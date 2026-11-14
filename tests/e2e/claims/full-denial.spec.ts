@@ -36,20 +36,20 @@ test("denied → one insistence → denied → escalation at d45 → closed", as
   await signIn(page, member);
   await openCase(page, c);
   await expectStatus(page, "sent");
-  await expect(messageItem(page, "initial_claim")).toContainText("sent");
+  await expect(messageItem(page, "initial_claim")).toContainText("Sent");
 
   // 1. The first denial: the insistence is queued, the case goes back to `sent`.
-  await inject(page, "Denegada (01)", "el caso ha cambiado de estado");
+  await inject(page, "Denied (01)", "status updated");
   await expect(messageItem(page, "denied")).toHaveCount(1);
-  await expect(messageItem(page, "insistence_after_denial")).toContainText("queued");
+  await expect(messageItem(page, "insistence_after_denial")).toContainText("Queued");
   await expectStatus(page, "sent");
 
   // The next tick sends it.
   await advanceClock(page, 1);
-  await expect(messageItem(page, "insistence_after_denial")).toContainText("sent");
+  await expect(messageItem(page, "insistence_after_denial")).toContainText("Sent");
 
   // 2. The second denial: no second insistence; the case stays denied, waiting for d45.
-  await inject(page, "Denegada (02)", "el caso ha cambiado de estado");
+  await inject(page, "Denied (02)", "status updated");
   await expect(messageItem(page, "denied")).toHaveCount(2);
   await expectStatus(page, "denied");
   await expect(messageItem(page, "insistence_after_denial")).toHaveCount(1);
@@ -62,13 +62,13 @@ test("denied → one insistence → denied → escalation at d45 → closed", as
   // 3. Day 45: the escalation goes out and the filing is owed (team queue).
   await advanceClock(page, 14);
   await expectStatus(page, "escalated");
-  await expect(messageItem(page, "escalation_d45")).toContainText("sent");
+  await expect(messageItem(page, "escalation_d45")).toContainText("Sent");
   await expect(pendingOf(page)).toContainText("escalation_filing_required");
 
   // 4. Three months after the claim: closed, and the user gets the final result.
   await advanceClock(page, 50);
   await expectStatus(page, "closed");
-  await expect(messageItem(page, "user_final_result")).toContainText("sent");
+  await expect(messageItem(page, "user_final_result")).toContainText("Sent");
   await expect(historyOf(page)).toContainText("escalated → closed");
 
   // The outbox of this case, read back: every operator mail went to the operator's verified

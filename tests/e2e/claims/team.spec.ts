@@ -77,18 +77,18 @@ async function seedSentCase(): Promise<{ id: string; ref: string }> {
 
 async function signIn(page: Page, email: string, password = PASSWORD) {
   await page.goto("/equipo");
-  await page.getByLabel("Correo electrónico").fill(email);
-  await page.getByLabel("Contraseña").fill(password);
-  await page.getByRole("button", { name: "Entrar" }).click();
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
 }
 
 const heading = (page: Page, name: string) => page.getByRole("heading", { level: 1, name });
-const messages = (page: Page) => page.getByRole("region", { name: "Mensajes" });
+const messages = (page: Page) => page.getByRole("region", { name: "Email thread" });
 
 test("the login gate: nothing is shown without a team session", async ({ page }) => {
   await page.goto("/equipo");
   await expect(page).toHaveURL(/\/equipo\/entrar$/);
-  await expect(heading(page, "Acceso del equipo")).toBeVisible();
+  await expect(heading(page, "Team sign-in")).toBeVisible();
 
   const { ref, id } = await seedSentCase();
   await page.goto(`/equipo/casos/${id}`);
@@ -97,19 +97,19 @@ test("the login gate: nothing is shown without a team session", async ({ page })
 
   // A wrong password, and a user who is not on the allowlist, get the same refusal.
   await signIn(page, member, "wrong-password");
-  await expect(page.getByRole("alert").filter({ hasText: "Correo o contraseña" })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "Email or password" })).toBeVisible();
   await signIn(page, outsider);
-  await expect(page.getByRole("alert").filter({ hasText: "Correo o contraseña" })).toBeVisible();
-  await expect(heading(page, "Cola del equipo")).toHaveCount(0);
+  await expect(page.getByRole("alert").filter({ hasText: "Email or password" })).toBeVisible();
+  await expect(heading(page, "Team queue")).toHaveCount(0);
 
   await signIn(page, member);
-  await expect(heading(page, "Cola del equipo")).toBeVisible();
+  await expect(heading(page, "Team queue")).toBeVisible();
   await expect(page.getByRole("link", { name: ref })).toBeVisible();
 
-  await page.getByRole("button", { name: "Cerrar sesión" }).click();
+  await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/equipo\/entrar$/);
   await page.goto("/equipo");
-  await expect(heading(page, "Acceso del equipo")).toBeVisible();
+  await expect(heading(page, "Team sign-in")).toBeVisible();
 });
 
 test("an operator reply that asks for the IBAN moves the case to waiting_user and queues the notice", async ({
@@ -118,20 +118,20 @@ test("an operator reply that asks for the IBAN moves the case to waiting_user an
   const { ref } = await seedSentCase();
   await signIn(page, member);
   await page.getByRole("link", { name: ref }).click();
-  await expect(heading(page, `Caso ${ref}`)).toBeVisible();
+  await expect(heading(page, `Case ${ref}`)).toBeVisible();
 
-  await page.getByLabel("Respuesta guionizada").selectOption({ label: "Pide datos (IBAN) (01)" });
-  await page.getByRole("button", { name: "Inyectar respuesta" }).click();
+  await page.getByLabel("Reply fixture").selectOption({ label: "Asks for the IBAN (01)" });
+  await page.getByRole("button", { name: "Simulate reply" }).click();
 
-  await expect(page.getByRole("status")).toContainText("el caso ha cambiado de estado");
-  const summary = page.getByRole("region", { name: "Resumen" });
-  await expect(summary).toContainText("Esperando al usuario");
+  await expect(page.getByRole("status")).toContainText("status updated");
+  const summary = page.getByRole("region", { name: "Case summary" });
+  await expect(summary).toContainText("Waiting for passenger");
   // The operator's mail, classified, and the notice to the user waiting in the outbox.
-  await expect(messages(page)).toContainText("asks_for_data");
-  await expect(messages(page)).toContainText("user_request_document");
-  await expect(messages(page)).toContainText("queued");
+  await expect(messages(page)).toContainText("Asks for data");
+  await expect(messages(page)).toContainText("Request to passenger");
+  await expect(messages(page)).toContainText("Queued");
   // Operator mail is shown as plain text.
-  await expect(messages(page).getByText("facilite el IBAN")).toBeVisible();
+  await expect(messages(page).getByText("facilite el IBAN").first()).toBeVisible();
 });
 
 test("moving the clock to day 30 queues and sends a reminder, for the case viewed only", async ({
@@ -143,24 +143,24 @@ test("moving the clock to day 30 queues and sends a reminder, for the case viewe
   await page.getByRole("link", { name: ref }).click();
   await expect(messages(page)).not.toContainText("reminder_");
 
-  await page.getByLabel("Días a adelantar").fill("30");
-  await page.getByRole("button", { name: "Adelantar el reloj" }).click();
-  await expect(page.getByRole("status")).toContainText("Reloj adelantado");
+  await page.getByLabel("Custom days").fill("30");
+  await page.getByRole("button", { name: "Move clock forward" }).click();
+  await expect(page.getByRole("status")).toContainText("Clock moved forward");
 
-  await expect(messages(page)).toContainText("reminder_d30");
-  await expect(messages(page)).toContainText("sent");
+  await expect(messages(page)).toContainText("Legal reminder (day 30)");
+  await expect(messages(page)).toContainText("Sent");
 
   // Another case, equally due, was not touched.
   await page.goto(`/equipo/casos/${other.id}`);
-  await expect(heading(page, `Caso ${other.ref}`)).toBeVisible();
+  await expect(heading(page, `Case ${other.ref}`)).toBeVisible();
   await expect(messages(page)).not.toContainText("reminder_");
 
   // The demo clock belongs to this session and is shown on the case page.
-  const expected = new Date(Date.now() + 30 * DAY).toLocaleDateString("es-ES", {
+  const expected = new Date(Date.now() + 30 * DAY).toLocaleDateString("en-GB", {
     dateStyle: "long",
     timeZone: "Europe/Madrid",
   });
-  await expect(page.getByRole("region", { name: "Reloj de demostración" })).toContainText(expected);
+  await expect(page.getByRole("region", { name: "Simulated clock" })).toContainText(expected);
 });
 
 test("a queue item can be resolved and then is no longer listed", async ({ page }) => {
@@ -171,9 +171,9 @@ test("a queue item can be resolved and then is no longer listed", async ({ page 
   if (error) throw error;
 
   await signIn(page, member);
-  const queue = page.getByRole("region", { name: "Pendiente de revisar" });
+  const queue = page.getByRole("region", { name: "Needs team review" });
   await expect(queue).toContainText("wrong_sender");
-  await page.getByRole("button", { name: new RegExp(`Marcar como resuelto: ${ref}`) }).click();
-  await expect(page.getByRole("status")).toContainText("marcado como resuelto");
+  await page.getByRole("button", { name: new RegExp(`Mark as resolved: ${ref}`) }).click();
+  await expect(page.getByRole("status")).toContainText("marked as resolved");
   await expect(queue.getByRole("link", { name: ref })).toHaveCount(0);
 });

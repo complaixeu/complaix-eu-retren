@@ -1,31 +1,31 @@
 import { Alert } from "@/shared/ui";
 
-// What the actions answer in `?aviso=` and `?error=`: codes only, mapped to plain Spanish here.
+// What the actions answer in `?aviso=` and `?error=`: codes only, mapped to English here.
 const AVISOS: Record<string, string> = {
-  resuelto: "Elemento marcado como resuelto.",
-  reloj_movido: "Reloj adelantado y envíos procesados.",
-  reloj_reiniciado: "Reloj de demostración reiniciado.",
+  resuelto: "Item marked as resolved.",
+  reloj_movido: "Clock moved forward and queued mail processed.",
+  reloj_reiniciado: "Simulated clock reset.",
 };
 
 const INYECTADO: Record<string, string> = {
-  applied: "La respuesta se ha procesado y el caso ha cambiado de estado.",
-  forwarded: "La respuesta se ha procesado.",
-  team_queue: "La respuesta se ha procesado y ha pasado a la cola del equipo.",
-  duplicate: "Esa respuesta ya estaba registrada.",
-  skipped: "La respuesta se ha descartado: no pertenece a ningún caso.",
-  error: "No se ha podido guardar la respuesta; inténtalo de nuevo.",
+  applied: "Reply processed and case status updated.",
+  forwarded: "Reply processed.",
+  team_queue: "Reply processed and sent to the team queue.",
+  duplicate: "That reply was already recorded.",
+  skipped: "Reply discarded: it did not match a case.",
+  error: "Could not save the reply. Try again.",
 };
 
 const ERRORES: Record<string, string> = {
-  demo_only: "Esta acción solo existe en modo demostración.",
-  not_found: "No se ha encontrado ese caso o elemento.",
-  bad_fixture: "Esa respuesta guionizada no existe para este operador.",
-  bad_input: "Datos no válidos.",
-  no_initial_claim: "El caso aún no tiene una reclamación enviada: no hay a qué responder.",
-  no_fixtures: "No hay respuestas guionizadas para este operador.",
-  ingest_failed: "No se ha podido procesar la respuesta.",
-  already_resolved: "Ese elemento ya estaba resuelto.",
-  failed: "No se ha podido completar la acción.",
+  demo_only: "This action is only available in demo mode.",
+  not_found: "Case or item not found.",
+  bad_fixture: "That reply fixture is not available for this operator.",
+  bad_input: "Invalid input.",
+  no_initial_claim: "The claim has not been sent yet, so it cannot receive a reply.",
+  no_fixtures: "No reply fixtures are available for this operator.",
+  ingest_failed: "Could not process the reply.",
+  already_resolved: "This item was already resolved.",
+  failed: "Could not complete the action.",
 };
 
 export function Notice({ aviso, error }: { aviso?: string; error?: string }) {

@@ -97,6 +97,10 @@ export type TimelineMessage = {
   createdAt: string;
   /** Operator mail only (inbound). Always rendered as plain text. */
   body: string | null;
+  from: string | null;
+  to: string | null;
+  deliveredTo: string[];
+  attachments: string[];
 };
 
 export type CaseView = {
@@ -238,7 +242,9 @@ export async function getCaseView(db: ServiceClient, caseId: string): Promise<Ca
       .limit(LIMIT),
     db
       .from("messages")
-      .select("id, direction, template, category, status, subject, body_text, created_at")
+      .select(
+        "id, direction, template, category, status, subject, body_text, created_at, from_address, to_address, delivered_to",
+      )
       .eq("case_id", caseId)
       .order("created_at", { ascending: true })
       .limit(LIMIT),
@@ -248,6 +254,17 @@ export async function getCaseView(db: ServiceClient, caseId: string): Promise<Ca
   if (messages.error) throw messages.error;
   const found = c.data;
   if (!found) return null;
+
+  const attachmentRows = await db
+    .from("attachments")
+    .select("message_id, kind")
+    .eq("case_id", caseId)
+    .is("deleted_at", null);
+  if (attachmentRows.error) throw attachmentRows.error;
+  const attachments = new Map<string, string[]>();
+  for (const a of attachmentRows.data)
+    if (a.message_id)
+      attachments.set(a.message_id, [...(attachments.get(a.message_id) ?? []), a.kind]);
 
   const resolved = resolvedIds(events.data);
   // A row queued without a template (the sender fills it in on send) is named the way the
@@ -287,7 +304,11 @@ export async function getCaseView(db: ServiceClient, caseId: string): Promise<Ca
       status: m.status,
       subject: m.subject,
       createdAt: m.created_at,
-      body: m.direction === "inbound" ? m.body_text : null,
+      body: m.body_text,
+      from: m.from_address,
+      to: m.to_address,
+      deliveredTo: m.delivered_to ?? [],
+      attachments: attachments.get(m.id) ?? [],
     })),
     open: events.data
       .filter(
@@ -423,15 +444,15 @@ export const FIXTURE_NAME = /^[a-z][a-z_-]*-\d{2}$/;
 export type MailFixture = { name: string; label: string };
 
 const FIXTURE_LABELS: Record<string, string> = {
-  acknowledgement: "Acuse de recibo",
-  approved: "Aprobada",
-  asks_for_data: "Pide datos (IBAN)",
-  denied: "Denegada",
-  refers_to_form: "Remite a su formulario",
-  other: "Otra respuesta",
-  injection: "Intento de inyección",
-  "wrong-sender": "Remitente equivocado",
-  "spoofed-ref": "Referencia falsificada",
+  acknowledgement: "Acknowledgement only",
+  approved: "Approved",
+  asks_for_data: "Asks for the IBAN",
+  denied: "Denied",
+  refers_to_form: "Refers to web form",
+  other: "Unclear reply",
+  injection: "Malicious email (prompt injection)",
+  "wrong-sender": "Wrong sender",
+  "spoofed-ref": "Spoofed reference",
 };
 
 type FixtureSet = Record<string, Record<string, string>>;

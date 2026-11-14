@@ -166,32 +166,49 @@ export async function userRepliesWithDocument(caseId: string): Promise<IngestRes
 
 export async function signIn(page: Page, email: string): Promise<void> {
   await page.goto("/equipo");
-  await page.getByLabel("Correo electrónico").fill(email);
-  await page.getByLabel("Contraseña").fill(PASSWORD);
-  await page.getByRole("button", { name: "Entrar" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Cola del equipo" })).toBeVisible();
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Team queue" })).toBeVisible();
 }
 
 export async function openCase(page: Page, c: { id: string; ref: string }): Promise<void> {
   await page.goto(`/equipo/casos/${c.id}`);
-  await expect(page.getByRole("heading", { level: 1, name: `Caso ${c.ref}` })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: `Case ${c.ref}` })).toBeVisible();
 }
 
-export const summary = (page: Page) => page.getByRole("region", { name: "Resumen" });
-export const messagesOf = (page: Page) => page.getByRole("region", { name: "Mensajes" });
-export const historyOf = (page: Page) => page.getByRole("region", { name: "Historial" });
-export const pendingOf = (page: Page) => page.getByRole("region", { name: "Pendiente de revisar" });
+export const summary = (page: Page) => page.getByRole("region", { name: "Case summary" });
+export const messagesOf = (page: Page) => page.getByRole("region", { name: "Email thread" });
+export const historyOf = (page: Page) => page.getByRole("region", { name: "History" });
+export const pendingOf = (page: Page) => page.getByRole("region", { name: "Needs team review" });
 
 /** The case status, by its code in the summary ("Estado"). */
 export async function expectStatus(page: Page, code: string): Promise<void> {
   await expect(summary(page).getByText(code, { exact: true })).toBeVisible();
 }
 
-/** One message of the "Mensajes" list, by its template or category code. */
+/** One message of the email thread, by its template or category code. */
+const MESSAGE_LABELS: Record<string, string> = {
+  initial_claim: "Initial claim",
+  reminder_d12: "Friendly reminder (day 12)",
+  reminder_d30: "Legal reminder (day 30)",
+  last_notice_d40: "Final notice (day 40)",
+  escalation_d45: "Escalation (day 45)",
+  insistence_after_denial: "Insistence after denial",
+  user_request_document: "Request to passenger",
+  user_final_result: "Final result to passenger",
+  acknowledgement: "Acknowledgement",
+  asks_for_data: "Asks for data",
+  approved: "Approved",
+  denied: "Denied",
+  refers_to_form: "Refers to web form",
+  other: "Unclear / suspicious",
+  reply_asks_for_data: "Passenger document forwarded to operator",
+};
 export const messageItem = (page: Page, kind: string) =>
   messagesOf(page)
     .getByRole("listitem")
-    .filter({ has: page.getByText(kind, { exact: true }) });
+    .filter({ has: page.getByText(MESSAGE_LABELS[kind] ?? kind, { exact: true }) });
 
 /** Reloads the case page without the last action's notice, so the next notice is this action's. */
 async function freshCasePage(page: Page): Promise<void> {
@@ -203,14 +220,14 @@ async function freshCasePage(page: Page): Promise<void> {
 
 export async function inject(page: Page, label: string, notice: RegExp | string): Promise<void> {
   await freshCasePage(page);
-  await page.getByLabel("Respuesta guionizada").selectOption({ label });
-  await page.getByRole("button", { name: "Inyectar respuesta" }).click();
+  await page.getByLabel("Reply fixture").selectOption({ label });
+  await page.getByRole("button", { name: "Simulate reply" }).click();
   await expect(page.getByRole("status")).toContainText(notice);
 }
 
 export async function advanceClock(page: Page, days: number): Promise<void> {
   await freshCasePage(page);
-  await page.getByLabel("Días a adelantar").fill(String(days));
-  await page.getByRole("button", { name: "Adelantar el reloj" }).click();
-  await expect(page.getByRole("status")).toContainText("Reloj adelantado");
+  await page.getByLabel("Custom days").fill(String(days));
+  await page.getByRole("button", { name: "Move clock forward" }).click();
+  await expect(page.getByRole("status")).toContainText("Clock moved forward");
 }
