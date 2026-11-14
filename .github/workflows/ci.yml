@@ -266,14 +266,29 @@ jobs:
             echo "::error::This deployment was assigned to PRODUCTION. ReTren is DEV-only. Tell Nestor Gomez Artiles; do not retry."
             exit 1
           fi
-      # Optional stable URL, e.g. retren-dev.vercel.app (repo/env variable DEV_ALIAS).
+      # Optional stable URL, e.g. retren-dev.vercel.app (repo/env variable DEV_ALIAS, a
+      # variable, not a secret). Uses the REST API like the guard above: `vercel alias set`
+      # failed with "User not found." for this token (2026-11-14).
       - name: Alias
         if: steps.check.outputs.ready == 'true' && vars.DEV_ALIAS != ''
         env:
           URL: ${{ steps.deploy.outputs.url }}
           DEV_ALIAS: ${{ vars.DEV_ALIAS }}
         run: |
-          vercel alias set "$URL" "$DEV_ALIAS" --token="$VERCEL_TOKEN"
+          set -euo pipefail
+          host="${URL#https://}"
+          id="$(curl -fsS -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v13/deployments/${host}?teamId=${VERCEL_ORG_ID}" | jq -r '.id')"
+          body="$(jq -nc --arg alias "$DEV_ALIAS" '{alias: $alias}')"
+          resp="$(mktemp)"
+          code="$(curl -sS -o "$resp" -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $VERCEL_TOKEN" -H "Content-Type: application/json" \
+            -d "$body" "https://api.vercel.com/v2/deployments/${id}/aliases?teamId=${VERCEL_ORG_ID}")"
+          if [ "$code" != "200" ]; then
+            # Print only Vercel's error code and message, never the full response.
+            echo "::error::Alias failed (HTTP $code): $(jq -r '(.error.code // "") + " " + (.error.message // "")' "$resp")"
+            exit 1
+          fi
           echo "Alias: https://$DEV_ALIAS" >> "$GITHUB_STEP_SUMMARY"
       # Preview URLs sit behind Vercel Authentication by default. With the
       # optional VERCEL_AUTOMATION_BYPASS_SECRET the check gets through;
