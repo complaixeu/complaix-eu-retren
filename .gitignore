@@ -33,3 +33,11 @@ supabase/.branches
 .idea
 .vscode/*
 !.vscode/extensions.json
+
+# Retren: never commit filled forms, user tickets or test PDFs (docs/ARCHITECTURE.md).
+# Only the blank official templates and reference docs are allowed.
+*.pdf
+!templates/*.pdf
+!docs/*.pdf
+/uploads/
+/tickets/
