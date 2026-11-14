@@ -131,7 +131,7 @@ version and run `pnpm install`. For anything in another person's domain, ask tha
 
 - One lane task per PR, ideally under ~400 changed lines.
 - Open → merged within a day, two at most. Long-lived branches are what cause the big conflicts.
-- Draft while working, `gh pr ready` once, then `gh pr merge --squash --delete-branch`, which puts
+- Draft while working, `gh pr ready` once, then `gh pr merge` (no flags: the queue squash-merges and the branch is deleted automatically), which puts
   it in the **merge queue**. The queue re-runs the checks on top of the latest `develop` plus the
   PRs ahead of it, so two PRs that clash together are stopped before DEV.
 - If Codex (or another agent) reviews your changes, do it before `gh pr ready`.
@@ -188,3 +188,8 @@ A 10–15 minute check-in each day:
 - Anything waiting on Nestor.
 
 Update the owner names in section 1 when people change domains.
+
+## 9. Autonomous execution
+
+Each domain has a task-by-task plan with the tests every step must pass, and the kickoff prompts
+that let each harness spawn its own subagents: [plans/README.md](plans/README.md).
