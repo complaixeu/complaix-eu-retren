@@ -33,6 +33,20 @@ export interface TicketPreviewData {
   imageUrl: string | null;
 }
 
+/**
+ * Mirrors `PhotoReading` in features/intake/extraction/decision.ts: whether the stored ticket
+ * was read (`read`), will be typed by hand (`manual`), needs another photo (`retry`; `heic` when
+ * its format is the reason) or is still unread after a failure on our side (`pending`).
+ */
+export interface TicketReadingData {
+  state: "read" | "manual" | "retry" | "pending";
+  heic: boolean;
+}
+
+/** What the "Leer el billete" action returns; on success the step re-renders with the result. */
+export type ReadTicketState = { status: "idle" } | { status: "ok" } | { status: "error" };
+export type ReadTicket = () => Promise<ReadTicketState>;
+
 /** What the browser tells us about the chosen file. */
 export interface TicketChoice {
   name: string;

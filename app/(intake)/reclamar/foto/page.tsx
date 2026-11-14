@@ -4,12 +4,13 @@ import {
   getCurrentDraft,
   intakeStepHref,
   intakeStepNeighbours,
+  photoReading,
   ticketPreview,
   ticketUploadRules,
 } from "@/features/intake";
 import { StepPage, stepTitle } from "../_components/step-page";
 import styles from "../_components/intake.module.css";
-import { beginUpload, finishUpload } from "./actions";
+import { beginUpload, finishUpload, readTicket } from "./actions";
 import { TicketUpload } from "./ticket-upload";
 
 export const metadata: Metadata = stepTitle("foto");
@@ -34,13 +35,16 @@ export default function FotoPage() {
 async function TicketStep() {
   const draft = await getCurrentDraft();
   const ticket = draft ? await ticketPreview(draft) : null;
+  const reading = draft?.ticket ? photoReading(draft.data, draft.ticket.contentType) : null;
   const next = intakeStepNeighbours("foto").next!;
   return (
     <TicketUpload
       begin={beginUpload}
       finish={finishUpload}
+      read={readTicket}
       rules={ticketUploadRules}
       ticket={ticket}
+      reading={reading}
       continueHref={intakeStepHref(next)}
     />
   );
