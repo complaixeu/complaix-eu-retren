@@ -41,13 +41,13 @@ The script runs in a clean environment (`env -i`) like a GitHub runner and tempo
 Resources: the local stack (Postgres, Auth, REST, Storage, Kong) needs roughly 1.5–2.5 GB RAM
 while running. It is started on demand and stopped at the end of the run, never left always-on.
 
-**On a server with a public IP (like the shared VPS):** Docker publishes the local Supabase
-ports (54321 API, 54322 Postgres with the CLI's default password) on **all interfaces**, and
-Docker's port rules bypass `ufw`. Either block those ports in the hosting provider's firewall or
-make Docker bind to localhost by default (`/etc/docker/daemon.json`: `{"ip": "127.0.0.1"}`, then
-restart Docker; this affects every container on the machine, so the server admin decides). The app
-itself is always started on `127.0.0.1`. To view it from your laptop, use an SSH tunnel
-([ONBOARDING.md §8](ONBOARDING.md)).
+**Local Supabase listens on 127.0.0.1 only.** Docker normally publishes container ports on all
+interfaces (and its rules bypass `ufw`), which on a server with a public IP would expose local
+Postgres with the CLI's default password. `scripts/supabase-local.sh` (used by `pnpm db:start`
+and `ci:local:full`) starts Supabase on a Docker network `retren_local` whose host binding is
+`127.0.0.1`, and stops it again if anything is published beyond localhost. Never start the local
+stack with a bare `supabase start`. The app is also always started on `127.0.0.1`. To view it from
+your laptop, use an SSH tunnel ([ONBOARDING.md §8](ONBOARDING.md)).
 
 ## Commands
 
@@ -74,8 +74,7 @@ pnpm db:stop         # stop it when you're done (frees RAM)
 ```
 
 The local keys come from `supabase status`; they are the CLI's fixed local-development keys,
-not DEV secrets. Studio is excluded from `db:start` to save memory; run `pnpm exec supabase start`
-without `-x` if you want it.
+not DEV secrets. Studio and other unused services are not started, to save memory.
 
 ## Writing and testing a migration locally
 
