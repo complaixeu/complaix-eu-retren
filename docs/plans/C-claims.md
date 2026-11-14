@@ -70,13 +70,25 @@ Email testing strategy: [README §4](README.md#4-email-how-we-test-it). It is bi
 Decided 2026-11-14 (Nestor): Gmail / Google Workspace, so there is no provider webhook. The app
 polls the mailbox instead, and there is no public inbound endpoint and no `INBOUND_SECRET`.
 
+The mailbox may be a shared, already used account (on 2026-11-14 the DEV one held 754 messages),
+so the reader must only ever touch mail that belongs to a claim.
+
 - `ingestMessage(raw)` is the one entry point for incoming mail: parses MIME (`mailparser`) and
-  matches the case by `[RTN-ref]` and/or `In-Reply-To`. A sender that isn't the operator's domain,
-  or an unknown reference, goes to the team queue. Raw mail goes to private storage. The
-  simulated mailbox (C9) calls the same function.
-- `pollInbox()` (`imapflow`), run by the existing hourly tick (`/api/claims/tick`, C7) when
-  `MAIL_PROVIDER=gmail`: reads only `INBOX`, only unseen messages, and marks a message seen only
-  after it is stored. Idempotent: `Message-ID` is unique, so a message read twice is stored once.
+  matches the case by `[RTN-ref]` and/or `In-Reply-To` / `References` against our own sent
+  `Message-ID`s. A reply that is ours (it carries our reference or threads onto our mail) but
+  comes from a sender outside the operator's domain, or carries a reference that doesn't exist,
+  goes to the team queue. Raw mail goes to private storage. The simulated mailbox (C9) calls the
+  same function.
+- **Only claim mail is read.** `pollInbox()` filters on the server with an IMAP search (subject
+  contains `[RTN-`, or the sender is one of the operators' configured domains), and a message that
+  then neither threads onto our mail nor carries one of our references is **skipped**: not stored,
+  not queued, not logged with content. Unrelated mail never reaches our database or storage.
+- **Read-only on the mailbox.** `pollInbox()` (`imapflow`), run by the existing hourly tick
+  (`/api/claims/tick`, C7) when `MAIL_PROVIDER=gmail`, opens `INBOX` read-only (`EXAMINE`) and
+  never changes flags, so the people using the mailbox see nothing change. Progress is kept in the
+  database as the last processed UID (with `UIDVALIDITY`); the first run starts at the mailbox's
+  current UID, so existing mail is never imported. Idempotent: `Message-ID` is unique, so a
+  message read twice is stored once.
 - **Never reads our own mail:** it skips anything sent from our own address, and anything
   addressed to `MAIL_REDIRECT_ALL_TO`. The redirect target must be a different mailbox from
   `SMTP_USER`; refuse to start if they are the same.
@@ -85,10 +97,12 @@ polls the mailbox instead, and there is no public inbound endpoint and no `INBOU
 - Tests:
   - integration with `.eml` fixtures through `ingestMessage`: matched, unknown reference, wrong
     sender, spoofed reference, the same `Message-ID` twice, a message from our own address, a
-    redirected copy.
-  - unit: `pollInbox` against a fake IMAP client: only unseen, seen only after storing, a failure
-    mid-batch leaves the rest unseen; same mailbox for redirect and sender → refuses to start.
-  - pgTAP: the storage bucket for raw mail is private.
+    redirected copy, an unrelated mail (skipped, nothing stored).
+  - unit: `pollInbox` against a fake IMAP client: opens read-only and sets no flags; the first run
+    imports nothing that was already there; it resumes from the stored UID; a `UIDVALIDITY` change
+    restarts from the current UID without re-importing; a failure mid-batch resumes at the failed
+    message; same mailbox for redirect and sender → refuses to start.
+  - pgTAP: the storage bucket for raw mail is private; the poll-state table has RLS on.
 
 ### C5: Classifier
 
