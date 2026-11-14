@@ -21,6 +21,11 @@ if [ -z "${RETREN_SUPABASE_LOCK_HELD:-}" ]; then
       echo "Removing stale local-Supabase lock (pid $holder is gone)."
       rm -rf "$lock"; continue
     fi
+    # A lock without a PID older than 2 minutes: its owner died between mkdir and writing the PID.
+    if [ -z "$holder" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +2 2>/dev/null)" ]; then
+      echo "Removing stale local-Supabase lock (no PID for over 2 minutes)."
+      rm -rf "$lock"; continue
+    fi
     echo "Local Supabase is busy (lock held by pid ${holder:-?}); waiting…"
     sleep 20
   done
@@ -34,7 +39,8 @@ fi
 started=0
 cleanup() {
   if [ "$started" = 1 ] && [ -z "${KEEP:-}" ]; then pnpm exec supabase stop --no-backup >/dev/null 2>&1 || true; fi
-  if [ "$own_lock" = 1 ]; then rm -rf "$lock"; fi
+  # Only remove the lock if it is still ours (another run may have reclaimed it as stale).
+  if [ "$own_lock" = 1 ] && [ "$(cat "$lock/pid" 2>/dev/null)" = "$$" ]; then rm -rf "$lock"; fi
 }
 trap cleanup EXIT
 

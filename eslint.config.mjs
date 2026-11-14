@@ -27,6 +27,15 @@ const eslintConfig = defineConfig([
     ),
   },
   {
+    files: ["features/intake/**", "app/(intake)/**"],
+    rules: boundary(
+      forbid(
+        ["rules", "documents"],
+        "Intake reaches rules and documents only through claims (A → C → B).",
+      ),
+    ),
+  },
+  {
     files: ["features/claims/**", "app/api/claims/**", "app/(team)/**"],
     rules: boundary(forbid(["intake"], "Domain C never imports intake (A → C → B).")),
   },
