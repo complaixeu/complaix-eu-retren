@@ -21,7 +21,7 @@ export type ReadTicketResult =
 const MAX_FILENAME = 120;
 
 /** The last path segment, without control characters, trimmed and at most 120 characters. */
-function cleanFilename(name: string): string {
+export function cleanFilename(name: string): string {
   const base = name.split(/[\\/]/).pop() ?? "";
   const clean = base.replace(/[\u0000-\u001f\u007f]/g, "").trim();
   if (clean.length <= MAX_FILENAME) return clean || "billete";

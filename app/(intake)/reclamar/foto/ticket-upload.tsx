@@ -1,13 +1,16 @@
 "use client";
 
-import { useActionState, useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, useTransition, type FormEvent } from "react";
 import { flushSync } from "react-dom";
 import { Alert, Button, ButtonLink, Field, FileInput } from "@/shared/ui";
 import intake from "../_components/intake.module.css";
 import styles from "./foto.module.css";
 import {
   formatFileSize,
+  sendTicket,
   ticketChoiceError,
+  type BeginUpload,
+  type FinishUpload,
   type TicketChoiceError,
   type TicketPreviewData,
   type TicketUploadRules,
@@ -15,7 +18,10 @@ import {
 } from "./ticket-choice";
 
 export interface TicketUploadProps {
-  action: (state: TicketUploadState, formData: FormData) => Promise<TicketUploadState>;
+  /** Server action: a signed upload URL for the chosen file. */
+  begin: BeginUpload;
+  /** Server action: checks the uploaded file and makes it the current draft. */
+  finish: FinishUpload;
   rules: TicketUploadRules;
   /** The current draft's ticket, or null before the first upload. */
   ticket: TicketPreviewData | null;
@@ -29,8 +35,9 @@ const IDLE: TicketUploadState = { status: "idle" };
  * its preview with "Continuar". It gets everything from the server page as props and imports no
  * domain code (see tests/unit/intake/client-boundary.test.ts).
  */
-export function TicketUpload({ action, rules, ticket, continueHref }: TicketUploadProps) {
-  const [state, formAction, pending] = useActionState(action, IDLE);
+export function TicketUpload({ begin, finish, rules, ticket, continueHref }: TicketUploadProps) {
+  const [state, setState] = useState<TicketUploadState>(IDLE);
+  const [pending, startTransition] = useTransition();
   const [choiceError, setChoiceError] = useState<TicketChoiceError | null>(null);
   // A server error stays until the user picks another file.
   const [dismissed, setDismissed] = useState<TicketUploadState | null>(null);
@@ -64,14 +71,22 @@ export function TicketUpload({ action, rules, ticket, continueHref }: TicketUplo
   }
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
-    const error = ticketChoiceError(inputRef.current?.files?.[0], rules);
-    if (!error) return;
     event.preventDefault();
-    flushSync(() => {
-      setDismissed(state);
-      setChoiceError(error);
+    const file = inputRef.current?.files?.[0];
+    const error = ticketChoiceError(file, rules);
+    if (error || !file) {
+      flushSync(() => {
+        setDismissed(state);
+        setChoiceError(error ?? "missing");
+      });
+      inputRef.current?.focus();
+      return;
+    }
+    // The file goes straight to Storage; our server only gets two small requests around it.
+    startTransition(async () => {
+      const next = await sendTicket(file, { begin, finish });
+      startTransition(() => setState(next));
     });
-    inputRef.current?.focus();
   }
 
   function startReplacing() {
@@ -140,7 +155,7 @@ export function TicketUpload({ action, rules, ticket, continueHref }: TicketUplo
   }
 
   return (
-    <form action={formAction} onSubmit={onSubmit} noValidate className={styles.form}>
+    <form onSubmit={onSubmit} noValidate className={styles.form}>
       {serverError === "failed" && (
         <Alert tone="error" title="No se ha subido el billete">
           {rules.messages.failed}

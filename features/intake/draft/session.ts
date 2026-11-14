@@ -1,10 +1,31 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import type { TicketUpload } from "../upload/read";
-import { intakeStepHref } from "../steps";
-import { DRAFT_COOKIE, draftCookieOptions, parseDraftId, type DraftCookieJar } from "./cookie";
+import { randomUUID } from "node:crypto";
+import { createServiceClient } from "@/shared/supabase/server";
 import {
+  UPLOAD_PREFIX,
+  declaredTicketError,
+  uploadContentType,
+  type DeclaredTicket,
+} from "../upload/direct";
+import { cleanFilename, type TicketUpload } from "../upload/read";
+import type { TicketContentType, TicketUploadError } from "../upload/rules";
+import { intakeStepHref } from "../steps";
+import {
+  DRAFT_COOKIE,
+  UPLOAD_COOKIE,
+  clearedCookieOptions,
+  draftCookieOptions,
+  encodeUploadCookie,
+  parseDraftId,
+  parseUploadCookie,
+  uploadCookieOptions,
+  type DraftCookieJar,
+} from "./cookie";
+import {
+  TICKET_BUCKET,
+  createDraftFromUpload,
   createDraft,
   deleteDraft,
   getDraft,
@@ -64,15 +85,77 @@ export async function startDraft(
   ticket: TicketUpload,
   deps: DraftSessionDeps = {},
 ): Promise<IntakeDraft> {
+  const draft = await createDraft(ticket, deps);
+  await makeCurrent(draft, deps);
+  return draft;
+}
+
+/** Points the draft cookie at `draft` and deletes this browser's previous draft, if any. */
+async function makeCurrent(draft: IntakeDraft, deps: DraftSessionDeps): Promise<void> {
   const jar = await jarOf(deps);
   const previous = parseDraftId(jar.get(DRAFT_COOKIE)?.value);
-  const draft = await createDraft(ticket, deps);
   jar.set(DRAFT_COOKIE, draft.id, draftCookieOptions(await hostOf(deps)));
   if (previous && previous !== draft.id) {
-    // Best effort: the new draft is already current, and an orphan expires anyway.
+    // Best effort: the new draft is already current, and the purge removes any leftover.
     await deleteDraft(previous, deps).catch(() => undefined);
   }
-  return draft;
+}
+
+export type BeginTicketUploadResult =
+  | { ok: true; uploadUrl: string; contentType: TicketContentType }
+  | { ok: false; error: Exclude<TicketUploadError, "missing" | "not_received" | "failed"> };
+
+/**
+ * Server actions only. Step 1 of the direct upload: refuses what the browser declares if it
+ * could never pass, then returns a signed URL the browser PUTs the file to, with the content type
+ * to send (the bucket only takes ours). The staged object is remembered in an httpOnly cookie.
+ */
+export async function beginTicketUpload(
+  declared: DeclaredTicket,
+  deps: DraftSessionDeps = {},
+): Promise<BeginTicketUploadResult> {
+  const refused = declaredTicketError(declared);
+  const contentType = uploadContentType(declared);
+  if (refused || !contentType) return { ok: false, error: refused ?? "wrong_type" };
+
+  const id = randomUUID();
+  const { data, error } = await (deps.db ?? createServiceClient()).storage
+    .from(TICKET_BUCKET)
+    .createSignedUploadUrl(`${UPLOAD_PREFIX}${id}`);
+  if (error || !data) throw new Error(`signed upload URL failed: ${error?.message ?? "no data"}`);
+
+  const jar = await jarOf(deps);
+  jar.set(
+    UPLOAD_COOKIE,
+    encodeUploadCookie(id, cleanFilename(String(declared.name))),
+    uploadCookieOptions(await hostOf(deps)),
+  );
+  return { ok: true, uploadUrl: data.signedUrl, contentType };
+}
+
+export type FinishTicketUploadResult =
+  | { ok: true; draft: IntakeDraft }
+  | { ok: false; error: "empty" | "too_large" | "wrong_type" | "not_received" };
+
+/**
+ * Server actions only. Step 2: checks the object this browser staged (from the upload cookie,
+ * never from the request), and on success makes it the current draft.
+ */
+export async function finishTicketUpload(
+  deps: DraftSessionDeps = {},
+): Promise<FinishTicketUploadResult> {
+  const jar = await jarOf(deps);
+  const upload = parseUploadCookie(jar.get(UPLOAD_COOKIE)?.value);
+  if (!upload) return { ok: false, error: "not_received" };
+
+  const result = await createDraftFromUpload(upload, deps);
+  if (result.ok || result.error !== "not_received") {
+    // Done with this staged object either way (it is moved, or it was deleted).
+    jar.set(UPLOAD_COOKIE, "", clearedCookieOptions(await hostOf(deps)));
+  }
+  if (!result.ok) return result;
+  await makeCurrent(result.draft, deps);
+  return { ok: true, draft: result.draft };
 }
 
 /**

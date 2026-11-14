@@ -62,7 +62,8 @@ export function detectTicketType(head: Uint8Array): TicketType | null {
   return null;
 }
 
-export type TicketUploadError = "missing" | "empty" | "too_large" | "wrong_type" | "failed";
+export type TicketUploadError =
+  "missing" | "empty" | "too_large" | "wrong_type" | "not_received" | "failed";
 
 export type TicketValidation =
   { ok: true; type: TicketType } | { ok: false; error: Exclude<TicketUploadError, "failed"> };
@@ -84,6 +85,8 @@ export const TICKET_UPLOAD_ERRORS: Record<TicketUploadError, string> = {
     "El archivo pesa más de 10 MB. Haz la foto con menos resolución o sube el PDF del billete.",
   wrong_type:
     "Este archivo no es una foto ni un PDF. Sube una foto en JPG, PNG o HEIC, o el PDF del billete.",
+  not_received:
+    "No nos ha llegado el archivo. Vuelve a subirlo; si se corta otra vez, prueba con otra conexión.",
   failed: "No hemos podido guardar el billete. Vuelve a intentarlo en unos minutos.",
 };
 

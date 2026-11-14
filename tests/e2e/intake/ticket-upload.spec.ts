@@ -92,6 +92,27 @@ test("the file can be changed after uploading", async ({ page }) => {
   await expect(preview(page)).not.toContainText("primero.pdf");
 });
 
+test("a 6 MB file goes straight to Storage: no request to the app carries it", async ({ page }) => {
+  const big = placeholderPngOfSize(6 * 1024 * 1024);
+  const appBodies: number[] = [];
+  page.on("request", (request) => {
+    if (request.url().startsWith("http://127.0.0.1:3200") && request.method() === "POST") {
+      appBodies.push(request.postDataBuffer()?.byteLength ?? 0);
+    }
+  });
+  const put = page.waitForRequest(
+    (r) => r.method() === "PUT" && r.url().includes("/storage/v1/object/upload/sign/tickets/"),
+  );
+  await upload(page, "billete-grande.png", "image/png", big);
+  // Playwright does not expose a File body; the stored size shows up in the preview below.
+  expect((await (await put).response())?.status()).toBe(200);
+
+  await expect(preview(page)).toContainText("billete-grande.png");
+  await expect(preview(page)).toContainText("6 MB");
+  expect(appBodies.length).toBeGreaterThanOrEqual(2); // begin + finish
+  for (const size of appBodies) expect(size).toBeLessThan(16 * 1024);
+});
+
 test.describe("errors", () => {
   test("a wrong type shows an error under the field and nothing is uploaded", async ({ page }) => {
     await choose(page, "notas.txt", "text/plain", PLACEHOLDER_TEXT);
@@ -124,6 +145,33 @@ test.describe("errors", () => {
     await uploadButton(page).click();
     await expect(fileInput(page)).toHaveAccessibleDescription(/Elige la foto o el PDF/);
     await expect(fileInput(page)).toBeFocused();
+  });
+
+  test("Storage refusing the size shows the size error", async ({ page }) => {
+    await page.route("**/storage/v1/object/upload/sign/**", (route) =>
+      route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({ statusCode: "413", error: "Payload too large" }),
+      }),
+    );
+    await upload(page, "billete.png", "image/png", PLACEHOLDER_PNG);
+    await expect(fileInput(page)).toHaveAccessibleDescription(/más de 10 MB/);
+    await expect(preview(page)).toHaveCount(0);
+  });
+
+  test("an upload lost on the way says so and can be sent again", async ({ page }) => {
+    let lost = false;
+    await page.route("**/storage/v1/object/upload/sign/**", (route) => {
+      if (lost || route.request().method() !== "PUT") return route.continue();
+      lost = true;
+      return route.abort("connectionreset");
+    });
+    await upload(page, "billete.png", "image/png", PLACEHOLDER_PNG);
+    await expect(fileInput(page)).toHaveAccessibleDescription(/No nos ha llegado el archivo/);
+    await uploadButton(page).click();
+    await expect(preview(page)).toContainText("billete.png");
   });
 
   test("choosing a valid file clears the error", async ({ page }) => {
