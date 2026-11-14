@@ -31,7 +31,8 @@ export default function MandatoPage() {
           Léelos y marca las dos casillas.
         </p>
         <Alert tone="warning" title={CONSENT_DRAFT_NOTICE.title}>
-          {CONSENT_DRAFT_NOTICE.text} Versión {CONSENT_TEXT_VERSION}.
+          {CONSENT_DRAFT_NOTICE.text} Versión{" "}
+          <span className={styles.version}>{CONSENT_TEXT_VERSION}</span>.
         </Alert>
         <MandateSection />
         <PrivacySection />

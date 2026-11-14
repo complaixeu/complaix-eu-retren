@@ -17,7 +17,13 @@
 }
 
 .subheading {
+  font-size: var(--text-base);
   font-weight: var(--weight-medium);
+}
+
+/* The version is one token: it never breaks at its hyphens. */
+.version {
+  white-space: nowrap;
 }
 
 .list {

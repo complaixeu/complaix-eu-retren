@@ -88,7 +88,7 @@ export const CONSENT_CHOICES = {
   },
   privacy: {
     label:
-      "He leído el aviso de privacidad y acepto que ReTren trate mis datos para esta reclamación.",
+      "He leído el aviso de privacidad y acepto que ReTren trate mis datos para esta reclamación",
     error: "Marca la aceptación del aviso de privacidad para seguir.",
   },
 } as const;
