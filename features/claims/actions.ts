@@ -19,12 +19,7 @@ import type { Json } from "@/shared/supabase";
 import { createServiceClient, type ServiceClient } from "@/shared/supabase/server";
 import { DEFAULT_NOTICE_FROM } from "./create-case";
 import { InvalidTransitionError, transition, type CaseTransitionEvent } from "./state-machine";
-
-/**
- * Most mails to an operator for one case. TODO(C7): import MAX_SENDS_PER_CASE from ./timers
- * once it is on develop; the SQL side is claims_max_sends_per_case().
- */
-export const MAX_SENDS_PER_CASE = 6;
+import { MAX_SENDS_PER_CASE, stageWindow } from "./timers";
 
 /**
  * send_count goes up when an operator mail is queued, and the last slot is reserved for the d45
@@ -36,15 +31,14 @@ export function replyMailFits(sendCount: number): boolean {
 }
 
 /** The day (since sent_at) of the d45 escalation (ARCHITECTURE §6), which the tick (C7) sends. */
-export const ESCALATION_DAY = 45;
+export const ESCALATION_DAY =
+  stageWindow("escalation_d45", new Date(0)).start.getTime() / 86_400_000; // 45
 
 /** Private bucket of the documents users send for their case (deleted once forwarded). */
 export const USER_DOCUMENTS_BUCKET = "claims-user-documents";
 
 /** Sender of the operator mails until the real mailbox exists (C3 rewrites it). */
 export const OPERATOR_MAIL_FROM = "reclamaciones@retren.invalid";
-
-const DAY_MS = 86_400_000;
 
 /** Why a reply landed in the team queue (C9 lists them). Codes only, no personal data. */
 export type TeamQueueReason =
@@ -123,8 +117,10 @@ function planned(
 
 /** The d45 escalation is due and still to come (the tick sends it, C7). */
 function escalationDue(ctx: ReplyActionContext): boolean {
+  // The escalation may use the last slot (C7: sent while send_count < MAX_SENDS_PER_CASE).
   if (!ctx.sentAt || ctx.escalationFired || ctx.sendCount >= MAX_SENDS_PER_CASE) return false;
-  return Math.floor((ctx.now.getTime() - Date.parse(ctx.sentAt)) / DAY_MS) >= ESCALATION_DAY;
+  const { start, end } = stageWindow("escalation_d45", ctx.sentAt);
+  return ctx.now >= start && ctx.now < end;
 }
 
 /**

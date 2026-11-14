@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   ESCALATION_DAY,
-  MAX_SENDS_PER_CASE,
   operatorRecipient,
   planReplyAction,
   RecipientRefusedError,
   type ReplyActionContext,
   type ReplyPlan,
 } from "@/features/claims/actions";
+import { MAX_SENDS_PER_CASE } from "@/features/claims/timers";
 import type { CaseStatus, OperatorPublicConfig, ReplyCategory } from "@/shared/contracts";
 
 // The category → action table (docs/plans/C-claims.md C6, ARCHITECTURE §5–§7). Written out by
