@@ -5,6 +5,7 @@ import { getOperatorConfig } from "@/features/rules";
 import { runTick } from "@/features/claims/tick";
 import { stageWindow } from "@/features/claims/timers";
 import type { CaseStatus } from "@/shared/contracts";
+import type { TablesUpdate } from "@/shared/supabase";
 import { createServiceClient } from "@/shared/supabase/server";
 
 // /api/claims/tick against the local Supabase (plan C7). Cases are inserted directly with the
@@ -385,11 +386,13 @@ describe("runTick: resume after a pause", () => {
   const at = (days: number) => new Date(Date.parse(S) + days * DAY);
   const d30 = () => stageWindow("reminder_d30", S).start;
 
-  async function resumeCase(
-    seedAs: Partial<Seed>,
-    resume: Record<string, unknown>,
-  ): Promise<string> {
-    const id = await seed({ status: "sent", sentAt: S, nextActionAt: at(12).toISOString(), ...seedAs });
+  async function resumeCase(seedAs: Partial<Seed>, resume: TablesUpdate<"cases">): Promise<string> {
+    const id = await seed({
+      status: "sent",
+      sentAt: S,
+      nextActionAt: at(12).toISOString(),
+      ...seedAs,
+    });
     const first = await runTick(db, at(12));
     expect(first.actions.find((a) => a.caseId === id)).toBeUndefined();
     const parked = await state(id);
