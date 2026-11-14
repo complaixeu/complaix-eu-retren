@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   decideRoute,
+  dkimPassDomains,
   isOwnMail,
   parseInbound,
   refsInSubject,
@@ -13,6 +14,8 @@ import { MAIL_FIXTURES_DIR } from "../../fixtures/mail/golden";
 // The pure parts of ingestMessage (docs/plans/C-claims.md C4). The DB paths are integration tests.
 
 const fixture = (name: string) => readFileSync(join(MAIL_FIXTURES_DIR, "iryo", name));
+const inboundFixture = (name: string) =>
+  readFileSync(join(process.cwd(), "tests", "fixtures", "claims", "inbound", name));
 
 describe("parseInbound", () => {
   it("reads the headers the matching needs from a golden fixture", async () => {
@@ -70,6 +73,31 @@ describe("isOwnMail", () => {
   });
 });
 
+describe("dkimPassDomains (Authentication-Results)", () => {
+  const AUTHSERV = "mx.google.com";
+  it("reads the dkim=pass domains (header.d, or header.i's domain) of Gmail's own header", async () => {
+    const p = await parseInbound(inboundFixture("ref-only-dkim-pass.eml"));
+    expect(dkimPassDomains(p!.authResults, AUTHSERV)).toEqual(["iryo.eu"]);
+    expect(
+      dkimPassDomains(["mx.google.com; dkim=pass header.d=Mail.Iryo.EU header.s=x"], AUTHSERV),
+    ).toEqual(["mail.iryo.eu"]);
+  });
+  it("nothing without the header, or with dkim=fail", async () => {
+    for (const f of ["ref-only-no-auth.eml", "ref-only-dkim-fail.eml"]) {
+      const p = await parseInbound(inboundFixture(f));
+      expect(dkimPassDomains(p!.authResults, AUTHSERV)).toEqual([]);
+    }
+  });
+  it("only the topmost header counts: a forged one below it is ignored", async () => {
+    const p = await parseInbound(inboundFixture("ref-only-forged-auth.eml"));
+    expect(p!.authResults).toHaveLength(2);
+    expect(dkimPassDomains(p!.authResults, AUTHSERV)).toEqual([]);
+  });
+  it("a header from another authserv-id is not Gmail's: ignored", () => {
+    expect(dkimPassDomains(["evil.example; dkim=pass header.d=iryo.eu"], AUTHSERV)).toEqual([]);
+  });
+});
+
 describe("decideRoute", () => {
   const kase = {
     id: "c1",
@@ -85,7 +113,10 @@ describe("decideRoute", () => {
     refCases: [kase],
     hasAttachment: false,
     operatorDomain: "iryo.eu",
+    refOperatorDomain: "iryo.eu",
+    dkimPassDomains: [],
   };
+  const refOnly: RouteInput = { ...base, threadCase: null };
 
   it("threaded, our reference, the operator's domain: an operator reply", () => {
     expect(decideRoute(base)).toEqual({ kind: "operator", case: kase });
@@ -105,6 +136,53 @@ describe("decideRoute", () => {
       case: null,
       reason: "unknown_reference",
     });
+  });
+  it("our reference only, from the operator's domain with an aligned dkim=pass: matched", () => {
+    expect(decideRoute({ ...refOnly, dkimPassDomains: ["iryo.eu"] })).toEqual({
+      kind: "operator",
+      case: kase,
+    });
+    // Relaxed alignment: a subdomain of the operator's domain signed it.
+    expect(decideRoute({ ...refOnly, dkimPassDomains: ["mail.iryo.eu"] }).kind).toBe("operator");
+  });
+  it("our reference only, without an aligned dkim=pass: spoofed", () => {
+    for (const dkim of [[], ["bulk-sender.example"], ["evil-iryo.eu"], ["iryo.eu.evil.example"]]) {
+      expect(decideRoute({ ...refOnly, dkimPassDomains: dkim })).toMatchObject({
+        reason: "spoofed_reference",
+      });
+    }
+  });
+  it("our reference only, from a foreign sender (even with its own dkim=pass): spoofed", () => {
+    expect(
+      decideRoute({
+        ...refOnly,
+        from: "atencion@iryo-soporte.example",
+        dkimPassDomains: ["iryo-soporte.example"],
+      }),
+    ).toEqual({ kind: "queue", case: kase, reason: "spoofed_reference" });
+  });
+  it("our reference only, but more than one reference or an unknown one alongside: spoofed", () => {
+    const other = { ...kase, id: "c2", public_ref: "RTN-BBBB0002" };
+    expect(
+      decideRoute({
+        ...refOnly,
+        refs: [kase.public_ref, other.public_ref],
+        refCases: [kase, other],
+        dkimPassDomains: ["iryo.eu"],
+      }),
+    ).toMatchObject({ reason: "spoofed_reference" });
+    expect(
+      decideRoute({
+        ...refOnly,
+        refs: [kase.public_ref, "RTN-NOPE"],
+        dkimPassDomains: ["iryo.eu"],
+      }),
+    ).toMatchObject({ reason: "spoofed_reference" });
+  });
+  it("our reference only, from the case user: spoofed (the user must reply in the thread)", () => {
+    expect(
+      decideRoute({ ...refOnly, from: kase.user_email, dkimPassDomains: ["example.test"] }),
+    ).toMatchObject({ reason: "spoofed_reference" });
   });
   it("our reference without a thread match: spoofed", () => {
     expect(decideRoute({ ...base, threadCase: null })).toEqual({

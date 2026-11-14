@@ -111,6 +111,18 @@ function eml(
   return { raw: Buffer.from(text.replace(/\r?\n/g, "\r\n")), messageId };
 }
 
+/** A tests/fixtures/claims/inbound fixture (reference only, no thread) for a seeded case. */
+function refOnly(name: string, ref: string): { raw: Buffer; messageId: string } {
+  const messageId = `<fixture-${randomUUID()}@mail.example>`;
+  const text = readFileSync(
+    join(process.cwd(), "tests", "fixtures", "claims", "inbound", name),
+    "utf8",
+  )
+    .replace(/^Message-ID: .*$/m, `Message-ID: ${messageId}`)
+    .replace(/\[RTN-T100\]/g, `[${ref}]`);
+  return { raw: Buffer.from(text.replace(/\r?\n/g, "\r\n")), messageId };
+}
+
 /** A hand-built mail (CRLF), with optional extra headers and attachment. */
 function mail(h: {
   from: string;
@@ -269,6 +281,52 @@ describe("ingestMessage (local Supabase)", () => {
       expect(s.outbox).toEqual([]);
       expect((await stored(m.messageId))[0]).toMatchObject({ case_id: c.id, category: null });
     }
+  });
+
+  it("our reference only, operator domain, aligned dkim=pass (no thread): matched and classified", async () => {
+    const c = await seedCase();
+    const m = refOnly("ref-only-dkim-pass.eml", c.ref);
+    expect(await ingestMessage(m.raw, deps)).toMatchObject({
+      outcome: "applied",
+      caseId: c.id,
+      category: "approved",
+    });
+    expect((await caseState(c.id)).status).toBe("resolved");
+    expect((await stored(m.messageId))[0]).toMatchObject({ case_id: c.id, category: "approved" });
+  });
+
+  it("our reference only, without a trusted dkim=pass or from a foreign sender: spoofed", async () => {
+    for (const file of [
+      "ref-only-no-auth.eml",
+      "ref-only-dkim-fail.eml",
+      "ref-only-forged-auth.eml",
+      "ref-only-other-dkim-domain.eml",
+      "ref-only-foreign-sender.eml",
+    ]) {
+      const c = await seedCase();
+      const m = refOnly(file, c.ref);
+      const classify = vi.spyOn(deps.classifier!, "forCase");
+      expect(await ingestMessage(m.raw, deps), file).toMatchObject({
+        outcome: "team_queue",
+        caseId: c.id,
+        reason: "spoofed_reference",
+      });
+      expect(classify, file).not.toHaveBeenCalled();
+      classify.mockRestore();
+      const s = await caseState(c.id);
+      expect(s.status, file).toBe("sent");
+      expect(s.outbox, file).toEqual([]);
+      expect((await stored(m.messageId))[0].category, file).toBeNull();
+    }
+  });
+
+  it("a reference only naming no case, even with dkim=pass: unknown reference", async () => {
+    const m = refOnly("ref-only-dkim-pass.eml", "RTN-0000YYYY");
+    expect(await ingestMessage(m.raw, deps)).toMatchObject({
+      outcome: "team_queue",
+      caseId: null,
+      reason: "unknown_reference",
+    });
   });
 
   it("spoofed reference: our reference without a thread match → team queue, no action", async () => {
@@ -471,6 +529,33 @@ describe("ingestMessage (local Supabase)", () => {
     await store.write(box, { uidValidity: BigInt(123), lastUid: 7 });
     await store.write(box, { uidValidity: BigInt(123), lastUid: 9 });
     expect(await store.read(box)).toEqual({ uidValidity: BigInt(123), lastUid: 9 });
+    await store.write(box, {
+      uidValidity: BigInt(123),
+      lastUid: 9,
+      failedUid: 10,
+      failedAttempts: 2,
+    });
+    expect(await store.read(box)).toEqual({
+      uidValidity: BigInt(123),
+      lastUid: 9,
+      failedUid: 10,
+      failedAttempts: 2,
+    });
+    // A poison mail: a case-less team-queue item with the UID and a code, no content; once.
+    await store.markPoison(box, BigInt(123), 10);
+    await store.markPoison(box, BigInt(123), 10);
+    const marker = `<imap-${box.toLowerCase()}-123-10@poll.invalid>`;
+    const rows = await stored(marker);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      case_id: null,
+      inbound_queue_reason: "unreadable_mail",
+      from_address: "",
+      to_address: "",
+      subject: "",
+      body_text: null,
+      raw_path: null,
+    });
     await db.from("claims_mail_poll_state").delete().eq("mailbox", box);
   });
 

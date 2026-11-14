@@ -115,9 +115,12 @@ class FakeImap implements ImapClient {
   }
 }
 
-function memoryState(initial?: PollState): PollStateStore & { value: PollState | null } {
+function memoryState(
+  initial?: PollState,
+): PollStateStore & { value: PollState | null; poisoned: { uidValidity: bigint; uid: number }[] } {
   const store = {
     value: initial ?? null,
+    poisoned: [] as { uidValidity: bigint; uid: number }[],
     async read(mailbox: string) {
       expect(mailbox).toBe(INBOX);
       return store.value;
@@ -125,6 +128,10 @@ function memoryState(initial?: PollState): PollStateStore & { value: PollState |
     async write(mailbox: string, state: PollState) {
       expect(mailbox).toBe(INBOX);
       store.value = { ...state };
+    },
+    async markPoison(mailbox: string, uidValidity: bigint, uid: number) {
+      expect(mailbox).toBe(INBOX);
+      store.poisoned.push({ uidValidity, uid });
     },
   };
   return store;
@@ -240,7 +247,12 @@ describe("pollInbox", () => {
     const out = await pollInbox({ client: imap, state, ingest: failing.ingest, env: ENV });
     expect(failing.seen).toEqual([2, 3, 4]);
     expect(out).toMatchObject({ processed: 2, failedAtUid: 4 });
-    expect(state.value).toEqual({ uidValidity: BigInt(1), lastUid: 3 });
+    expect(state.value).toEqual({
+      uidValidity: BigInt(1),
+      lastUid: 3,
+      failedUid: 4,
+      failedAttempts: 1,
+    });
     expect(imap.loggedOut).toBe(true);
 
     const ok = recordingIngest();
@@ -258,7 +270,12 @@ describe("pollInbox", () => {
     const out = await pollInbox({ client: imap, state, ingest, env: ENV });
     expect(seen).toEqual([2]);
     expect(out.failedAtUid).toBe(3);
-    expect(state.value).toEqual({ uidValidity: BigInt(1), lastUid: 2 });
+    expect(state.value).toEqual({
+      uidValidity: BigInt(1),
+      lastUid: 2,
+      failedUid: 3,
+      failedAttempts: 1,
+    });
   });
 
   it("reads at most `limit` mails per run and continues on the next one", async () => {
@@ -307,5 +324,110 @@ describe("pollInbox", () => {
     } catch (e) {
       expect(String(e)).not.toContain(ENV.SMTP_PASS);
     }
+  });
+
+  it("a mail that fails 3 times is put in the team queue (UID and code only) and skipped", async () => {
+    const imap = new FakeImap([1, 2, 3, 4].map(claimMail));
+    const state = memoryState({ uidValidity: BigInt(1), lastUid: 1 });
+    const failing = recordingIngest(new Set([3]));
+
+    const first = await pollInbox({ client: imap, state, ingest: failing.ingest, env: ENV });
+    expect(first.failedAtUid).toBe(3);
+    expect(state.value).toEqual({
+      uidValidity: BigInt(1),
+      lastUid: 2,
+      failedUid: 3,
+      failedAttempts: 1,
+    });
+    await pollInbox({ client: imap, state, ingest: failing.ingest, env: ENV });
+    expect(state.value).toMatchObject({ lastUid: 2, failedUid: 3, failedAttempts: 2 });
+    expect(state.poisoned).toEqual([]);
+
+    // The 3rd failure: marked for the team, skipped, and the next mail is read.
+    const third = await pollInbox({ client: imap, state, ingest: failing.ingest, env: ENV });
+    expect(state.poisoned).toEqual([{ uidValidity: BigInt(1), uid: 3 }]);
+    expect(third).toMatchObject({ poisonedUids: [3] });
+    expect(third.failedAtUid).toBeUndefined();
+    expect(failing.seen).toEqual([2, 3, 3, 3, 4]);
+    expect(state.value).toEqual({ uidValidity: BigInt(1), lastUid: 4 });
+  });
+
+  it("a success resets the failure count", async () => {
+    const imap = new FakeImap([1, 2, 3].map(claimMail));
+    const state = memoryState({ uidValidity: BigInt(1), lastUid: 1 });
+    const failing = recordingIngest(new Set([2]));
+    await pollInbox({ client: imap, state, ingest: failing.ingest, env: ENV });
+    await pollInbox({ client: imap, state, ingest: failing.ingest, env: ENV });
+    expect(state.value).toMatchObject({ failedUid: 2, failedAttempts: 2 });
+
+    const ok = recordingIngest();
+    await pollInbox({ client: imap, state, ingest: ok.ingest, env: ENV });
+    expect(state.value).toEqual({ uidValidity: BigInt(1), lastUid: 3 });
+    expect(state.poisoned).toEqual([]);
+
+    // A later failure of another mail starts counting from 1 again.
+    imap.mails.push(claimMail(4));
+    await pollInbox({
+      client: imap,
+      state,
+      ingest: recordingIngest(new Set([4])).ingest,
+      env: ENV,
+    });
+    expect(state.value).toMatchObject({ lastUid: 3, failedUid: 4, failedAttempts: 1 });
+  });
+
+  it("a batch exactly at `limit` followed by unrelated mail advances to the current UID", async () => {
+    const imap = new FakeImap([
+      claimMail(1),
+      claimMail(2),
+      claimMail(3),
+      unrelated(4),
+      unrelated(5),
+    ]);
+    const state = memoryState({ uidValidity: BigInt(1), lastUid: 1 });
+    const { ingest, seen } = recordingIngest();
+    await pollInbox({ client: imap, state, ingest, env: ENV, limit: 2 });
+    expect(seen).toEqual([2, 3]);
+    expect(state.value).toEqual({ uidValidity: BigInt(1), lastUid: 5 });
+  });
+
+  it("a truncated batch covers up to the next match, and the next run picks up the rest", async () => {
+    const imap = new FakeImap([
+      claimMail(1),
+      claimMail(2),
+      unrelated(3),
+      claimMail(4),
+      unrelated(5),
+      claimMail(6),
+      unrelated(7),
+    ]);
+    const state = memoryState({ uidValidity: BigInt(1), lastUid: 1 });
+    const { ingest, seen } = recordingIngest();
+    await pollInbox({ client: imap, state, ingest, env: ENV, limit: 2 });
+    expect(seen).toEqual([2, 4]);
+    // Past the unrelated 5, never past the match 6 that didn't fit.
+    expect(state.value).toEqual({ uidValidity: BigInt(1), lastUid: 5 });
+
+    await pollInbox({ client: imap, state, ingest, env: ENV, limit: 2 });
+    expect(imap.searches.at(-1)!.uid).toBe("6:*");
+    expect(seen).toEqual([2, 4, 6]);
+    expect(state.value).toEqual({ uidValidity: BigInt(1), lastUid: 7 });
+
+    imap.mails.push(unrelated(8), unrelated(9));
+    await pollInbox({ client: imap, state, ingest, env: ENV, limit: 2 });
+    expect(seen).toEqual([2, 4, 6]);
+    expect(state.value).toEqual({ uidValidity: BigInt(1), lastUid: 9 });
+  });
+
+  it("a failure covers the unrelated mail before the failed one", async () => {
+    const imap = new FakeImap([claimMail(1), unrelated(2), unrelated(3), claimMail(4)]);
+    const state = memoryState({ uidValidity: BigInt(1), lastUid: 1 });
+    await pollInbox({
+      client: imap,
+      state,
+      ingest: recordingIngest(new Set([4])).ingest,
+      env: ENV,
+    });
+    expect(state.value).toMatchObject({ lastUid: 3, failedUid: 4, failedAttempts: 1 });
   });
 });

@@ -2,7 +2,8 @@
 --
 -- 1. A private storage bucket for the raw MIME of every inbound mail we keep (claim mail only:
 --    unrelated mail is never stored).
--- 2. claims_mail_poll_state: where pollInbox() got to in the mailbox (last UID and UIDVALIDITY).
+-- 2. claims_mail_poll_state: where pollInbox() got to in the mailbox (last UID and UIDVALIDITY),
+--    and the mail that keeps failing, if any.
 -- 3. messages.inbound_queue_reason: why an inbound mail went to the team queue when it arrived.
 --    Mail that matched no case has no case_events row to carry it, so the reason lives here.
 -- 4. claims_record_inbound: records one inbound mail, and either applies `operator_replied` to its
@@ -21,6 +22,11 @@ create table public.claims_mail_poll_state (
   mailbox text primary key check (length(mailbox) > 0),
   uid_validity bigint not null check (uid_validity > 0),
   last_uid bigint not null check (last_uid >= 0),
+  -- The mail that failed last and how many runs in a row it failed. After 3, pollInbox puts it
+  -- in the team queue (its UID and a code only) and moves past it, so one bad mail never blocks
+  -- the mailbox. Null: nothing is failing.
+  failed_uid bigint check (failed_uid is null or failed_uid > 0),
+  failed_attempts integer check (failed_attempts is null or failed_attempts >= 0),
   updated_at timestamptz not null default now()
 );
 

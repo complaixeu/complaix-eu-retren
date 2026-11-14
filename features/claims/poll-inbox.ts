@@ -50,12 +50,22 @@ export interface ImapClient {
 export interface PollState {
   uidValidity: bigint;
   lastUid: number;
+  /** The mail that failed last, and how many runs in a row it failed. Absent: none. */
+  failedUid?: number;
+  failedAttempts?: number;
 }
 
 export interface PollStateStore {
   read(mailbox: string): Promise<PollState | null>;
   write(mailbox: string, state: PollState): Promise<void>;
+  /** Tells the team a mail could not be read POISON_ATTEMPTS times: its UID and a code only. */
+  markPoison(mailbox: string, uidValidity: bigint, uid: number): Promise<void>;
 }
+
+/** Runs in a row one mail may fail before it is put in the team queue and skipped. */
+export const POISON_ATTEMPTS = 3;
+/** The team-queue code of a mail that kept failing (messages.inbound_queue_reason). */
+export const POISON_REASON = "unreadable_mail";
 
 export interface PollResult {
   /** first_run / uidvalidity_changed: the position was (re)set to the current UID, nothing read. */
@@ -66,6 +76,8 @@ export interface PollResult {
   outcomes: Partial<Record<IngestResult["outcome"], number>>;
   /** Set when a mail failed: the next run starts again at this UID. */
   failedAtUid?: number;
+  /** Mails that failed POISON_ATTEMPTS times: put in the team queue and skipped. */
+  poisonedUids?: number[];
 }
 
 export interface PollDeps {
@@ -142,12 +154,19 @@ export function dbPollState(db: ServiceClient): PollStateStore {
     async read(mailbox) {
       const { data, error } = await db
         .from("claims_mail_poll_state")
-        .select("uid_validity, last_uid")
+        .select("uid_validity, last_uid, failed_uid, failed_attempts")
         .eq("mailbox", mailbox)
         .maybeSingle();
       if (error) throw error;
       return data
-        ? { uidValidity: BigInt(data.uid_validity), lastUid: Number(data.last_uid) }
+        ? {
+            uidValidity: BigInt(data.uid_validity),
+            lastUid: Number(data.last_uid),
+            ...(data.failed_uid !== null && {
+              failedUid: Number(data.failed_uid),
+              failedAttempts: data.failed_attempts ?? 0,
+            }),
+          }
         : null;
     },
     async write(mailbox, state) {
@@ -155,7 +174,27 @@ export function dbPollState(db: ServiceClient): PollStateStore {
         mailbox,
         uid_validity: Number(state.uidValidity),
         last_uid: state.lastUid,
+        failed_uid: state.failedUid ?? null,
+        failed_attempts: state.failedUid !== undefined ? (state.failedAttempts ?? 0) : null,
         updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+    },
+    async markPoison(mailbox, uidValidity, uid) {
+      // A case-less team-queue item (C9 lists them): a synthetic Message-ID naming the UID, the
+      // code, and no content at all. Idempotent: the same UID is recorded once.
+      const { error } = await db.rpc("claims_record_inbound", {
+        p_message: {
+          from: "",
+          to: "",
+          subject: "",
+          message_id: `<imap-${mailbox.toLowerCase()}-${uidValidity}-${uid}@poll.invalid>`,
+        },
+        // Nullable in SQL; the generated Args type marks every function parameter as non-null.
+        p_case_id: null as unknown as string,
+        p_expected_status: null as unknown as "sent",
+        p_to_status: null as unknown as "sent",
+        p_queue_reason: POISON_REASON,
       });
       if (error) throw error;
     },
@@ -212,7 +251,12 @@ export async function pollInbox(deps: PollDeps = {}): Promise<PollResult> {
     const uids = [...new Set(found)].filter((u) => u > saved.lastUid).sort((a, b) => a - b);
     const batch = uids.slice(0, limit);
     const result: PollResult = { started: "resumed", processed: 0, outcomes: {} };
+    const validity = box.uidValidity;
     let lastUid = saved.lastUid;
+    let failure =
+      saved.failedUid !== undefined
+        ? { uid: saved.failedUid, attempts: saved.failedAttempts ?? 0 }
+        : null;
 
     for (const uid of batch) {
       let outcome: IngestResult | null;
@@ -228,20 +272,37 @@ export async function pollInbox(deps: PollDeps = {}): Promise<PollResult> {
         outcome = null;
       }
       if (!outcome || outcome.outcome === "error") {
-        result.failedAtUid = uid;
-        break;
+        const attempts = failure?.uid === uid ? failure.attempts + 1 : 1;
+        if (attempts < POISON_ATTEMPTS) {
+          // Stop here; the unrelated mail before it is covered, the failed one is read again.
+          result.failedAtUid = uid;
+          failure = { uid, attempts };
+          await state.write(INBOX, {
+            uidValidity: validity,
+            lastUid: Math.max(lastUid, uid - 1),
+            failedUid: uid,
+            failedAttempts: attempts,
+          });
+          return result;
+        }
+        // A poison mail: the team is told (UID and code only) and the batch goes on without it.
+        await state.markPoison(INBOX, validity, uid);
+        (result.poisonedUids ??= []).push(uid);
+      } else {
+        result.processed += 1;
+        result.outcomes[outcome.outcome] = (result.outcomes[outcome.outcome] ?? 0) + 1;
       }
-      result.processed += 1;
-      result.outcomes[outcome.outcome] = (result.outcomes[outcome.outcome] ?? 0) + 1;
+      failure = null;
       lastUid = uid;
-      await state.write(INBOX, { uidValidity: box.uidValidity, lastUid });
+      await state.write(INBOX, { uidValidity: validity, lastUid });
     }
 
-    // A full batch also moves past the unrelated mail the search left out.
-    if (result.failedAtUid === undefined && batch.length === uids.length) {
-      if (current > lastUid)
-        await state.write(INBOX, { uidValidity: box.uidValidity, lastUid: current });
-    }
+    // Everything the search covered is done: up to the current UID when every match fit in the
+    // batch, else up to just before the first match that didn't (it is read next time). So
+    // unrelated mail is never searched again, and no match is ever skipped.
+    const covered =
+      batch.length < uids.length ? uids[batch.length] - 1 : Math.max(current, lastUid);
+    if (covered > lastUid) await state.write(INBOX, { uidValidity: validity, lastUid: covered });
     return result;
   } finally {
     await client.logout().catch(() => {});

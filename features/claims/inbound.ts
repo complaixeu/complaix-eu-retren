@@ -107,6 +107,8 @@ export interface ParsedInbound {
   references: string[];
   text: string;
   attachments: { filename: string; contentType: string; content: Buffer; size: number }[];
+  /** Every Authentication-Results header, topmost first, unfolded. */
+  authResults: string[];
 }
 
 const lower = (s: string) => s.trim().toLowerCase();
@@ -120,6 +122,19 @@ function addresses(field: AddressObject | AddressObject[] | undefined): string[]
 function messageIds(value: string | string[] | undefined): string[] {
   const text = Array.isArray(value) ? value.join(" ") : (value ?? "");
   return [...text.matchAll(/<[^<>\s]+>/g)].map((m) => m[0]);
+}
+
+/** Every occurrence of a header, in the order it appears (topmost first), unfolded. */
+function headerLines(mail: ParsedMail, name: string): string[] {
+  const key = name.toLowerCase();
+  return (mail.headerLines ?? [])
+    .filter((h) => h.key.toLowerCase() === key)
+    .map((h) =>
+      h.line
+        .slice(h.line.indexOf(":") + 1)
+        .replace(/\r?\n[ \t]+/g, " ")
+        .trim(),
+    );
 }
 
 function headerText(mail: ParsedMail, name: string): string[] {
@@ -156,6 +171,7 @@ export async function parseInbound(
       messageId,
       inReplyTo: messageIds(mail.inReplyTo)[0] ?? null,
       references: messageIds(mail.references),
+      authResults: headerLines(mail, "authentication-results"),
       text: (mail.text ?? "").slice(0, BODY_LIMIT),
       attachments: (mail.attachments ?? [])
         // Inline parts of an HTML body (logos, signatures) are not documents.
@@ -220,6 +236,10 @@ export interface RouteInput {
   hasAttachment: boolean;
   /** The domain of the thread case operator's verified address; null without an email channel. */
   operatorDomain: string | null;
+  /** The same for the case the subject's reference names (refCases[0]). */
+  refOperatorDomain: string | null;
+  /** The domains with an aligned dkim=pass in the receiving server's own Authentication-Results. */
+  dkimPassDomains: string[];
 }
 
 export type Route =
@@ -228,15 +248,61 @@ export type Route =
   | { kind: "user_document"; case: InboundCase }
   | { kind: "queue"; case: InboundCase | null; reason: InboundQueueReason };
 
+/** The receiving server's authserv-id: only its own Authentication-Results header is trusted. */
+export const DEFAULT_AUTHSERV_ID = "mx.google.com";
+
 /**
- * Where a mail goes. Only a mail threaded onto our own sent mail is trusted; a reference in the
- * subject alone is whatever the sender typed.
+ * The domains a DKIM signature that passed vouches for (`header.d`, or the domain of `header.i`),
+ * read from the receiving server's own Authentication-Results header only.
+ *
+ * Anyone can write an Authentication-Results header into a mail they send. The receiving server
+ * (Gmail) adds its own on top of the mail, so only the topmost header is trusted, and only when it
+ * names that server (`authservId`). Anything else gives no domain at all.
+ */
+export function dkimPassDomains(authResults: readonly string[], authservId: string): string[] {
+  const top = authResults[0];
+  if (!top) return [];
+  const [id, ...results] = top.split(";");
+  if (lower(id.trim().split(/\s+/)[0] ?? "") !== lower(authservId)) return [];
+  const domains = results.flatMap((r) => {
+    if (!/^\s*dkim\s*=\s*pass\b/i.test(r)) return [];
+    const d = /\bheader\.d\s*=\s*"?([^\s;"]+)/i.exec(r)?.[1];
+    const i = /\bheader\.i\s*=\s*"?([^\s;"]+)/i.exec(r)?.[1];
+    const domain = d ?? i?.split("@").pop();
+    return domain ? [lower(domain)] : [];
+  });
+  return [...new Set(domains)];
+}
+
+/** DKIM relaxed alignment: the signing domain is the domain itself or one of its subdomains. */
+function aligned(signing: string, domain: string): boolean {
+  return signing === domain || signing.endsWith(`.${domain}`);
+}
+
+/**
+ * Where a mail goes. The From header alone is never trusted: anyone can write any From. A mail is
+ * linked to a case only
+ * - by threading onto our own sent mail (In-Reply-To / References onto our Message-IDs), or
+ * - by its subject reference alone when it names exactly one existing case, the sender is in that
+ *   case operator's domain, and the receiving server saw a DKIM signature pass for that domain
+ *   (an operator's ticketing system often starts a new thread, keeping only the reference).
+ * Any other combination is `spoofed_reference`; a reference that names no case is
+ * `unknown_reference`. Both go to the team queue, never classified.
  */
 export function decideRoute(r: RouteInput): Route {
   if (!r.threadCase) {
     if (r.refs.length === 0) return { kind: "skip" };
     if (r.refCases.length === 0) return { kind: "queue", case: null, reason: "unknown_reference" };
-    return { kind: "queue", case: r.refCases[0], reason: "spoofed_reference" };
+    const c = r.refCases[0];
+    const opDomain = r.refOperatorDomain ? lower(r.refOperatorDomain) : null;
+    const trusted =
+      r.refs.length === 1 &&
+      r.refCases.length === 1 &&
+      opDomain !== null &&
+      lower(r.from).split("@")[1] === opDomain &&
+      r.dkimPassDomains.some((d) => aligned(lower(d), opDomain));
+    if (!trusted) return { kind: "queue", case: c, reason: "spoofed_reference" };
+    return { kind: "operator", case: c };
   }
   const c = r.threadCase;
   if (r.refs.some((ref) => ref !== c.public_ref)) {
@@ -358,6 +424,11 @@ async function ingest(
     refCases,
     hasAttachment: mail.attachments.length > 0,
     operatorDomain: threadCase ? operatorDomainOf(configOf(threadCase.operator)) : null,
+    refOperatorDomain: refCases[0] ? operatorDomainOf(configOf(refCases[0].operator)) : null,
+    dkimPassDomains: dkimPassDomains(
+      mail.authResults,
+      deps.env.MAIL_AUTHSERV_ID?.trim() || DEFAULT_AUTHSERV_ID,
+    ),
   });
   // Unrelated mail: nothing stored, nothing logged.
   if (route.kind === "skip") return { outcome: "skipped", reason: "unrelated" };

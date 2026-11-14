@@ -1,6 +1,6 @@
 -- Inbound mail (migration *_claims_inbound.sql, docs/plans/C-claims.md C4).
 begin;
-select plan(35);
+select plan(39);
 
 -- The raw-mail bucket is private, and the API roles can't read or write its objects.
 select is((select public from storage.buckets where id = 'claims-inbound-mail'), false,
@@ -43,6 +43,15 @@ select throws_ok($$insert into public.claims_mail_poll_state (mailbox, uid_valid
   values ('TEST-C4B', 7, -1)$$, '23514', null, 'last_uid is never negative');
 select throws_ok($$insert into public.claims_mail_poll_state (mailbox, uid_validity, last_uid)
   values ('TEST-C4C', 0, 0)$$, '23514', null, 'uid_validity is positive');
+
+select col_is_null('public', 'claims_mail_poll_state', 'failed_uid', 'failed_uid is nullable');
+select col_is_null('public', 'claims_mail_poll_state', 'failed_attempts',
+  'failed_attempts is nullable');
+select throws_ok($$insert into public.claims_mail_poll_state (mailbox, uid_validity, last_uid, failed_uid)
+  values ('TEST-C4D', 7, 0, 0)$$, '23514', null, 'failed_uid is a real UID');
+select throws_ok($$insert into public.claims_mail_poll_state (mailbox, uid_validity, last_uid,
+  failed_uid, failed_attempts) values ('TEST-C4E', 7, 0, 3, -1)$$, '23514', null,
+  'failed_attempts is never negative');
 
 -- messages.inbound_queue_reason: nullable, a code only.
 select col_is_null('public', 'messages', 'inbound_queue_reason', 'inbound_queue_reason is nullable');
