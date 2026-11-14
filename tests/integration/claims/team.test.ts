@@ -216,6 +216,88 @@ describe("getCaseView and listCases", () => {
     expect(await getCaseView(db, randomUUID())).toBeNull();
     expect(await getCaseView(db, "not-a-uuid")).toBeNull();
   });
+
+  // Found by C10: C6 queues its mail with no template (the sender fills it in on send), so a
+  // queued insistence, notice or forward showed as "sin tipo". The kind comes from the event that
+  // queued it ({template, message_id}), like the sender derives it.
+  it("shows the kind of a queued outbound row from the event that queued it", async () => {
+    const c = await seedCase();
+    const { data: queued, error } = await db
+      .from("messages")
+      .insert({
+        case_id: c.id,
+        direction: "outbound",
+        from_address: "reclamaciones@retren.invalid",
+        to_address: OPERATOR_ADDRESS,
+        subject: `[${c.ref}] Insistencia`,
+        status: "queued",
+        body_text: "insistence",
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+    await queueEvent(c.id, "operator_mail_queued", {
+      template: "insistence_after_denial",
+      message_id: queued.id,
+    });
+    // A queued row that no event names stays without a kind.
+    const { error: e2 } = await db.from("messages").insert({
+      case_id: c.id,
+      direction: "outbound",
+      from_address: "reclamaciones@retren.invalid",
+      to_address: OPERATOR_ADDRESS,
+      subject: `[${c.ref}] Sin evento`,
+      status: "queued",
+      body_text: "unknown",
+    });
+    if (e2) throw e2;
+
+    const view = await getCaseView(db, c.id);
+    expect(view?.messages.map((m) => [m.direction, m.kind, m.status])).toEqual([
+      ["outbound", "initial_claim", "sent"],
+      ["outbound", "insistence_after_denial", "queued"],
+      ["outbound", null, "queued"],
+    ]);
+  });
+
+  // The sender's other fallback (messageKind): a C7 row queued without a template is named by the
+  // `timer_action` event written in the same transaction (same created_at). close_3m is the
+  // user_final_result notice.
+  it("shows the kind of a queued timer row from its timer_action event", async () => {
+    const c = await seedCase();
+    const at = (ms: number) => new Date(Date.now() + ms).toISOString();
+    const rows = [
+      { action: "reminder_d12", createdAt: at(1_000), to: OPERATOR_ADDRESS },
+      { action: "close_3m", createdAt: at(2_000), to: PII.email },
+    ];
+    for (const r of rows) {
+      const { error } = await db.from("messages").insert({
+        case_id: c.id,
+        direction: "outbound",
+        from_address: "reclamaciones@retren.invalid",
+        to_address: r.to,
+        subject: `[${c.ref}] ${r.action}`,
+        status: "queued",
+        body_text: r.action,
+        created_at: r.createdAt,
+      });
+      if (error) throw error;
+      const ev = await db.from("case_events").insert({
+        case_id: c.id,
+        kind: "timer_action",
+        data: { action: r.action },
+        created_at: r.createdAt,
+      });
+      if (ev.error) throw ev.error;
+    }
+
+    const view = await getCaseView(db, c.id);
+    expect(view?.messages.map((m) => [m.direction, m.kind, m.status])).toEqual([
+      ["outbound", "initial_claim", "sent"],
+      ["outbound", "reminder_d12", "queued"],
+      ["outbound", "user_final_result", "queued"],
+    ]);
+  });
 });
 
 describe("injectOperatorReply", () => {

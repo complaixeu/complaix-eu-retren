@@ -250,6 +250,23 @@ export async function getCaseView(db: ServiceClient, caseId: string): Promise<Ca
   if (!found) return null;
 
   const resolved = resolvedIds(events.data);
+  // A row queued without a template (the sender fills it in on send) is named the way the
+  // sender's messageKind derives it: the event that links it ({template, message_id}), else C7's
+  // `timer_action` written in the same transaction (same created_at; close_3m is the notice).
+  const queuedAs = new Map<string, string>();
+  const timerAt = new Map<string, string>();
+  for (const e of events.data) {
+    const d = dataOf(e.data);
+    const id = toCode(d.message_id);
+    const template = toCode(d.template);
+    if (id && template && !queuedAs.has(id)) queuedAs.set(id, template);
+    const action = e.kind === "timer_action" ? toCode(d.action) : null;
+    if (action && !timerAt.has(e.created_at)) {
+      timerAt.set(e.created_at, action === "close_3m" ? "user_final_result" : action);
+    }
+  }
+  const kindOf = (m: { id: string; template: string | null; created_at: string }) =>
+    m.template ?? queuedAs.get(m.id) ?? timerAt.get(m.created_at) ?? null;
   return {
     case: summary(found),
     events: events.data.map((e) => {
@@ -266,7 +283,7 @@ export async function getCaseView(db: ServiceClient, caseId: string): Promise<Ca
     messages: messages.data.map((m) => ({
       id: m.id,
       direction: m.direction,
-      kind: m.direction === "inbound" ? m.category : m.template,
+      kind: m.direction === "inbound" ? m.category : kindOf(m),
       status: m.status,
       subject: m.subject,
       createdAt: m.created_at,
