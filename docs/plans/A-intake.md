@@ -1,6 +1,6 @@
 # Plan A: Intake (ticket upload → review → questions → consent → case)
 
-Owner: _person A_ · Harness: Claude Code · Architecture: §1, §2, legal "evidencia de la aceptación"
+Owner: `@complaix-eu` (Nestor) · Harness: Claude Code · Architecture: §1, §2, legal "evidencia de la aceptación"
 Folders: `app/(intake)/`, `features/intake/`, `shared/ui/`, `app/layout.tsx`, `app/globals.css`,
 `tests/{unit,integration,e2e}/intake/`, `supabase/tests/intake_*.sql`, migrations `*_intake_*.sql`.
 Uses: `@/features/claims` (`createCase`, mock until C2). Never imports B directly.

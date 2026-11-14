@@ -11,18 +11,18 @@ and `CLAUDE.md`/`AGENTS.md`; they always win over this page.
 We split by **domain** (a slice that goes from screen to database), not by layer. A layer split
 (frontend / backend / DB) means every feature touches all three people.
 
-| Domain               | Owner      | Architecture sections                                    | Owns (folders)                                                                                                | Owns (data)                                     |
-| -------------------- | ---------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| **A. Intake**        | _person A_ | §1 user form, §2 ticket reading, consent evidence        | `app/(intake)/`, `features/intake/`, `app/layout.tsx`, `app/globals.css`, `shared/ui/`, `tests/unit/intake/`  | ticket storage bucket, `consents` table         |
-| **B. Rules & docs**  | _person B_ | §3 operator config + eligibility, §4 documents, PDF map  | `features/rules/`, `features/documents/`, `templates/`, `tests/unit/rules/`, `tests/unit/documents/`          | none: pure functions, no DB, no network         |
-| **C. Claims engine** | _person C_ | §5 email loop, §6 timers and escalation, §7 user notices | `features/claims/`, `app/api/claims/`, `app/(team)/` (review queue), `shared/supabase/`, `tests/unit/claims/` | `cases`, `case_events`, `messages`, attachments |
-| Shared (everyone)    | all three  | contracts between domains                                | `shared/contracts/`                                                                                           | -                                               |
+| Domain               | Owner                   | Architecture sections                                    | Owns (folders)                                                                                                | Owns (data)                                     |
+| -------------------- | ----------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| **A. Intake**        | `@complaix-eu` (Nestor) | §1 user form, §2 ticket reading, consent evidence        | `app/(intake)/`, `features/intake/`, `app/layout.tsx`, `app/globals.css`, `shared/ui/`, `tests/unit/intake/`  | ticket storage bucket, `consents` table         |
+| **B. Rules & docs**  | `@micah-earl`           | §3 operator config + eligibility, §4 documents, PDF map  | `features/rules/`, `features/documents/`, `templates/`, `tests/unit/rules/`, `tests/unit/documents/`          | none: pure functions, no DB, no network         |
+| **C. Claims engine** | `@vinimp2003`           | §5 email loop, §6 timers and escalation, §7 user notices | `features/claims/`, `app/api/claims/`, `app/(team)/` (review queue), `shared/supabase/`, `tests/unit/claims/` | `cases`, `case_events`, `messages`, attachments |
+| Shared (everyone)    | all three               | contracts between domains                                | `shared/contracts/`                                                                                           | -                                               |
 
-Suggested owners: **B → the Codex developer** (deterministic, fully specified in the architecture
-doc, test-driven: a good fit for Codex). **C → the developer whose Claude Code is reviewed by Codex**
-(the most cross-cutting domain, with the AI-containment rules in §5 that most need a second
-reviewer). **A → the other Claude Code developer.** Swap if you prefer, then write the names into
-the table.
+Owners and harnesses: **A → `@complaix-eu`** (Claude Code). **B → `@micah-earl`** (Codex: the
+domain is deterministic, fully specified and test-driven). **C → `@vinimp2003`** (Claude Code
+with Codex reviewing every PR: the most cross-cutting domain, with the AI-containment rules of
+§5). Agents @mention these handles on their tracker issue when they stop. Only GitHub handles
+go here, never emails: the repo is public.
 
 ### How the domains talk to each other
 

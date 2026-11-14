@@ -32,6 +32,13 @@ automatically and must end with **READY**.
 
 ### A: Intake (Claude Code)
 
+- [ ] **A's owner is the repo admin.** The agents must **not** run with the admin login: give them
+      the narrow fine-grained token from [ONBOARDING.md §6](../ONBOARDING.md) (Contents, Pull
+      requests, Issues read/write, Actions read; no Administration, Secrets, Environments or
+      Workflows), e.g. `GH_TOKEN=<that token> caffeinate -dimsu claude …`. Check it with
+      `gh api repos/complaixeu/complaix-eu-retren --jq .permissions.admin`, which must print
+      `false` inside the agent's shell.
+
 - [ ] Claude Code is logged in, and Remote Control works (`/remote-control`) so you can follow the
       run from your phone.
 - [ ] Permissions for an unattended run: see section 3.
