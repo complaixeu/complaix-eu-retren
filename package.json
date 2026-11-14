@@ -18,7 +18,7 @@
     "db:start": "bash scripts/supabase-local.sh start",
     "db:stop": "bash scripts/supabase-local.sh stop",
     "db:new": "supabase migration new",
-    "db:reset": "supabase db reset",
+    "db:reset": "supabase db reset --network-id retren_local",
     "db:env": "bash scripts/local-env.sh",
     "ci:local": "bash scripts/local-ci.sh",
     "ci:local:full": "bash scripts/local-ci.sh --full"
