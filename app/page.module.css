@@ -1,0 +1,128 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  width: 100%;
+  max-width: calc(var(--content-width) + 2 * var(--space-4));
+  margin-inline: auto;
+  padding: var(--space-6) var(--space-4) var(--space-7);
+}
+
+.page:focus {
+  outline: none;
+}
+
+@media (min-width: 40rem) {
+  .page {
+    padding-top: var(--space-8);
+  }
+}
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.brand {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+.headline {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+.lead {
+  color: var(--color-text-muted);
+  font-size: var(--text-lg);
+}
+
+.cta {
+  margin-top: var(--space-2);
+}
+
+@media (min-width: 40rem) {
+  .cta {
+    align-self: flex-start;
+    min-width: 12rem;
+  }
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+@media (min-width: 40rem) {
+  .card {
+    padding: var(--space-6);
+  }
+}
+
+.cardTitle {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+}
+
+/* The same stations-on-a-line as the stepper, drawn vertically */
+.line {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stop {
+  position: relative;
+  padding-left: var(--space-6);
+}
+
+/* From this stop's dot (centre 10 px down) to the next one's */
+.stop:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: calc(-1 * var(--space-5) - 10px);
+  left: 5px;
+  width: 2px;
+  background: var(--color-primary);
+}
+
+.dot {
+  position: absolute;
+  top: var(--space-1);
+  left: 0;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--color-primary);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  z-index: 1;
+}
+
+.stopTitle {
+  font-weight: var(--weight-medium);
+}
+
+.stopText {
+  color: var(--color-text-muted);
+}
+
+.note {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
