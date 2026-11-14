@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { PLACEHOLDER_PDF } from "../../fixtures/intake/tickets";
 
 // [A0] Flow skeleton: landing → every step renders its heading, the stepper marks the current
 // step, and the flow works from the keyboard. Roles and labels only (docs/plans/README.md §3).
@@ -17,6 +18,15 @@ const steps = [
 
 const stepper = (page: Page) =>
   page.getByRole("navigation", { name: "Progreso de la reclamación" });
+
+/** Since [A1] the first step needs a ticket before "Continuar" appears: choose a placeholder. */
+async function chooseTicket(page: Page) {
+  await page.getByLabel("Foto o PDF del billete").setInputFiles({
+    name: "billete.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from(PLACEHOLDER_PDF),
+  });
+}
 
 /** Presses Tab until `target` has focus, failing after `max` presses. */
 async function tabTo(page: Page, target: ReturnType<Page["getByRole"]>, max = 15) {
@@ -77,6 +87,8 @@ test("completed steps are links back, later steps are not", async ({ page }) => 
 
 test("continuar and atrás move through every step in order", async ({ page }) => {
   await page.goto(steps[0].path);
+  await chooseTicket(page);
+  await page.getByRole("button", { name: "Subir billete" }).click();
   for (const next of steps.slice(1)) {
     await page.getByRole("link", { name: "Continuar" }).click();
     await expect(page.getByRole("heading", { level: 1, name: next.heading })).toBeVisible();
@@ -112,6 +124,9 @@ test.describe("keyboard", () => {
       page.getByRole("heading", { level: 1, name: "Sube la foto de tu billete" }),
     ).toBeVisible();
 
+    await chooseTicket(page);
+    await tabTo(page, page.getByRole("button", { name: "Subir billete" }));
+    await page.keyboard.press("Enter");
     await tabTo(page, page.getByRole("link", { name: "Continuar" }));
     await page.keyboard.press("Enter");
     await expect(
@@ -139,7 +154,10 @@ test.describe("mobile, 375 px wide", () => {
       );
       expect(overflow).toBeLessThanOrEqual(0);
 
-      const primary = page.getByRole("link", { name: /^(Reclamar|Continuar|Volver al inicio)$/ });
+      // The first step's primary action is its upload button ([A1]); the others are links.
+      const primary = page
+        .getByRole("link", { name: /^(Reclamar|Continuar|Volver al inicio)$/ })
+        .or(page.getByRole("button", { name: "Subir billete" }));
       await expect(primary).toBeVisible();
       const box = await primary.boundingBox();
       expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);

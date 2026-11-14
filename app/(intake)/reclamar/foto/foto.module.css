@@ -1,0 +1,116 @@
+/* The upload step. Same rhythm as the card: sections are --space-5 apart. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.progress {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* Empty, it takes no room but stays in the accessibility tree, so the next message is announced. */
+.progress:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+/* The stored ticket */
+.ticket {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.heading {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+.heading:focus {
+  outline: none;
+}
+
+.heading:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* The ticket and its name, as one object on the sunken surface. */
+.file {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}
+
+/* The photo at its own size, never blown up; nested radius = outer (8) - padding, floored at 4. */
+.frame {
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.image {
+  display: block;
+  max-width: 100%;
+  max-height: var(--ticket-preview-height);
+  height: auto;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Stands in for a thumbnail when the browser can't draw the file (PDF, HEIC). */
+.badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--ticket-badge-size);
+  height: var(--ticket-badge-size);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.meta {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name {
+  font-weight: var(--weight-medium);
+  overflow-wrap: anywhere;
+}
+
+.details,
+.note {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* On wide screens the quiet button's label lines up with the text above it (its padding is --space-5). */
+@media (min-width: 40rem) {
+  .replace {
+    margin-inline-start: calc(-1 * var(--space-5));
+  }
+}

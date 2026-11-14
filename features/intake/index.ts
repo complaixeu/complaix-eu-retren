@@ -9,6 +9,48 @@
 // Server-side only, for A1/A3 server code:
 export { createOcr } from "./ocr";
 
+// Server-side only: the draft of the claim in progress ([A1]). Later steps call `requireDraft()`
+// at the top of their page (redirects to /reclamar/foto without a valid draft) and
+// `updateCurrentDraft(patch)` / `mergeDraftData(id, patch)` from their server actions.
+export {
+  getCurrentDraft,
+  requireDraft,
+  startDraft,
+  updateCurrentDraft,
+  type DraftSessionDeps,
+} from "./draft/session";
+export {
+  DRAFT_TTL_MS,
+  INTAKE_DRAFT_STATUSES,
+  TICKET_BUCKET,
+  createDraft,
+  deleteDraft,
+  getDraft,
+  mergeDraftData,
+  ticketPreview,
+  ticketVersion,
+  type DraftDeps,
+  type IntakeDraft,
+  type IntakeDraftData,
+  type IntakeDraftStatus,
+  type IntakeDraftTicket,
+  type TicketPreview,
+} from "./draft/store";
+export { DRAFT_COOKIE } from "./draft/cookie";
+
+// Server-side only: the ticket upload check ([A1]).
+export { readTicketUpload, type ReadTicketResult, type TicketUpload } from "./upload/read";
+export {
+  TICKET_MAX_BYTES,
+  TICKET_TYPES,
+  TICKET_UPLOAD_ERRORS,
+  detectTicketType,
+  ticketUploadRules,
+  validateTicket,
+  type TicketType,
+  type TicketUploadError,
+} from "./upload/rules";
+
 // The step list, for intake's own pages in app/(intake)/ (server components):
 export {
   INTAKE_STEPS,
