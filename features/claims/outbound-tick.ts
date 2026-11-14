@@ -16,6 +16,18 @@ export interface OutboundTickResult {
 export const OUTBOUND_TICK_LIMIT = 100;
 
 /**
+ * The limit a tick uses: OUTBOUND_TICK_LIMIT, unless the env var of the same name holds a
+ * positive whole number. Only the integration tests set it (they share one database, so older
+ * rows from other files would otherwise crowd out a test's own); anything invalid keeps the default.
+ */
+export function outboundLimitFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): number {
+  const raw = env.OUTBOUND_TICK_LIMIT?.trim();
+  return raw && /^[1-9]\d{0,6}$/.test(raw) ? Number(raw) : OUTBOUND_TICK_LIMIT;
+}
+
+/**
  * 1. The initial claim of every waiting_period case whose earliest_send_at has passed at `now`.
  *    Idempotent: a sent case is no longer in waiting_period, and claims_send_initial_claim
  *    re-checks under a row lock, so a second or concurrent tick sends nothing again. A refused
