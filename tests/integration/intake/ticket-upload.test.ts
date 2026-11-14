@@ -15,6 +15,7 @@ import {
   getDraft,
   mergeDraftData,
   ticketPreview,
+  ticketVersion,
 } from "@/features/intake/draft/store";
 import { readTicketUpload } from "@/features/intake/upload/read";
 import { fixedClock } from "@/shared/clock";
@@ -176,11 +177,16 @@ describe("getDraft, mergeDraftData, deleteDraft", () => {
     const png = await createDraft(await uploaded(PLACEHOLDER_PNG, "billete.png"), { db, clock });
     const image = await ticketPreview(png, { db });
     expect(image).toMatchObject({
-      key: png.ticket!.path,
+      key: ticketVersion(png),
       filename: "billete.png",
       typeLabel: "PNG",
       sizeBytes: PLACEHOLDER_PNG.length,
     });
+    // The key handed to the browser is opaque: neither the storage key nor the draft id.
+    expect(image!.key).toMatch(/^[0-9a-f]{16}$/);
+    for (const secret of [png.id, png.ticket!.path, png.ticket!.path.slice(7, 43)]) {
+      expect(image!.key).not.toContain(secret);
+    }
     expect(image?.imageUrl).toMatch(/\/storage\/v1\/object\/sign\/tickets\//);
     const res = await fetch(image!.imageUrl!);
     expect(res.status).toBe(200);

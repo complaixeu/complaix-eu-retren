@@ -134,6 +134,36 @@ test.describe("errors", () => {
   });
 });
 
+test("a request the platform rejects shows the step's error page, with a way to retry", async ({
+  page,
+}) => {
+  // What a hosting body-size limit looks like from the browser: the action's POST gets a 413.
+  let rejected = false;
+  await page.route("**/reclamar/foto", async (route) => {
+    const request = route.request();
+    if (!rejected && request.method() === "POST" && request.headers()["next-action"]) {
+      rejected = true;
+      await route.fulfill({ status: 413, body: "Request Entity Too Large" });
+      return;
+    }
+    await route.continue();
+  });
+
+  await upload(page, "billete.png", "image/png", PLACEHOLDER_PNG);
+  const heading = page.getByRole("heading", { level: 1, name: "No hemos podido seguir" });
+  await expect(heading).toBeVisible();
+  await expect(page.getByText(/foto más ligera|PDF del billete/)).toBeVisible();
+  // The stepper (layout) stays, so the user knows where they are.
+  await expect(page.getByRole("navigation", { name: "Progreso de la reclamación" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Volver a intentarlo" }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Sube la foto de tu billete" }),
+  ).toBeVisible();
+  await upload(page, "billete.png", "image/png", PLACEHOLDER_PNG);
+  await expect(preview(page)).toContainText("billete.png");
+});
+
 test.describe("mobile, 375 px wide", () => {
   test.use({ viewport: { width: 375, height: 812 } });
 

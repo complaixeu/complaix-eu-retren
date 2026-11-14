@@ -1,6 +1,6 @@
 "use server";
 
-import { readTicketUpload, startDraft } from "@/features/intake";
+import { readTicketUpload, startDraft, ticketVersion } from "@/features/intake";
 import type { TicketUploadState } from "./ticket-choice";
 
 /**
@@ -15,7 +15,7 @@ export async function uploadTicket(
   if (!read.ok) return { status: "error", error: read.error };
   try {
     const draft = await startDraft(read.ticket);
-    return { status: "ok", key: draft.ticket!.path };
+    return { status: "ok", key: ticketVersion(draft) };
   } catch (error) {
     // No ticket data in the log, only what failed.
     console.error("[intake] ticket upload failed:", error instanceof Error ? error.message : error);

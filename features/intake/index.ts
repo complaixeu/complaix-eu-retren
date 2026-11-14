@@ -28,6 +28,7 @@ export {
   getDraft,
   mergeDraftData,
   ticketPreview,
+  ticketVersion,
   type DraftDeps,
   type IntakeDraft,
   type IntakeDraftData,

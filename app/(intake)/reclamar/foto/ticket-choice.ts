@@ -20,7 +20,7 @@ export interface TicketUploadRules {
 /** What the upload action returns to the form. */
 export type TicketUploadState =
   | { status: "idle" }
-  /** `key` is the stored ticket's key (never the draft id), to tell when the preview has it. */
+  /** `key` is an opaque ticket version (a hash), to tell when the preview shows the new ticket. */
   | { status: "ok"; key: string }
   | { status: "error"; error: TicketUploadErrorCode };
 

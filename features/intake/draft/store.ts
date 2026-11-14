@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Clock } from "@/shared/contracts";
 import { systemClock } from "@/shared/clock";
 import type { Json } from "@/shared/supabase";
@@ -173,7 +173,7 @@ export async function deleteDraft(id: string, deps: Pick<DraftDeps, "db"> = {}):
 
 /** What the upload step shows of a stored ticket. Plain data, safe to pass to the browser. */
 export interface TicketPreview {
-  /** Changes whenever the ticket does; not the draft id. */
+  /** `ticketVersion(draft)`: changes whenever the ticket does, reveals nothing. */
   key: string;
   filename: string;
   /** "JPG", "PNG", "HEIC" or "PDF". */
@@ -181,6 +181,17 @@ export interface TicketPreview {
   sizeBytes: number;
   /** A short-lived signed link for JPG and PNG; null for PDF and HEIC (browsers can't draw it). */
   imageUrl: string | null;
+}
+
+/**
+ * An opaque value that changes whenever the draft's ticket does, for the browser to tell which
+ * ticket it is showing. A hash, so neither the draft id nor the storage key reaches the page.
+ */
+export function ticketVersion(draft: IntakeDraft): string {
+  return createHash("sha256")
+    .update(`${draft.id}:${draft.ticket?.path ?? ""}`)
+    .digest("hex")
+    .slice(0, 16);
 }
 
 export async function ticketPreview(
@@ -199,7 +210,7 @@ export async function ticketPreview(
     imageUrl = signed.data?.signedUrl ?? null;
   }
   return {
-    key: ticket.path,
+    key: ticketVersion(draft),
     filename: ticket.filename,
     typeLabel: type?.label ?? "",
     sizeBytes: ticket.sizeBytes,
