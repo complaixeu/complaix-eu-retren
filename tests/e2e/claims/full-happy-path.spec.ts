@@ -103,8 +103,8 @@ test("upload → eligible claim sent to Iryo → approved → user gets the fina
   await expect(messageItem(page, "initial_claim")).toContainText("Sent");
   await expect(page.getByRole("region", { name: "Claim process" })).toContainText("Claim sent");
   await expect(messageItem(page, "initial_claim")).toContainText("Initial claim");
-  await expect(messageItem(page, "initial_claim")).toContainText("EU claim form (PDF)");
-  await expect(messageItem(page, "initial_claim")).toContainText("Mandate (PDF)");
+  await expect(messageItem(page, "initial_claim")).toContainText("EU claim form.pdf");
+  await expect(messageItem(page, "initial_claim")).toContainText("Mandate.pdf");
   await expect(messageItem(page, "initial_claim")).toContainText("Ticket");
   await expect(messageItem(page, "initial_claim").locator("ul").getByRole("listitem")).toHaveCount(
     3,
