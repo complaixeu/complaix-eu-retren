@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   TEAM_RESOLVED_EVENT,
   TeamActionError,
@@ -30,8 +30,19 @@ const OPERATOR_ADDRESS = (() => {
   return ch.address;
 })();
 
+const seeded: string[] = [];
 beforeAll(async () => {
   await waitForDb(db);
+});
+// The next files send at most a fixed number of queued rows per tick: leave none of ours queued.
+afterAll(async () => {
+  if (seeded.length === 0) return;
+  const { error } = await db
+    .from("messages")
+    .update({ status: "failed", failure_reason: "test_cleanup" })
+    .in("case_id", seeded)
+    .eq("status", "queued");
+  if (error) throw error;
 });
 
 async function seedCase(status: CaseStatus = "sent", sentDaysAgo = 1) {
@@ -52,6 +63,7 @@ async function seedCase(status: CaseStatus = "sent", sentDaysAgo = 1) {
     .select("id")
     .single();
   if (error) throw error;
+  seeded.push(data.id);
   const claimMessageId = `<${randomUUID()}@retren.example>`;
   const { error: e } = await db.from("messages").insert({
     case_id: data.id,
