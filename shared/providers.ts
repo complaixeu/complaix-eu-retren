@@ -3,7 +3,7 @@
  * fresh checkout never call a real service. Real ones need keys that only Nestor can set.
  */
 export const PROVIDERS = {
-  OCR_PROVIDER: ["fake", "vision"],
+  OCR_PROVIDER: ["fake", "vision", "gemini"],
   LLM_PROVIDER: ["fake", "gemini"],
   MAIL_PROVIDER: ["fake", "gmail"],
 } as const;

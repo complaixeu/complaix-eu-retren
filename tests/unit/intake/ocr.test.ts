@@ -4,6 +4,7 @@ import { createFakeOcr } from "@/features/intake/ocr/fake";
 import { createOcr } from "@/features/intake/ocr";
 import { classifyQuality, MIN_TEXT_LENGTH } from "@/features/intake/ocr/quality";
 import { createVisionOcr, type FetchLike } from "@/features/intake/ocr/vision";
+import { createGeminiOcr } from "@/features/intake/ocr/gemini";
 import { fixtureTextsByHash, ocrFixtureFiles, ocrFixtureTexts } from "@/tests/fixtures/intake/ocr";
 
 const json = (name: string) =>
@@ -132,5 +133,69 @@ describe("createOcr", () => {
   });
   it("an unknown provider throws", () => {
     expect(() => createOcr({ OCR_PROVIDER: "nope" })).toThrow();
+  });
+  it("accepts gemini when its key is present", () => {
+    expect(() =>
+      createOcr({ OCR_PROVIDER: "gemini", GEMINI_API_KEY: "k" }, { fetch: reply({}) }),
+    ).not.toThrow();
+  });
+  it("gemini without a key names the missing variable", () => {
+    expect(() => createOcr({ OCR_PROVIDER: "gemini" })).toThrow(/GEMINI_API_KEY/);
+  });
+});
+
+describe("gemini OCR", () => {
+  const file = { bytes: new Uint8Array([1, 2, 3]), contentType: "image/jpeg" };
+  const response = (text: string) => ({ candidates: [{ content: { parts: [{ text }] } }] });
+
+  it("sends inline image bytes and the exact transcription instruction", async () => {
+    const fetch = reply(response("Billete de tren legible para probar OCR"));
+    await createGeminiOcr({ apiKey: "k-secret", fetch }).readText(file);
+    const [url, init] = fetch.mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    expect(url).toContain(":generateContent");
+    expect(body.contents[0].parts).toContainEqual({
+      inlineData: { mimeType: file.contentType, data: Buffer.from(file.bytes).toString("base64") },
+    });
+    expect(body.contents[0].parts).toContainEqual({
+      text: "Transcribe ALL the visible text of this train ticket exactly as printed, line by line. Do not interpret, translate, add or correct anything. If you cannot read it, answer exactly UNREADABLE.",
+    });
+  });
+  it("sends PDFs inline with application/pdf", async () => {
+    const fetch = reply(response("PDF ticket text"));
+    await createGeminiOcr({ apiKey: "k", fetch }).readText({
+      ...file,
+      contentType: "application/pdf",
+    });
+    const body = JSON.parse(fetch.mock.calls[0][1].body as string);
+    expect(
+      body.contents[0].parts.find((part: { inlineData?: unknown }) => part.inlineData)?.inlineData,
+    ).toMatchObject({ mimeType: "application/pdf" });
+  });
+  it("keeps the API key in the header and out of URLs and logs, and returns text", async () => {
+    const fetch = reply(response("Transcribed ticket text exactly"));
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const result = await createGeminiOcr({ apiKey: "k-secret", fetch }).readText(file);
+    expect(result).toEqual({ text: "Transcribed ticket text exactly", quality: "ok" });
+    const [url, init] = fetch.mock.calls[0];
+    expect(url).not.toContain("k-secret");
+    expect((init.headers as Record<string, string>)["x-goog-api-key"]).toBe("k-secret");
+    expect(log).not.toHaveBeenCalled();
+    log.mockRestore();
+  });
+  it.each([
+    ["HTTP error", async () => new Response("private", { status: 503 })],
+    ["empty response", async () => new Response(JSON.stringify(response("")))],
+    ["UNREADABLE response", async () => new Response(JSON.stringify(response("UNREADABLE")))],
+    [
+      "timeout",
+      async () => {
+        throw new DOMException("timeout", "TimeoutError");
+      },
+    ],
+  ])("returns unreadable for %s", async (_name, impl) => {
+    const fetch = vi.fn<FetchLike>(impl);
+    const result = await createGeminiOcr({ apiKey: "k", fetch }).readText(file);
+    expect(result.quality).toBe("unreadable");
   });
 });
