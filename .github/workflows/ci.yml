@@ -186,9 +186,9 @@ jobs:
           set -uo pipefail
           for attempt in 1 2 3 4 5 6; do
             if [ -n "$BYPASS" ]; then
-              status=$(curl -s -o /dev/null -w '%{http_code}' -H "x-vercel-protection-bypass: $BYPASS" "$URL/api/health" || echo 000)
+              status=$(curl -s -o /dev/null -w '%{http_code}' -H "x-vercel-protection-bypass: $BYPASS" "$URL/api/health" || true)
             else
-              status=$(curl -s -o /dev/null -w '%{http_code}' "$URL/api/health" || echo 000)
+              status=$(curl -s -o /dev/null -w '%{http_code}' "$URL/api/health" || true)
             fi
             echo "Attempt $attempt: $status"
             [ "$status" = "200" ] && exit 0
