@@ -89,8 +89,17 @@ function deobfuscate(text: string): string {
 const LABEL = "[a-z0-9](?:[a-z0-9-]*[a-z0-9])?";
 const HOST = `(?:${LABEL}\\.)+[a-z]{2,24}`;
 const ADDRESS = new RegExp(`([a-z0-9._%+-]+)@(${HOST})`, "g");
-/** `https://host…` and `www.host…`; the captured host keeps its `www.` exactly once. */
-const URL_HOST = new RegExp(`(?:\\bhttps?:\\/\\/(${HOST})|(?<![\\w.@/-])(www\\.${HOST}))`, "g");
+/** Any `scheme://` (http, ftp, sftp, file, git+ssh, …). `mailto:` is covered by ADDRESS. */
+const SCHEME = "[a-z][a-z0-9+.-]*:\\/\\/";
+/**
+ * `scheme://[user@]host…` and `www.host…`; the captured host keeps its `www.` exactly once. Every
+ * scheme goes through the same trusted check as http(s).
+ */
+const URL_HOST = new RegExp(
+  `(?:\\b${SCHEME}(?:[^\\s/@]+@)?(${HOST})|(?<![\\w.@/-])(www\\.${HOST}))`,
+  "g",
+);
+const URL_TOKEN = new RegExp(`\\b(?:${SCHEME}|www\\.)\\S*`, "g");
 /**
  * A bare host without a scheme: two or more labels and a letters-only TLD, not part of an
  * address or a URL, and either followed by a path or with a subdomain (3+ labels). Prose such as
@@ -140,7 +149,7 @@ function untrustedTarget(text: string, trust: Trust): boolean {
   }
   // Bare hosts are looked for outside the URLs already checked (their paths, queries and
   // fragments are not hosts), and file names are not hosts.
-  const withoutUrls = cleaned.replace(/\b(?:https?:\/\/|www\.)\S*/g, " ");
+  const withoutUrls = cleaned.replace(URL_TOKEN, " ");
   for (const m of withoutUrls.matchAll(BARE_HOST)) {
     const h = m[1];
     if (FILE_EXTENSION.test(h)) continue;
