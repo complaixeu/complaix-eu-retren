@@ -1,0 +1,219 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`operator configurations > keeps the operator policy table values in a reviewed snapshot 1`] = `
+[
+  {
+    "active": true,
+    "channel": {
+      "address": "atencion.cliente@iryo.eu",
+      "type": "email",
+    },
+    "consultedAt": "2026-11-13",
+    "deadline": {
+      "amount": 3,
+      "anchor": "trip",
+      "unit": "months",
+    },
+    "exclusions": {
+      "adifSpeedLimit": {
+        "policy": "operator_decides",
+      },
+      "forceMajeure": {
+        "note": "decide la empresa",
+        "sendAnyway": true,
+      },
+      "intermediary": {
+        "payment": [
+          "voucher",
+        ],
+      },
+    },
+    "id": "iryo",
+    "minWait": {
+      "amount": 48,
+      "anchor": "trip",
+      "unit": "hours",
+    },
+    "payment": {
+      "default": [
+        "voucher",
+      ],
+      "onMoneyRequest": [
+        "money",
+      ],
+    },
+    "responseDays": 30,
+    "sourceUrls": [
+      "https://iryo.eu/es/viaja/servicio-postventa",
+      "https://iryo.eu/es/legal/condiciones-generales-del-contrato-de-transportes",
+      "https://iryo.eu/es/atencion-al-cliente",
+    ],
+    "tiers": [
+      {
+        "maxDelayMinutes": 60,
+        "minDelayMinutes": 60,
+        "payment": [
+          "voucher",
+        ],
+        "percent": 50,
+        "status": "doubtful",
+      },
+      {
+        "maxDelayMinutes": 90,
+        "minDelayMinutes": 61,
+        "payment": [
+          "voucher",
+          "money",
+        ],
+        "percent": 50,
+        "status": "eligible",
+      },
+      {
+        "minDelayMinutes": 91,
+        "payment": [
+          "voucher",
+          "money",
+        ],
+        "percent": 100,
+        "status": "eligible",
+      },
+    ],
+    "validFrom": "2026-11-13",
+    "version": "2026-11-13",
+  },
+  {
+    "active": false,
+    "channel": {
+      "type": "web_form",
+      "url": "https://venta.renfe.com/vol/claimsMenu.do",
+    },
+    "consultedAt": "2026-11-13",
+    "deadline": {
+      "amount": 3,
+      "anchor": "trip",
+      "unit": "months",
+    },
+    "exclusions": {
+      "adifSpeedLimit": {
+        "policy": "excluded",
+        "purchaseDateOnOrAfter": "2026-01-31",
+      },
+      "forceMajeure": {
+        "note": "decide la empresa",
+        "sendAnyway": true,
+      },
+      "intermediary": {},
+    },
+    "id": "renfe",
+    "minWait": {
+      "amount": 24,
+      "anchor": "arrival",
+      "unit": "hours",
+    },
+    "payment": {
+      "default": [
+        "money",
+        "voucher",
+      ],
+    },
+    "responseDays": 30,
+    "sourceUrls": [
+      "https://www.renfe.com/es/es/ayuda/compromiso-puntualidad",
+      "https://www.renfe.com/es/es/ayuda/contactar-renfe.html",
+      "https://www.renfe.com/es/es/normativa.html",
+    ],
+    "tiers": [
+      {
+        "maxDelayMinutes": 90,
+        "minDelayMinutes": 60,
+        "payment": [
+          "money",
+          "voucher",
+        ],
+        "percent": 50,
+        "status": "eligible",
+      },
+      {
+        "minDelayMinutes": 91,
+        "payment": [
+          "money",
+          "voucher",
+        ],
+        "percent": 100,
+        "status": "eligible",
+      },
+    ],
+    "validFrom": "2026-11-13",
+    "version": "2026-11-13",
+  },
+  {
+    "active": false,
+    "channel": {
+      "type": "web_form",
+      "url": "https://ouigo.zendesk.com/hc/es/requests/new",
+    },
+    "consultedAt": "2026-11-13",
+    "deadline": {
+      "amount": 3,
+      "anchor": "trip",
+      "unit": "months",
+    },
+    "exclusions": {
+      "adifSpeedLimit": {
+        "policy": "not_applicable",
+      },
+      "forceMajeure": {
+        "note": "decide la empresa",
+        "sendAnyway": true,
+      },
+      "intermediary": {},
+    },
+    "id": "ouigo",
+    "minWait": {
+      "amount": 7,
+      "anchor": "trip",
+      "unit": "days",
+    },
+    "payment": {
+      "default": [
+        "non_refundable_voucher",
+        "refundable_voucher",
+      ],
+    },
+    "responseDays": 30,
+    "sourceUrls": [
+      "https://www.ouigo.com/es/condiciones-generales-de-transporte-ouigo",
+    ],
+    "tiers": [
+      {
+        "maxDelayMinutes": 59,
+        "minDelayMinutes": 30,
+        "payment": [
+          "non_refundable_voucher",
+        ],
+        "percent": 50,
+        "status": "eligible",
+      },
+      {
+        "maxDelayMinutes": 89,
+        "minDelayMinutes": 60,
+        "payment": [
+          "refundable_voucher",
+        ],
+        "percent": 50,
+        "status": "eligible",
+      },
+      {
+        "minDelayMinutes": 90,
+        "payment": [
+          "refundable_voucher",
+        ],
+        "percent": 100,
+        "status": "eligible",
+      },
+    ],
+    "validFrom": "2026-11-13",
+    "version": "2026-11-13",
+  },
+]
+`;
