@@ -228,7 +228,22 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      claims_create_case: {
+        Args: {
+          p_earliest_send_at: string;
+          p_eligibility: Json;
+          p_event_data: Json;
+          p_next_action_at: string;
+          p_notice?: Json;
+          p_operator: string;
+          p_public_ref: string;
+          p_status: Database["public"]["Enums"]["case_status"];
+          p_submission: Json;
+          p_user_email: string;
+        };
+        Returns: string;
+      };
+      claims_new_public_ref: { Args: Record<PropertyKey, never>; Returns: string };
     };
     Enums: {
       attachment_kind: "eu_form" | "mandate" | "ticket" | "user_document";
