@@ -47,6 +47,23 @@
   border-inline-start: var(--alert-stripe) solid var(--color-warning);
 }
 
+/* The stripe sits in the card's gutter, so the field's edges line up with the unmarked ones. In a
+   pair there is no gutter on the right-hand side, so it stays inside the column. */
+.section > div > .missing:only-child {
+  margin-inline-start: calc(-1 * (var(--alert-stripe) + var(--space-3)));
+}
+
+/* The localizador's box carries the stripe itself instead of being framed twice. */
+.section > div > .missing:has(> .check) {
+  margin-inline-start: 0;
+  padding-inline-start: 0;
+  border-inline-start: 0;
+}
+
+.missing > .check {
+  border-inline-start: var(--alert-stripe) solid var(--color-warning);
+}
+
 .missingNote {
   color: var(--color-warning);
   font-weight: var(--weight-medium);

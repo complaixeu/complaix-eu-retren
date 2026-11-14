@@ -13,6 +13,9 @@ const confirm = (page: Page) =>
   page.getByRole("checkbox", { name: "He comprobado el localizador" });
 const continueButton = (page: Page) => page.getByRole("button", { name: "Continuar" });
 const MISSING = /No aparece en el billete/;
+// The form's error summary. Next's route announcer is also a role="alert", so match by its text.
+const errorSummary = (page: Page) =>
+  page.getByRole("alert").filter({ hasText: "Faltan datos o hay alguno que corregir" });
 
 async function openWith(page: Page, data: Record<string, unknown>) {
   await uploadPlaceholderTicket(page);
@@ -64,7 +67,7 @@ test("the missing fields are marked and asked for", async ({ page }) => {
   await confirm(page).check();
   await continueButton(page).click();
 
-  await expect(page.getByRole("alert")).toContainText("Faltan datos o hay alguno que corregir");
+  await expect(errorSummary(page)).toBeVisible();
   await expect(field(page, "Localizador")).toBeFocused();
   await expect(field(page, "Localizador")).toHaveAttribute("aria-invalid", "true");
   await expect(field(page, "Localizador")).toHaveAccessibleDescription(
@@ -165,7 +168,7 @@ test.describe("mobile, 375 px wide", () => {
         expect((await target.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
       }
       await continueButton(page).click();
-      await expect(page.getByRole("alert")).toBeVisible();
+      await expect(errorSummary(page)).toBeVisible();
       expect(await overflow()).toBeLessThanOrEqual(0);
     });
   }

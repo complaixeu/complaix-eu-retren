@@ -64,8 +64,9 @@ export function ReviewForm({ action, sections, values, missingCount, backHref }:
   };
 
   const renderField = (field: ReviewFieldView): ReactNode => {
-    const help = helpOf(field);
     const error = errors[field.name];
+    // Under an error, the error says what to do: the "missing" note would only repeat it.
+    const help = helpOf(field, error != null);
     const value = shown[field.name] ?? "";
 
     if (field.kind === "choice") {
@@ -171,8 +172,8 @@ export function ReviewForm({ action, sections, values, missingCount, backHref }:
   );
 }
 
-function helpOf(field: ReviewFieldView): ReactNode {
-  if (!field.missing) return field.help;
+function helpOf(field: ReviewFieldView, hasError: boolean): ReactNode {
+  if (!field.missing || hasError) return field.help;
   return (
     <>
       <span className={styles.missingNote}>{MISSING_NOTE}</span>
