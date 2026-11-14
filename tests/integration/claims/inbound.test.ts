@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { USER_DOCUMENTS_BUCKET } from "@/features/claims/actions";
 import { createClassifier } from "@/features/claims/classifier";
 import { RAW_MAIL_BUCKET, ingestMessage, type IngestDeps } from "@/features/claims/inbound";
@@ -41,6 +41,19 @@ beforeAll(async () => {
   deps = { db, env: ENV, clock: fixedClock(NOW.toISOString()), classifier: createClassifier(ENV) };
 });
 afterEach(() => vi.restoreAllMocks());
+
+// The database is shared by every integration file, and the tick sends the oldest 100 queued rows
+// (OUTBOUND_TICK_LIMIT). The mail these tests queue must not crowd out a later file's rows.
+const seededCases: string[] = [];
+afterAll(async () => {
+  if (!seededCases.length) return;
+  await db
+    .from("messages")
+    .update({ status: "failed", failure_reason: "test_cleanup" })
+    .in("case_id", seededCases)
+    .eq("direction", "outbound")
+    .eq("status", "queued");
+});
 
 type Seeded = { id: string; ref: string; claimMessageId: string; noticeMessageId: string };
 
@@ -89,6 +102,7 @@ async function seedCase(status: CaseStatus = "sent"): Promise<Seeded> {
     },
   ]);
   if (e) throw e;
+  seededCases.push(data.id);
   return { id: data.id, ref, claimMessageId, noticeMessageId };
 }
 
