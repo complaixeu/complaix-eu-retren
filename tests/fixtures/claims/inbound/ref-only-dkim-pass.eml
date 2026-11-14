@@ -1,0 +1,19 @@
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@iryo.eu header.s=sel1 header.b=FAKEb64;
+       spf=pass (google.com: domain of atencion.cliente@iryo.eu designates 192.0.2.10 as permitted sender) smtp.mailfrom=atencion.cliente@iryo.eu;
+       dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=iryo.eu
+From: Iryo Atencion al Cliente <atencion.cliente@iryo.eu>
+To: Retren Reclamaciones <reclamaciones@retren.example>
+Subject: Re: Reclamacion por retraso [RTN-T100]
+Date: Mon, 02 Nov 2026 11:00:00 +0100
+Message-ID: <fixture-ref-only-dkim-pass@mail.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Buenos días,
+
+Tras revisar su caso, le informamos de que su reclamación ha sido aprobada. Recibirá el reembolso en los próximos días.
+
+Un saludo,
+Atención al Cliente (texto de prueba ficticio)
