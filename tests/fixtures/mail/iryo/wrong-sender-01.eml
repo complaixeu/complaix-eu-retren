@@ -1,0 +1,18 @@
+From: Atencion Iryo <atencion@iryo-reembolsos.example>
+To: Retren Reclamaciones <reclamaciones@retren.example>
+Subject: Re: Reclamacion por retraso [RTN-T022]
+Date: Mon, 02 Nov 2026 10:22:00 +0100
+Message-ID: <fixture-wrong-sender-01@mail.example>
+In-Reply-To: <claim-rtn-t022@retren.example>
+References: <claim-rtn-t022@retren.example>
+X-Retren-Golden-Accept: approved, other
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Buenos días,
+
+Su reclamación ha sido aprobada. Recibirá el reembolso en los próximos días.
+
+Un saludo,
+Atención al Cliente (texto de prueba ficticio)

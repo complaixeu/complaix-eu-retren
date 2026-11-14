@@ -39,7 +39,8 @@ Uses: `@/features/claims` (`createCase`, mock until C2). Never imports B directl
 
 ### A2: OCR port
 
-- `OcrProvider` with `vision` (Google Cloud Vision, server-only, key from env) and `fake`
+- `OcrProvider` with `vision` (Google Cloud Vision, server-only, key from
+  `GOOGLE_CLOUD_VISION_API_KEY`) and `fake`
   (fixture text keyed by file hash). Returns `{ text, quality: 'ok' | 'unreadable' }`.
 - Tests:
   - unit: the fake returns the fixtures; the adapter maps Vision's response shape (recorded JSON
@@ -47,8 +48,10 @@ Uses: `@/features/claims` (`createCase`, mock until C2). Never imports B directl
 
 ### A3: Extraction port and "never invent"
 
-- `Extractor` with `gemini` (Flash-Lite, structured JSON output; check the model name) and `fake`.
-  Output: `TicketData`, every field optional, plus `missing[]`.
+- `Extractor` with `gemini` (Flash-Lite, structured JSON output; key from `GEMINI_API_KEY`,
+  server-only) and `fake`. The model comes from `GEMINI_EXTRACTION_MODEL` (not `GEMINI_MODEL`, which is C5's classifier), default `gemini-3.5-flash-lite`
+  (listed for the DEV key on 2026-11-14). Never a `-latest` alias: a silent model change would
+  change extraction results. Output: `TicketData`, every field optional, plus `missing[]`.
 - Post-check: any extracted value that doesn't appear (normalized) in the OCR text is dropped and
   goes into `missing`. This is the "AI fills nothing the user didn't give" rule.
 - An unreadable photo asks for another one; the second failure goes to manual entry.
