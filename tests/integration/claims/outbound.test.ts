@@ -277,22 +277,23 @@ describe("sendInitialClaim (local Supabase)", () => {
     ]);
   });
 
-  it("refuses mock template text through a non-fake provider, before writing anything", async () => {
+  it("sends real B6 template text through a non-fake provider when redirected", async () => {
     const { caseId } = await readyCase();
     const transport = createFakeTransport();
-    expect(
-      await sendInitialClaim(caseId, {
-        db,
-        clock: fixedClock(READY),
-        transport,
-        providerName: "smtp",
-        env: { MAIL_REDIRECT_ALL_TO: "equipo@retren.example" },
-      }),
-    ).toEqual({ ok: false, reason: "mock_text" });
+    const sent = await sendInitialClaim(caseId, {
+      db,
+      clock: fixedClock(READY),
+      transport,
+      providerName: "smtp",
+      env: { MAIL_REDIRECT_ALL_TO: "equipo@retren.example" },
+    });
+    expect(sent).toMatchObject({ ok: true, delivery: { status: "sent" } });
     const { row, messages } = await stored(caseId);
-    expect(row.status).toBe("waiting_period");
-    expect(messages).toEqual([]);
-    expect(transport.outbox).toEqual([]);
+    expect(row.status).toBe("sent");
+    expect(messages).toHaveLength(1);
+    expect(messages[0].body_text).toContain("Reglamento (UE) 2021/782");
+    expect(messages[0].body_text).not.toMatch(/\bmock\b/i);
+    expect(transport.outbox).toHaveLength(1);
   });
 });
 

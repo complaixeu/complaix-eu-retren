@@ -4,11 +4,13 @@ import * as documents from "@/features/documents";
 import * as mock from "@/features/documents/mock";
 import { buildEuForm as realBuildEuForm } from "@/features/documents/eu-form";
 import { buildMandate as realBuildMandate } from "@/features/documents/mandate";
+import { renderTemplate as realRenderTemplate } from "@/features/documents/templates";
 
 describe("documents public API", () => {
   it("routes the EU form and mandate exports to their real implementations", () => {
     expect(documents.buildEuForm).toBe(realBuildEuForm);
     expect(documents.buildMandate).toBe(realBuildMandate);
+    expect(documents.renderTemplate).toBe(realRenderTemplate);
   });
 
   it("keeps the template mock output valid against the shared schema", () => {
