@@ -16,7 +16,6 @@ import {
   type Clock,
   type OperatorPublicConfig,
   type ReplyCategory,
-  type TemplateKind,
 } from "@/shared/contracts";
 import type { Json } from "@/shared/supabase";
 import { createServiceClient, type ServiceClient } from "@/shared/supabase/server";
@@ -326,7 +325,7 @@ const NOTICE_VARS: Record<
   (a: ReplyActionKind) => Record<string, string>
 > = {
   user_request_document: () => ({}),
-  user_final_result: (a) =>
+  user_final_result: (a): Record<string, string> =>
     a === "resolve" ? { result: "approved", confirmReceipt: "yes" } : { result: "denied" },
 };
 
