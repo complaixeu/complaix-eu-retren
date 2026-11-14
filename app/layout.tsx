@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { preload } from "react-dom";
+import { SiteShell } from "@/shared/ui/site-shell";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,12 +17,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   preload("/fonts/montserrat-v31-latin.woff2", FONT_OPTIONS);
 
   return (
-    <html lang="es">
+    <html lang="es" data-theme="light">
       <body>
         <a href="#contenido" className="skip-link">
           Saltar al contenido
         </a>
-        {children}
+        <SiteShell>{children}</SiteShell>
       </body>
     </html>
   );

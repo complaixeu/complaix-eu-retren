@@ -165,6 +165,10 @@
   /* Layout. --tap-target is the minimum for anything tappable; --control-height is the height of
      buttons and inputs (48 px, the Complaix button size). */
   --content-width: 36rem;
+  --page-width: 72rem;
+  --page-gutter: 1.5rem;
+  --hero-title-size: clamp(2.5rem, 5vw, 4rem);
+  --section-space: clamp(4rem, 8vw, 6rem);
   --tap-target: 44px;
   --control-height: 48px;
   --focus-ring: 2px solid var(--color-focus);
