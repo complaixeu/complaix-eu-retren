@@ -93,7 +93,9 @@ test("upload → eligible claim sent to Iryo → approved → user gets the fina
   await expectStatus(page, "waiting_period");
 
   // The eligible trip arrived yesterday, so Iryo's 48-hour minimum wait is still ahead.
-  const daysPastEarliest = Math.floor((Date.parse(stored.earliest_send_at) - Date.now()) / DAY) + 2;
+  // Round up the time left before the earliest send, plus one day of margin, so the move
+  // always lands past it whatever the time of day or the UTC/Madrid date boundary.
+  const daysPastEarliest = Math.ceil((Date.parse(stored.earliest_send_at) - Date.now()) / DAY) + 1;
   await advanceClock(page, Math.max(1, daysPastEarliest));
   await expectStatus(page, "sent");
   await expect(messageItem(page, "initial_claim")).toContainText("sent");
