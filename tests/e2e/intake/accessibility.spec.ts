@@ -5,6 +5,7 @@ import { DELAYS, tripData } from "../../fixtures/intake/submit";
 import { startDraftWith, startSubmittableDraft, uploadPlaceholderTicket } from "./support/draft";
 
 async function check(page: Page) {
+  await expect(page).toHaveTitle(/\S/);
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();

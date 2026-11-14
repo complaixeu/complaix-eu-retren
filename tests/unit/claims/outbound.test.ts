@@ -16,7 +16,7 @@ import {
 } from "@/features/claims/outbound";
 import { MAX_SENDS_PER_CASE } from "@/features/claims/timers";
 import { createFakeTransport, createMailTransport } from "@/features/claims/transport";
-import { renderTemplate } from "@/features/documents";
+import { renderTemplate } from "@/features/documents/mock";
 import { getOperatorConfig } from "@/features/rules";
 import { MailMessage } from "@/shared/contracts";
 
