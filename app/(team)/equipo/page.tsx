@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
+import { Suspense } from "react";
 import Link from "next/link";
 import { createServiceClient } from "@/shared/supabase/server";
 import { Button } from "@/shared/ui";
@@ -14,10 +15,16 @@ import styles from "./team.module.css";
 
 export const metadata: Metadata = { title: "Cola del equipo" };
 
-/** Data of a team member's session: always rendered per request, never cached. */
-export const dynamic = "force-dynamic";
+export default function TeamPage({ searchParams }: PageProps<"/equipo">) {
+  // Everything here depends on the session, so it renders at request time (Cache Components).
+  return (
+    <Suspense fallback={<p>Cargando…</p>}>
+      <Queue searchParams={searchParams} />
+    </Suspense>
+  );
+}
 
-export default async function TeamPage({ searchParams }: PageProps<"/equipo">) {
+async function Queue({ searchParams }: Pick<PageProps<"/equipo">, "searchParams">) {
   const session = await requireTeam();
   const params = await searchParams;
   const one = (v: string | string[] | undefined) => (typeof v === "string" ? v : undefined);

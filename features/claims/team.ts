@@ -412,15 +412,21 @@ const FIXTURE_LABELS: Record<string, string> = {
   "spoofed-ref": "Referencia falsificada",
 };
 
-const fixturesRoot = (env: Env) =>
-  env.TEAM_FIXTURES_DIR ?? join(process.cwd(), "tests", "fixtures", "mail");
+/**
+ * Where an operator's scripted replies are: tests/fixtures/mail/<operator> (statically scoped, so
+ * the build traces that folder only). TEAM_FIXTURES_DIR is a test-only override.
+ */
+const operatorDir = (env: Env, operator: string) =>
+  env.TEAM_FIXTURES_DIR
+    ? join(/* turbopackIgnore: true */ env.TEAM_FIXTURES_DIR, operator)
+    : join(process.cwd(), "tests", "fixtures", "mail", operator);
 
 /** The scripted replies available for an operator: tests/fixtures/mail/<operator>/*.eml. */
 export function listFixtures(operator: string, env: Env = process.env): MailFixture[] {
   if (!/^[a-z]+$/.test(operator)) return [];
   let files: string[];
   try {
-    files = readdirSync(join(fixturesRoot(env), operator));
+    files = readdirSync(operatorDir(env, operator));
   } catch {
     return [];
   }
@@ -526,10 +532,7 @@ export async function injectOperatorReply(
     sent.data.find((m) => m.to_address.toLowerCase() !== row.user_email.toLowerCase());
   if (!claim?.message_id) throw new TeamActionError("no_initial_claim");
 
-  const raw = readFileSync(
-    join(fixturesRoot(env), row.operator, `${input.fixture}.eml`),
-    "utf8",
-  );
+  const raw = readFileSync(join(operatorDir(env, row.operator), `${input.fixture}.eml`), "utf8");
   const mail = scriptedReply(raw, {
     fixture: input.fixture,
     publicRef: row.public_ref,

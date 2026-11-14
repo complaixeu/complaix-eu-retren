@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { createServiceClient } from "@/shared/supabase/server";
 import { Button } from "@/shared/ui";
 import { getCaseView, listFixtures } from "../../../../../features/claims/team";
@@ -12,12 +13,19 @@ import { ResolveForm } from "../../_components/resolve-form";
 import styles from "../../team.module.css";
 
 export const metadata: Metadata = { title: "Caso" };
-export const dynamic = "force-dynamic";
 
-export default async function TeamCasePage({
+export default function TeamCasePage({ params, searchParams }: PageProps<"/equipo/casos/[id]">) {
+  return (
+    <Suspense fallback={<p>Cargando…</p>}>
+      <CaseDetail params={params} searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function CaseDetail({
   params,
   searchParams,
-}: PageProps<"/equipo/casos/[id]">) {
+}: Pick<PageProps<"/equipo/casos/[id]">, "params" | "searchParams">) {
   await requireTeam();
   const { id } = await params;
   const query = await searchParams;

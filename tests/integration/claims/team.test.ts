@@ -10,6 +10,7 @@ import {
   resolveQueueItem,
   runDemoTick,
 } from "@/features/claims/team";
+import { ingestForTeam } from "@/features/claims/team-ingest";
 import { getOperatorConfig } from "@/features/rules";
 import type { CaseStatus } from "@/shared/contracts";
 import type { Json } from "@/shared/supabase";
@@ -222,6 +223,37 @@ describe("injectOperatorReply", () => {
     expect(raw).toContain(`References: ${c.claimMessageId}`);
     expect(raw).toContain(`[${c.ref}]`);
     expect(raw).toContain("IBAN");
+  });
+
+  it("goes through C4, C5 and C6 for real: an IBAN request moves the case and queues the notice", async () => {
+    const c = await seedCase();
+    const out = await injectOperatorReply(
+      db,
+      { caseId: c.id, fixture: "asks_for_data-01" },
+      { ingest: ingestForTeam, env: DEMO },
+    );
+    expect(out).toMatchObject({ outcome: "applied", status: "waiting_user" });
+
+    const view = await getCaseView(db, c.id);
+    expect(view?.case.status).toBe("waiting_user");
+    expect(view?.messages.map((m) => [m.direction, m.kind, m.status])).toContainEqual([
+      "inbound",
+      "asks_for_data",
+      "received",
+    ]);
+    // The notice to the user is in the outbox.
+    const outbox = view?.messages.filter(
+      (m) => m.direction === "outbound" && m.status === "queued",
+    );
+    expect(outbox?.length).toBe(1);
+
+    // The same fixture again is a new mail (fresh Message-ID), not a duplicate.
+    const again = await injectOperatorReply(
+      db,
+      { caseId: c.id, fixture: "asks_for_data-01" },
+      { ingest: ingestForTeam, env: DEMO },
+    );
+    expect(again.outcome).not.toBe("duplicate");
   });
 
   it("is demo only, and refuses unknown fixtures, cases and path tricks", async () => {

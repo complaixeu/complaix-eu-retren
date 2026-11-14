@@ -3,6 +3,7 @@
 // claims' public API (like app/api/claims/tick/route.ts).
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { connection } from "next/server";
 import {
   TEAM_SESSION_COOKIE,
   teamAccessMode,
@@ -18,6 +19,8 @@ export const LOGIN_PATH = "/equipo/entrar";
  * an action is a public endpoint, so it never trusts that the page was gated.
  */
 export async function requireTeam(): Promise<{ email: string | null }> {
+  // Env and cookies are per request: never frozen into a prerendered shell.
+  await connection();
   const mode = teamAccessMode();
   if (mode === "disabled") notFound();
   if (mode === "open") return { email: null };
