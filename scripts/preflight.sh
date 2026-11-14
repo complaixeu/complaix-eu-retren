@@ -50,8 +50,14 @@ if gh auth status >/dev/null 2>&1; then
   [[ "$perm" == WRITE || "$perm" == MAINTAIN || "$perm" == ADMIN ]] && ok "repo permission: $perm" || bad "repo permission: ${perm:-none}" "ask Nestor for Write (ONBOARDING §2)"
   # The agents' token must not be able to administer the repo (ONBOARDING §6). Reading branch
   # protection needs admin, and it is read-only, so it is a safe probe.
+  # The repo owner may knowingly run with an admin token: RETREN_ALLOW_ADMIN_TOKEN=1 turns this
+  # into a warning (decided by Nestor, 2026-11-14). Everyone else keeps the hard stop.
   if gh api "repos/{owner}/{repo}/branches/develop/protection" >/dev/null 2>&1; then
-    bad "this GitHub token has ADMIN capability" "run agents with the narrow fine-grained token: GH_TOKEN=<token> pnpm empezar (ONBOARDING §6)"
+    if [ "${RETREN_ALLOW_ADMIN_TOKEN:-}" = 1 ]; then
+      warn "this GitHub token has ADMIN capability (allowed by RETREN_ALLOW_ADMIN_TOKEN=1)" "the agents can change repo settings with it; only the written rules stop them"
+    else
+      bad "this GitHub token has ADMIN capability" "run agents with the narrow fine-grained token: GH_TOKEN=<token> pnpm empezar (ONBOARDING §6), or, repo owner only, RETREN_ALLOW_ADMIN_TOKEN=1 pnpm empezar"
+    fi
   else ok "token has no admin capability"; fi
 else bad "gh not logged in" "gh auth login (your own account)"; fi
 

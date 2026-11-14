@@ -37,7 +37,9 @@ automatically and must end with **READY**.
       requests, Issues read/write, Actions read; no Administration, Secrets, Environments or
       Workflows), e.g. `GH_TOKEN=<that token> caffeinate -dimsu claude …`. Check it with
       the preflight, which fails if the token can read branch protection (that needs admin, and the
-      check is read-only).
+      check is read-only). The repo owner may knowingly override it with
+      `RETREN_ALLOW_ADMIN_TOKEN=1 pnpm empezar`: the check becomes a warning, and only the written
+      rules (CLAUDE.md §0) then stop the agents from changing repo settings.
 
 - [ ] Claude Code is logged in, and Remote Control works (`/remote-control`) so you can follow the
       run from your phone.
@@ -105,7 +107,8 @@ That's all. `pnpm empezar`:
 type `/remote-control` once the session is up if you want to follow it from your phone.
 
 A's owner (the repo admin) runs it with the narrow token: `GH_TOKEN=<token> pnpm empezar`. The
-preflight refuses a token that can administer the repo.
+preflight refuses a token that can administer the repo, unless the owner sets
+`RETREN_ALLOW_ADMIN_TOKEN=1`.
 
 Within a few minutes your **tracker issue** (`Tracker: <domain>`) appears on GitHub with one box per
 task. If it doesn't, the run hasn't really started: look at the terminal before you leave.
