@@ -3,8 +3,9 @@ import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { teamAccessMode } from "../../../../features/claims/team-access";
-import { Alert, Button, Field, Input } from "@/shared/ui";
+import { Alert, Field, Input } from "@/shared/ui";
 import { login } from "../actions";
+import { ActionSubmit } from "../_components/action-submit";
 import styles from "../team.module.css";
 
 export const metadata: Metadata = { title: "Team sign-in" };
@@ -51,7 +52,7 @@ async function LoginForm({ searchParams }: Pick<PageProps<"/equipo/entrar">, "se
             />
           )}
         </Field>
-        <Button type="submit">Sign in</Button>
+        <ActionSubmit pendingLabel="Signing in…">Sign in</ActionSubmit>
       </form>
     </section>
   );

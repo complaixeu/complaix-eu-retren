@@ -1,4 +1,4 @@
-import { Button } from "@/shared/ui";
+import { ActionSubmit } from "./action-submit";
 import { advanceClock, resetClock } from "../actions";
 import styles from "../team.module.css";
 
@@ -23,7 +23,7 @@ export function ClockPanel({ now, back, caseId }: { now: string; back: string; c
             <input type="hidden" name="back" value={back} />
             <input type="hidden" name="caseId" value={caseId} />
             <input type="hidden" name="days" value={days} />
-            <Button type="submit">+{days} days</Button>
+            <ActionSubmit pendingLabel="Moving clock…">+{days} days</ActionSubmit>
           </form>
         ))}
       </div>
@@ -43,13 +43,13 @@ export function ClockPanel({ now, back, caseId }: { now: string; back: string; c
             className={styles.select}
           />
         </label>
-        <Button type="submit">Move clock forward</Button>
+        <ActionSubmit pendingLabel="Moving clock…">Move clock forward</ActionSubmit>
       </form>
       <form action={resetClock}>
         <input type="hidden" name="back" value={back} />
-        <Button type="submit" variant="quiet">
+        <ActionSubmit pendingLabel="Resetting…" variant="quiet">
           Reset simulated clock
-        </Button>
+        </ActionSubmit>
       </form>
     </section>
   );

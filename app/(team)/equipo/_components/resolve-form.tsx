@@ -1,4 +1,4 @@
-import { Button } from "@/shared/ui";
+import { ActionSubmit } from "./action-submit";
 import { resolveItem } from "../actions";
 
 /** Marks one queue item as handled (appends an event; nothing is deleted). */
@@ -19,9 +19,13 @@ export function ResolveForm({
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="source" value={source} />
       <input type="hidden" name="back" value={back} />
-      <Button type="submit" variant="secondary" aria-label={`Mark as resolved: ${label}`}>
+      <ActionSubmit
+        pendingLabel="Saving…"
+        variant="secondary"
+        aria-label={`Mark as resolved: ${label}`}
+      >
         Mark as resolved
-      </Button>
+      </ActionSubmit>
     </form>
   );
 }
