@@ -52,9 +52,9 @@ jobs:
     timeout-minutes: 15
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -80,9 +80,9 @@ jobs:
     timeout-minutes: 10
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -99,7 +99,7 @@ jobs:
     if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     environment: development
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: supabase/setup-cli@v1
         with:
           version: ${{ env.SUPABASE_CLI_VERSION }}
@@ -142,11 +142,11 @@ jobs:
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.check.outputs.ready == 'true'
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         if: steps.check.outputs.ready == 'true'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: steps.check.outputs.ready == 'true'
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -169,6 +169,23 @@ jobs:
           url="$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")"
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployed: $url" >> "$GITHUB_STEP_SUMMARY"
+      # DEV only. Vercel assigns a project's *first* deployment to production even
+      # without --prod (it happened on 2026-11-14). Ask the API which target this
+      # deployment really got and fail loudly if it is production.
+      - name: Guard — fail if the deployment is production
+        if: steps.check.outputs.ready == 'true'
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          host="${URL#https://}"
+          target="$(curl -fsS -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v13/deployments/${host}?teamId=${VERCEL_ORG_ID}" | jq -r '.target // "preview"')"
+          echo "Vercel target: $target"
+          if [ "$target" = "production" ]; then
+            echo "::error::This deployment was assigned to PRODUCTION. ReTren is DEV-only. Tell Nestor Gomez Artiles; do not retry."
+            exit 1
+          fi
       # Optional stable URL, e.g. retren-dev.vercel.app (repo/env variable DEV_ALIAS).
       - name: Alias
         if: steps.check.outputs.ready == 'true' && vars.DEV_ALIAS != ''

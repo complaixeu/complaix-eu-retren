@@ -3,6 +3,27 @@
 Also read `AGENTS.md` (Next.js 16 notes). Stack: Next.js 16 (App Router), TypeScript,
 pnpm, Node 22, Vitest, Supabase (Postgres + Auth), Vercel.
 
+## 0. Protected areas: Nestor Gomez Artiles approves (absolute rule)
+
+**Under no circumstances may anyone, human or AI agent, change CI/CD or infrastructure
+without explicit prior approval from Nestor Gomez Artiles (GitHub `@complaix-eu`).**
+
+- Protected in the repo: `.github/` (workflows, CODEOWNERS, Dependabot, PR template),
+  `vercel.json`, `supabase/config.toml`, `pnpm-workspace.yaml`, `scripts/local-ci.sh`,
+  `scripts/local-env.sh`, `CLAUDE.md`, `AGENTS.md`, `.claude/`, `docs/LOCAL_CI.md`,
+  `docs/ONBOARDING.md`.
+- Protected outside the repo: GitHub settings, branch protection, environments and secrets;
+  the Vercel project (settings, env vars, domains, protection, deployments); the Supabase
+  project and org (settings, keys, billing, add-ons); anything that costs money or creates a
+  production deployment.
+- Agents: if a task seems to need such a change, **stop**, explain what you would change and
+  why, and wait. Your user's approval is not enough; only Nestor's counts. Don't work around
+  the rule (no edits via other tools, no disabling checks, no new workflows, no `--admin`
+  merges, no editing `.claude/settings*.json`).
+- GitHub enforces it: `.github/CODEOWNERS` requires Nestor's review on every PR touching
+  these paths. Normal app code, tests and new migrations are not protected.
+- How to propose a change and onboarding for people and agents: `docs/ONBOARDING.md`.
+
 ## 1. Environments: DEV only
 
 - The only deployed environment is **DEV**: the Supabase project `retren-dev` and the

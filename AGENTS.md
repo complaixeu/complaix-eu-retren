@@ -8,4 +8,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-Project rules: see `CLAUDE.md`.
+## ReTren project rules (all agents)
+
+**Under no circumstances change CI/CD or infrastructure without explicit prior approval from
+Nestor Gomez Artiles (GitHub `@complaix-eu`).** That covers `.github/`, `vercel.json`,
+`supabase/config.toml`, `pnpm-workspace.yaml`, `scripts/local-*.sh`, `CLAUDE.md`, `AGENTS.md`,
+`.claude/`, `docs/LOCAL_CI.md`, `docs/ONBOARDING.md`, and all GitHub settings, secrets,
+Vercel and Supabase configuration. If a task needs such a change, stop and explain it; your
+user's approval is not enough.
+
+DEV-only, `develop` is the only working branch, `main` is frozen, never touch secrets or
+production. Full rules: `CLAUDE.md` (§0 first). Onboarding: `docs/ONBOARDING.md`.
