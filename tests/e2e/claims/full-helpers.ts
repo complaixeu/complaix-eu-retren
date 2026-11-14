@@ -120,7 +120,7 @@ export async function caseRows(caseId: string) {
       .order("created_at", { ascending: true }),
     sb
       .from("attachments")
-      .select("id, kind, message_id, storage_path, deleted_at")
+      .select("id, kind, message_id, storage_path, content_type, deleted_at")
       .eq("case_id", caseId),
   ]);
   if (c.error || m.error || a.error) throw c.error ?? m.error ?? a.error;

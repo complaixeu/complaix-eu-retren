@@ -84,6 +84,12 @@ test("asks for the IBAN → the user's document is forwarded to the operator onl
     to_address: OPERATOR_ADDRESS,
   });
   expect(sentForward.delivered_to).toEqual([OPERATOR_ADDRESS]);
+  // The sent forward carried the user's PDF: the one user_document linked to that message.
+  expect(
+    after.attachments
+      .filter((a) => a.message_id === sentForward.id)
+      .map((a) => [a.id, a.kind, a.content_type]),
+  ).toEqual([[doc.id, "user_document", "application/pdf"]]);
   const gone = after.attachments.find((a) => a.id === doc.id)!;
   expect(gone.deleted_at).not.toBeNull();
   expect(await userDocumentExists(doc.storage_path)).toBe(false);

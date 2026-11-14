@@ -259,6 +259,45 @@ describe("getCaseView and listCases", () => {
       ["outbound", null, "queued"],
     ]);
   });
+
+  // The sender's other fallback (messageKind): a C7 row queued without a template is named by the
+  // `timer_action` event written in the same transaction (same created_at). close_3m is the
+  // user_final_result notice.
+  it("shows the kind of a queued timer row from its timer_action event", async () => {
+    const c = await seedCase();
+    const at = (ms: number) => new Date(Date.now() + ms).toISOString();
+    const rows = [
+      { action: "reminder_d12", createdAt: at(1_000), to: OPERATOR_ADDRESS },
+      { action: "close_3m", createdAt: at(2_000), to: PII.email },
+    ];
+    for (const r of rows) {
+      const { error } = await db.from("messages").insert({
+        case_id: c.id,
+        direction: "outbound",
+        from_address: "reclamaciones@retren.invalid",
+        to_address: r.to,
+        subject: `[${c.ref}] ${r.action}`,
+        status: "queued",
+        body_text: r.action,
+        created_at: r.createdAt,
+      });
+      if (error) throw error;
+      const ev = await db.from("case_events").insert({
+        case_id: c.id,
+        kind: "timer_action",
+        data: { action: r.action },
+        created_at: r.createdAt,
+      });
+      if (ev.error) throw ev.error;
+    }
+
+    const view = await getCaseView(db, c.id);
+    expect(view?.messages.map((m) => [m.direction, m.kind, m.status])).toEqual([
+      ["outbound", "initial_claim", "sent"],
+      ["outbound", "reminder_d12", "queued"],
+      ["outbound", "user_final_result", "queued"],
+    ]);
+  });
 });
 
 describe("injectOperatorReply", () => {
