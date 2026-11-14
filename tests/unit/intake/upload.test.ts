@@ -144,7 +144,7 @@ describe("readTicketUpload (the server check on the submitted form value)", () =
 describe("upload messages", () => {
   it("say what happened and what to do next, in Spanish", () => {
     expect(Object.keys(TICKET_UPLOAD_ERRORS).sort()).toEqual(
-      ["empty", "failed", "missing", "too_large", "wrong_type"].sort(),
+      ["empty", "failed", "missing", "not_received", "too_large", "wrong_type"].sort(),
     );
     for (const message of Object.values(TICKET_UPLOAD_ERRORS)) {
       expect(message).toMatch(/\.$/);

@@ -1,24 +1,45 @@
 "use server";
 
-import { readTicketUpload, startDraft, ticketVersion } from "@/features/intake";
-import type { TicketUploadState } from "./ticket-choice";
+import { beginTicketUpload, finishTicketUpload, ticketVersion } from "@/features/intake";
+import type { BeginUploadState, DeclaredTicketInput, TicketUploadState } from "./ticket-choice";
 
 /**
- * The upload step's form action: checks the file on the server (size, and type by its bytes),
- * stores it as a new draft and sets the draft cookie, which re-renders the step with the preview.
+ * The upload step's server actions. The file itself never comes through here: the browser PUTs
+ * it straight to Storage between `beginUpload` and `finishUpload`, so no request to the app
+ * carries more than a few hundred bytes.
  */
-export async function uploadTicket(
-  _previous: TicketUploadState,
-  formData: FormData,
-): Promise<TicketUploadState> {
-  const read = await readTicketUpload(formData.get("ticket"));
-  if (!read.ok) return { status: "error", error: read.error };
+
+/** Step 1: a signed upload URL for the chosen file, if what the browser declares could pass. */
+export async function beginUpload(declared: DeclaredTicketInput): Promise<BeginUploadState> {
+  // Untrusted input: take only the three plain values.
+  const input = {
+    name: String(declared?.name ?? "").slice(0, 500),
+    type: String(declared?.type ?? "").slice(0, 100),
+    size: Number(declared?.size),
+  };
   try {
-    const draft = await startDraft(read.ticket);
-    return { status: "ok", key: ticketVersion(draft) };
+    const begun = await beginTicketUpload(input);
+    return begun.ok
+      ? { status: "ready", uploadUrl: begun.uploadUrl, contentType: begun.contentType }
+      : { status: "error", error: begun.error };
   } catch (error) {
-    // No ticket data in the log, only what failed.
-    console.error("[intake] ticket upload failed:", error instanceof Error ? error.message : error);
+    console.error("[intake] upload begin failed:", error instanceof Error ? error.message : error);
+    return { status: "error", error: "failed" };
+  }
+}
+
+/**
+ * Step 2: checks the stored file (size, and type by its bytes), deletes it if it fails, and
+ * otherwise makes it the current draft; setting the draft cookie re-renders the step.
+ */
+export async function finishUpload(): Promise<TicketUploadState> {
+  try {
+    const done = await finishTicketUpload();
+    return done.ok
+      ? { status: "ok", key: ticketVersion(done.draft) }
+      : { status: "error", error: done.error };
+  } catch (error) {
+    console.error("[intake] upload finish failed:", error instanceof Error ? error.message : error);
     return { status: "error", error: "failed" };
   }
 }
