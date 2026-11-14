@@ -4,7 +4,7 @@
 // The key is never printed.
 import { createClassifier } from "./index";
 import type { FetchLike } from "./gemini";
-import type { ReplyCategory } from "@/shared/contracts";
+import { OperatorId, type ReplyCategory } from "@/shared/contracts";
 import { loadGoldenSet } from "@/tests/fixtures/mail/golden";
 
 export type EvalResult =
@@ -34,6 +34,7 @@ export async function runClassifierEval(options: {
       LLM_PROVIDER: "gemini",
       GEMINI_API_KEY: options.env.GEMINI_API_KEY,
       GEMINI_MODEL: options.env.GEMINI_MODEL,
+      MAIL_SENDING_DOMAIN: options.env.MAIL_SENDING_DOMAIN,
     },
     { fetch: options.fetch },
   );
@@ -44,7 +45,9 @@ export async function runClassifierEval(options: {
 
   for (const f of golden) {
     const fixture = `${f.operator}/${f.file}`;
-    const { category, confidence } = await classifier.classify(f.mail);
+    const { category, confidence } = await classifier
+      .forCase({ operator: OperatorId.parse(f.operator) })
+      .classify(f.mail);
     let verdict: string;
     if (f.accept.includes(category)) {
       correct++;

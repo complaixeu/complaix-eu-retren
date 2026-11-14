@@ -12,7 +12,8 @@ const fromFile = existsSync(envFile) ? parseEnv(readFileSync(envFile, "utf8")) :
 const gemini = (vars: Record<string, string | undefined>) =>
   Object.fromEntries(
     Object.entries(vars).filter(
-      (e): e is [string, string] => e[0].startsWith("GEMINI_") && Boolean(e[1]),
+      (e): e is [string, string] =>
+        (e[0].startsWith("GEMINI_") || e[0] === "MAIL_SENDING_DOMAIN") && Boolean(e[1]),
     ),
   );
 

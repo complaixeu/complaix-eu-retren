@@ -1,4 +1,5 @@
 import type { Classifier, ReplyCategory } from "@/shared/contracts";
+import { normalize, stripQuoted } from "./guard";
 import { OTHER, toVerdict } from "./verdict";
 
 /**
@@ -49,13 +50,6 @@ const ACKNOWLEDGEMENT: RegExp[] = [
   /\ble (responderemos|contestaremos)\b/,
 ];
 
-function normalize(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-}
-
 export function fakeCategory(text: string): ReplyCategory {
   const t = normalize(text);
   const hits = (Object.keys(DECISIVE) as Decisive[]).filter((c) =>
@@ -69,7 +63,8 @@ export function fakeCategory(text: string): ReplyCategory {
 export function createFakeClassifier(): Classifier {
   return {
     async classify(mail) {
-      const category = fakeCategory(`${mail.subject}\n${mail.text}`);
+      // Only the new part of the reply: quoted history is our own earlier text.
+      const category = fakeCategory(`${mail.subject}\n${stripQuoted(mail.text)}`);
       return category === "other" ? { ...OTHER } : toVerdict({ category, confidence: 0.9 });
     },
   };
