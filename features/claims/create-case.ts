@@ -49,7 +49,15 @@ const toMs = (offset: string) =>
   (Number(offset.slice(1, 3)) * 60 + Number(offset.slice(4, 6))) *
   60_000;
 
-/** A Madrid wall-clock date and time (tickets and the user's answers) as an ISO instant. */
+/**
+ * A Madrid wall-clock date and time (tickets and the user's answers) as an ISO instant.
+ *
+ * DST edges, read deterministically (pinned in tests/unit/claims/create-case.test.ts):
+ * - skipped hour (last Sunday of March, 02:00–02:59 doesn't exist): read with the offset before
+ *   the change, +01:00, so 02:30 is the instant a Madrid clock shows as 03:30 CEST;
+ * - repeated hour (last Sunday of October, 02:00–02:59 happens twice): read as the second one,
+ *   after the change, +01:00.
+ */
 export function madridInstant(date: string, time: string): string {
   const hhmm = time.slice(0, 5);
   const wall = Date.parse(`${date}T${hhmm}:00Z`);
@@ -92,15 +100,22 @@ export interface CasePlan {
 }
 
 /**
- * What a new case becomes. Eligible and doubtful both wait for the earliest send date (a doubtful
- * claim is still sent); without one there is no minimum wait, so the next action is now. Not
- * eligible closes the case and tells the user (ARCHITECTURE §7, final result).
+ * Thrown when the rules say eligible or doubtful but give no earliest send date. Every operator
+ * has a minimum wait (ARCHITECTURE §3, B3); createCase never invents one and writes nothing.
  */
-export function planCase(
-  submission: IntakeSubmission,
-  eligibility: EligibilityResult,
-  now: Date,
-): CasePlan {
+export class MissingEarliestSendAtError extends Error {
+  constructor(readonly eligibility: EligibilityResult["status"]) {
+    super(`createCase: a ${eligibility} result has no earliestSendAt`);
+    this.name = "MissingEarliestSendAtError";
+  }
+}
+
+/**
+ * What a new case becomes. Eligible and doubtful both wait for the earliest send date (a doubtful
+ * claim is still sent). Not eligible closes the case and tells the user (ARCHITECTURE §7, final
+ * result).
+ */
+export function planCase(submission: IntakeSubmission, eligibility: EligibilityResult): CasePlan {
   const event: CaseTransitionEvent =
     eligibility.status === "not_eligible" ? "not_eligible" : "eligible";
   const status = transition("draft", event);
@@ -113,8 +128,9 @@ export function planCase(
       notice: { template: "user_final_result", to: submission.answers.email },
     };
   }
-  const earliestSendAt = eligibility.earliestSendAt ?? null;
-  return { event, status, earliestSendAt, nextActionAt: earliestSendAt ?? now.toISOString() };
+  const { earliestSendAt } = eligibility;
+  if (!earliestSendAt) throw new MissingEarliestSendAtError(eligibility.status);
+  return { event, status, earliestSendAt, nextActionAt: earliestSendAt };
 }
 
 type DbError = { code?: string; message: string };
@@ -132,7 +148,11 @@ class CreateCaseDbError extends Error {
 
 const UNIQUE_VIOLATION = "23505";
 
-/** Creates the case for an intake submission. Throws a ZodError on an invalid submission. */
+/**
+ * Creates the case for an intake submission. Throws a ZodError on an invalid submission and a
+ * MissingEarliestSendAtError on an eligible or doubtful result without a send date, both before
+ * writing anything.
+ */
 export async function createCase(
   input: IntakeSubmission,
   deps: CreateCaseDeps = {},
@@ -141,7 +161,7 @@ export async function createCase(
   const now = (deps.clock ?? systemClock).now();
   const evaluate = deps.evaluateEligibility ?? evaluateEligibility;
   const eligibility = evaluate(toEligibilityInput(submission, now));
-  const plan = planCase(submission, eligibility, now);
+  const plan = planCase(submission, eligibility);
   const db = deps.db ?? createServiceClient();
   const from = deps.noticeFrom ?? process.env.MAIL_FROM ?? DEFAULT_NOTICE_FROM;
 

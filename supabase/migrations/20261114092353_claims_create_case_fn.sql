@@ -20,7 +20,8 @@ alter table public.cases alter column public_ref set default public.claims_new_p
 
 -- Inserts one case created by createCase. A duplicate p_public_ref raises 23505 and writes
 -- nothing (the caller asks for a new reference and retries). p_event_data must hold no personal
--- data. p_notice, when given: {template, from, to, subject, body_text}.
+-- data. p_notice is required exactly when p_status is closed: {template: user_final_result, from,
+-- to (= p_user_email), subject, body_text}.
 create function public.claims_create_case(
   p_public_ref text,
   p_operator text,
@@ -45,6 +46,22 @@ begin
   -- A new case leaves draft only through `eligible` or `not_eligible` (features/claims/state-machine.ts).
   if p_status not in ('waiting_period', 'closed') then
     raise exception 'createCase cannot create a case in status %', p_status using errcode = '22023';
+  end if;
+
+  -- The only notice createCase queues is the final result of a closed case, to its own user
+  -- (ARCHITECTURE §7): exactly one notice when closed, none otherwise.
+  if (p_status = 'closed') <> (p_notice is not null) then
+    raise exception 'a % case % a notice', p_status,
+      case when p_notice is null then 'needs' else 'cannot have' end
+      using errcode = '22023';
+  end if;
+  if p_notice is not null then
+    if p_notice ->> 'template' is distinct from 'user_final_result' then
+      raise exception 'createCase only queues the user_final_result notice' using errcode = '22023';
+    end if;
+    if p_notice ->> 'to' is distinct from p_user_email then
+      raise exception 'the notice must go to the case user' using errcode = '22023';
+    end if;
   end if;
 
   insert into public.cases (

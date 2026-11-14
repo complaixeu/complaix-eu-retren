@@ -1,6 +1,6 @@
 -- createCase in one transaction (migration *_claims_create_case_fn.sql, docs/plans/C-claims.md C2).
 begin;
-select plan(22);
+select plan(31);
 
 select has_function('public', 'claims_new_public_ref', array[]::text[], 'claims_new_public_ref exists');
 select has_function('public', 'claims_create_case', 'claims_create_case exists');
@@ -89,8 +89,9 @@ $$, '23505', null, 'a duplicate public_ref is a unique violation');
 select throws_ok($$
   select public.claims_create_case(
     'RTN-0000BAD1', 'iryo', 'closed', '{}', '{}', 'user@example.test',
-    null, null, '{}', '{"template":"user_final_result","subject":"[RTN-0000BAD1] x"}')
-$$, '23502', null, 'a notice without addresses fails');
+    null, null, '{}',
+    '{"template":"user_final_result","to":"user@example.test","subject":"[RTN-0000BAD1] x"}')
+$$, '23502', null, 'a notice without a from address fails');
 select is((select count(*) from public.cases where public_ref = 'RTN-0000BAD1'), 0::bigint,
   'the failed case was not stored');
 select is((select count(*) from public.cases where public_ref = 'RTN-0000BAD1'
@@ -102,6 +103,42 @@ select throws_ok($$
   select public.claims_create_case(
     'RTN-0000BAD2', 'iryo', 'sent', '{}', '{}', 'user@example.test', null, null, '{}', null)
 $$, '22023', null, 'createCase only creates waiting_period or closed cases');
+
+-- The notice may only be the final result, to the case's own user, and only on a closed case.
+select throws_ok($$
+  select public.claims_create_case(
+    'RTN-0000BAD3', 'iryo', 'closed', '{}', '{}', 'user@example.test', null, null, '{}',
+    '{"template":"user_final_result","from":"retren@example.test","to":"other@example.test",
+      "subject":"[RTN-0000BAD3] x","body_text":"x"}')
+$$, '22023', null, 'a notice to anyone but the case user is refused');
+select throws_ok($$
+  select public.claims_create_case(
+    'RTN-0000BAD4', 'iryo', 'closed', '{}', '{}', 'user@example.test', null, null, '{}',
+    '{"template":"initial_claim","from":"retren@example.test","to":"user@example.test",
+      "subject":"[RTN-0000BAD4] x","body_text":"x"}')
+$$, '22023', null, 'a notice other than user_final_result is refused');
+select throws_ok($$
+  select public.claims_create_case(
+    'RTN-0000BAD5', 'iryo', 'waiting_period', '{}', '{}', 'user@example.test', null, null, '{}',
+    '{"template":"user_final_result","from":"retren@example.test","to":"user@example.test",
+      "subject":"[RTN-0000BAD5] x","body_text":"x"}')
+$$, '22023', null, 'a waiting_period case gets no notice');
+select throws_ok($$
+  select public.claims_create_case(
+    'RTN-0000BAD6', 'iryo', 'closed', '{}', '{}', 'user@example.test', null, null, '{}', null)
+$$, '22023', null, 'a closed case always gets its notice');
+select is((select count(*) from public.cases where public_ref like 'RTN-0000BAD_'), 0::bigint,
+  'no refused case was stored');
+
+-- Both functions run as the caller (no SECURITY DEFINER) with an empty search_path.
+select ok(not p.prosecdef, p.proname || ' is not SECURITY DEFINER')
+from pg_proc p
+where p.pronamespace = 'public'::regnamespace
+  and p.proname in ('claims_new_public_ref', 'claims_create_case');
+select ok(p.proconfig @> array['search_path=""'], p.proname || ' pins search_path to empty')
+from pg_proc p
+where p.pronamespace = 'public'::regnamespace
+  and p.proname in ('claims_new_public_ref', 'claims_create_case');
 
 select * from finish();
 rollback;

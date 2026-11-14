@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 import { createCase } from "@/features/claims";
 import {
   madridInstant,
+  MissingEarliestSendAtError,
   planCase,
   toEligibilityInput,
   type CreateCaseDeps,
@@ -63,6 +64,24 @@ describe("madridInstant", () => {
   it("uses +02:00 in summer", () => {
     expect(madridInstant("2026-07-15", "10:00")).toBe("2026-07-15T10:00:00+02:00");
   });
+  // Spring forward, 2026-03-29: 02:00–02:59 does not exist (02:00 CET → 03:00 CEST).
+  it("2026-03-29: around the skipped hour, each side keeps its own offset", () => {
+    expect(madridInstant("2026-03-29", "01:30")).toBe("2026-03-29T01:30:00+01:00");
+    expect(madridInstant("2026-03-29", "03:30")).toBe("2026-03-29T03:30:00+02:00");
+  });
+  it("2026-03-29: a time in the skipped hour is read with the offset before the change (+01:00)", () => {
+    // 02:30+01:00 is 01:30Z, which a Madrid clock shows as 03:30 CEST.
+    expect(madridInstant("2026-03-29", "02:30")).toBe("2026-03-29T02:30:00+01:00");
+  });
+  // Fall back, 2026-10-25: 02:00–02:59 happens twice (03:00 CEST → 02:00 CET).
+  it("2026-10-25: around the repeated hour, each side keeps its own offset", () => {
+    expect(madridInstant("2026-10-25", "01:30")).toBe("2026-10-25T01:30:00+02:00");
+    expect(madridInstant("2026-10-25", "03:30")).toBe("2026-10-25T03:30:00+01:00");
+  });
+  it("2026-10-25: a time in the repeated hour is read as the second one, after the change (+01:00)", () => {
+    expect(madridInstant("2026-10-25", "02:30")).toBe("2026-10-25T02:30:00+01:00");
+  });
+
   it("is the same instant as the Madrid wall-clock time", () => {
     expect(new Date(madridInstant("2026-07-15", "23:30")).toISOString()).toBe(
       "2026-07-15T21:30:00.000Z",
@@ -106,10 +125,9 @@ describe("toEligibilityInput (the submission → rules mapping)", () => {
 
 describe("planCase (eligibility → status, timer and notice)", () => {
   const s = submissionFixture(90);
-  const now = new Date(NOW);
 
   it("eligible → waiting_period, next action at earliestSendAt, no notice", () => {
-    const plan = planCase(s, result(), now);
+    const plan = planCase(s, result());
     expect(plan.status).toBe("waiting_period");
     expect(plan.event).toBe("eligible");
     expect(plan.nextActionAt).toBe("2026-01-17T12:30:00.000Z");
@@ -118,23 +136,24 @@ describe("planCase (eligibility → status, timer and notice)", () => {
   });
 
   it("doubtful → waiting_period too (the claim is still sent)", () => {
-    const plan = planCase(s, result({ status: "doubtful" }), now);
+    const plan = planCase(s, result({ status: "doubtful" }));
     expect(plan.status).toBe("waiting_period");
     expect(plan.event).toBe("eligible");
     expect(plan.nextActionAt).toBe("2026-01-17T12:30:00.000Z");
   });
 
-  it("eligible without earliestSendAt → next action now (no minimum wait)", () => {
-    const plan = planCase(s, result({ earliestSendAt: undefined }), now);
-    expect(plan.nextActionAt).toBe(NOW);
-    expect(plan.earliestSendAt).toBeNull();
+  it("eligible or doubtful without earliestSendAt → MissingEarliestSendAtError (no invented wait)", () => {
+    for (const status of ["eligible", "doubtful"] as const) {
+      expect(() => planCase(s, result({ status, earliestSendAt: undefined }))).toThrow(
+        MissingEarliestSendAtError,
+      );
+    }
   });
 
   it("not eligible → closed, no timer, a user_final_result notice", () => {
     const plan = planCase(
       s,
       result({ status: "not_eligible", earliestSendAt: undefined, delayMinutes: 20 }),
-      now,
     );
     expect(plan.status).toBe("closed");
     expect(plan.event).toBe("not_eligible");
@@ -203,6 +222,17 @@ describe("createCase", () => {
       p_next_action_at: "2026-01-17T12:30:00.000Z",
       p_notice: null,
     });
+  });
+
+  it("eligible without earliestSendAt: throws before touching the DB", async () => {
+    const { db, rpc } = fakeDb();
+    await expect(
+      createCase(
+        submissionFixture(90),
+        deps(db, { evaluateEligibility: () => result({ earliestSendAt: undefined }) }),
+      ),
+    ).rejects.toBeInstanceOf(MissingEarliestSendAtError);
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it("not eligible: closed, and a user_final_result notice queued to the user", async () => {
