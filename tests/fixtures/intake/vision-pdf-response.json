@@ -1,0 +1,12 @@
+{
+  "responses": [
+    {
+      "responses": [
+        {
+          "fullTextAnnotation": { "text": "Pagina uno del billete de ejemplo\nLocalizador: ABC123" }
+        },
+        { "fullTextAnnotation": { "text": "Pagina dos: condiciones de ejemplo" } }
+      ]
+    }
+  ]
+}
