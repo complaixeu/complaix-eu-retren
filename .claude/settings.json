@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "ask": [
+      "Edit(.github/**)",
+      "Edit(vercel.json)",
+      "Edit(supabase/config.toml)",
+      "Edit(pnpm-workspace.yaml)",
+      "Edit(scripts/local-ci.sh)",
+      "Edit(scripts/local-env.sh)",
+      "Edit(CLAUDE.md)",
+      "Edit(AGENTS.md)",
+      "Edit(.claude/**)",
+      "Edit(docs/LOCAL_CI.md)",
+      "Edit(docs/ONBOARDING.md)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(.vercel/**)",
+      "Bash(gh secret:*)",
+      "Bash(gh variable:*)",
+      "Bash(gh workflow run:*)",
+      "Bash(gh pr merge --admin:*)",
+      "Bash(vercel:*)",
+      "Bash(npx vercel:*)",
+      "Bash(pnpm dlx vercel:*)",
+      "Bash(supabase link:*)",
+      "Bash(supabase db push --remote:*)",
+      "Bash(pnpm exec supabase link:*)",
+      "Bash(pnpm exec supabase db push --remote:*)",
+      "Bash(supabase projects:*)",
+      "Bash(supabase secrets:*)",
+      "Bash(git push origin main:*)",
+      "Bash(git push origin develop:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)"
+    ]
+  }
+}

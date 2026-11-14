@@ -1,0 +1,16 @@
+# Protected areas: CI/CD, infrastructure, and the rules for humans and agents.
+# Any PR touching these paths needs an approving review from
+# Nestor Gomez Artiles (@complaix-eu) before it can merge into develop.
+# See CLAUDE.md §0 and docs/ONBOARDING.md.
+
+/.github/                 @complaix-eu
+/vercel.json              @complaix-eu
+/supabase/config.toml     @complaix-eu
+/pnpm-workspace.yaml      @complaix-eu
+/scripts/local-ci.sh      @complaix-eu
+/scripts/local-env.sh     @complaix-eu
+/CLAUDE.md                @complaix-eu
+/AGENTS.md                @complaix-eu
+/.claude/                 @complaix-eu
+/docs/LOCAL_CI.md         @complaix-eu
+/docs/ONBOARDING.md       @complaix-eu
