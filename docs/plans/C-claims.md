@@ -63,7 +63,8 @@ Email testing strategy: [README §4](README.md#4-email-how-we-test-it). It is bi
 
 ### C4: Inbound `/api/claims/inbound`
 
-- Guarded by a shared-secret header. Parses MIME (`mailparser`) and matches the case by
+- Guarded by a shared-secret header whose value is `process.env.INBOUND_SECRET` (constant-time
+  compare; 401 when it is unset). Parses MIME (`mailparser`) and matches the case by
   `[RTN-ref]` and/or `In-Reply-To`. A sender that isn't the operator's domain, or an unknown
   reference, goes to the team queue. Raw mail goes to private storage.
 - Tests:
@@ -111,10 +112,16 @@ Email testing strategy: [README §4](README.md#4-email-how-we-test-it). It is bi
 
 - The tick endpoint is guarded by a secret and processes the due cases. A `now` override is
   allowed only when `DEMO_MODE=1`.
+- **The scheduler already exists** (migration `*_claims_tick_schedule.sql`): `pg_cron` calls it
+  every hour as `POST /api/claims/tick` with `Authorization: Bearer <TICK_SECRET>`, body `{}`,
+  plus `x-vercel-protection-bypass` on DEV. The endpoint compares the bearer token with
+  `process.env.TICK_SECRET` in constant time, answers 401 when it is missing or wrong (and when
+  `TICK_SECRET` is unset), and must be idempotent because pg_cron may fire it twice.
 - Tests:
   - unit with a fixed clock: every day boundary (11, 12, 15, 29, 30, 39, 40, 44, 45, 3 months − 1
     day, 3 months); pause and resume; stop on reply; the cap.
-  - integration: tick processes exactly the due cases, and running it twice is idempotent.
+  - integration: tick processes exactly the due cases, and running it twice is idempotent;
+    missing or wrong bearer token → 401.
 
 ### C8: User notices
 
