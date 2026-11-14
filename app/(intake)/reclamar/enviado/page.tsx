@@ -12,7 +12,7 @@ import {
 } from "@/features/intake";
 import { StepActions, StepPage, stepTitle } from "../_components/step-page";
 import { submitClaim } from "./actions";
-import { MissingScreen, ReadyScreen, ResultScreen } from "./screens";
+import { MissingScreen, ReadyScreen, ReceivedScreen, ResultScreen } from "./screens";
 
 export const metadata: Metadata = stepTitle("enviado");
 
@@ -40,18 +40,20 @@ async function Outcome({
 }: {
   searchParams: PageProps<"/reclamar/enviado">["searchParams"];
 }) {
+  const { aviso } = await searchParams;
   const draft = await getCurrentDraft();
   if (!draft) {
     const result = await currentResult();
-    if (!result) redirect(intakeStepHref("foto"));
-    return <ResultScreen view={describeResult(result)} />;
+    if (result) return <ResultScreen view={describeResult(result)} />;
+    // A submit that found the claim already made, before its result reached this browser.
+    if (aviso === "recibida") return <ReceivedScreen />;
+    redirect(intakeStepHref("foto"));
   }
 
   const consent = await latestConsent(draft.id);
   const check = draftToSubmission(draft, consent && toConsentRef(consent));
   if (!check.ok) return <MissingScreen reason={check.reason} href={intakeStepHref(check.step)} />;
 
-  const { aviso } = await searchParams;
   return (
     <ReadyScreen
       action={submitClaim}

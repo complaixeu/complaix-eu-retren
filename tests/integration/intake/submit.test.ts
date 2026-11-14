@@ -138,6 +138,8 @@ describe("submitDraft (real createCase, local Supabase)", () => {
     expect(still?.ticket?.path).toBe(draft.ticket!.path);
     expect(await exists(draft.ticket!.path)).toBe(true);
     expect(await casesOf(draft.id)).toHaveLength(0);
+    // No case: no copy of the ticket is left behind in submitted/.
+    expect(await exists(`submitted/${draft.id}.png`)).toBe(false);
 
     expect((await submitDraft(still!, { db, sleep })).ok).toBe(true);
     expect(await casesOf(draft.id)).toHaveLength(1);
@@ -221,5 +223,80 @@ describe("submitDraft (real createCase, local Supabase)", () => {
       createCase: (s) => createCase(s, { db, evaluateEligibility: doubtful }),
     });
     expect(out.ok && out.result.eligibility.status).toBe("doubtful");
+  });
+});
+
+/** The service client with `storage.copy` failing, everything else real. */
+function withFailingCopy(real: ServiceClient): ServiceClient {
+  const bound = (target: object, key: string | symbol) => {
+    const value = (target as Record<string | symbol, unknown>)[key];
+    return typeof value === "function" ? value.bind(target) : value;
+  };
+  return new Proxy(real, {
+    get(target, key) {
+      if (key !== "storage") return bound(target, key);
+      return {
+        from: (bucket: string) =>
+          new Proxy(target.storage.from(bucket), {
+            get: (file, method) =>
+              method === "copy"
+                ? async () => ({ data: null, error: { message: "copy refused" } })
+                : bound(file, method),
+          }),
+      };
+    },
+  });
+}
+
+describe("the ticket copy (local Supabase)", () => {
+  it("keeps the content type of the ticket", async () => {
+    const { draft } = await readyDraft();
+    expect((await submitDraft(draft, { db, sleep })).ok).toBe(true);
+    const { data } = await db.storage.from(TICKET_BUCKET).list("submitted", {
+      search: `${draft.id}.png`,
+    });
+    expect(data).toHaveLength(1);
+    expect(data![0].metadata).toMatchObject({ mimetype: "image/png" });
+  });
+
+  it("a failing copy stops before createCase: draft whole, no case, claim released", async () => {
+    const { draft } = await readyDraft();
+    let calls = 0;
+    const counting = (s: Parameters<typeof createCase>[0]) => {
+      calls += 1;
+      return createCase(s, { db });
+    };
+    await expect(
+      submitDraft(draft, { db: withFailingCopy(db), sleep, createCase: counting }),
+    ).rejects.toThrow(/ticket copy failed/);
+    expect(calls).toBe(0);
+    expect(await casesOf(draft.id)).toHaveLength(0);
+    expect(await exists(draft.ticket!.path)).toBe(true);
+    expect(await exists(`submitted/${draft.id}.png`)).toBe(false);
+    // The claim was given back, so a retry works at once.
+    expect((await submitDraft((await getDraft(draft.id, { db }))!, { db, sleep })).ok).toBe(true);
+  });
+});
+
+describe("releasing a claim", () => {
+  it("never wipes the claim of the request that took over", async () => {
+    const { draft } = await readyDraft();
+    const takenOver = new Date(Date.now() + 5 * 60_000).toISOString();
+    const failing = {
+      db,
+      sleep,
+      createCase: async (): Promise<never> => {
+        // Meanwhile the lease ran out and another request claimed the draft.
+        await mergeDraftData(
+          draft.id,
+          { submit: { at: takenOver, by: "other-request" } } as never,
+          { db },
+        );
+        throw new Error("boom");
+      },
+    };
+    await expect(submitDraft(draft, failing)).rejects.toThrow("boom");
+    const row = (await rowsOf("intake_drafts", "id", draft.id))[0];
+    expect((row.data as { submit?: { by?: string } }).submit?.by).toBe("other-request");
   });
 });

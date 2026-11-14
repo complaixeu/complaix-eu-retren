@@ -102,6 +102,15 @@ export function MissingScreen({
   );
 }
 
+/** The claim was already made (another tab, or a retry) but this browser has no result yet. */
+export function ReceivedScreen() {
+  return (
+    <Alert tone="success" title="Ya hemos recibido tu reclamación">
+      Recarga la página en unos segundos para ver el resultado, o revisa tu email.
+    </Alert>
+  );
+}
+
 /** Everything is there but the claim was not created (a failure on our side): try again. */
 export function ReadyScreen({
   action,

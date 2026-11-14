@@ -115,6 +115,12 @@ export async function casesOfDraft(draftId: string) {
   return data;
 }
 
+/** Deletes a draft row, as the other tab's clean-up would. */
+export async function deleteDraftRow(draftId: string): Promise<void> {
+  const { error } = await serviceDb().from("intake_drafts").delete().eq("id", draftId);
+  if (error) throw new Error(`deleting the draft failed: ${error.message}`);
+}
+
 /** Whether a draft row still exists. */
 export async function draftExists(draftId: string): Promise<boolean> {
   const { data, error } = await serviceDb().from("intake_drafts").select("id").eq("id", draftId);

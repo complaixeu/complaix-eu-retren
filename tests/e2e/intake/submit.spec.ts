@@ -3,6 +3,7 @@ import { REVIEW } from "../../fixtures/intake/review";
 import { DELAYS, tripData } from "../../fixtures/intake/submit";
 import {
   casesOfDraft,
+  deleteDraftRow,
   draftExists,
   startSubmittableDraft,
   ticketObjectExists,
@@ -213,5 +214,33 @@ test.describe("incomplete submission", () => {
   test("without a draft or a result, goes to the upload", async ({ page }) => {
     await page.goto("/reclamar/enviado");
     await expect(page).toHaveURL(/\/reclamar\/foto$/);
+  });
+});
+
+test.describe("a second request after the claim went out", () => {
+  test("a submit whose draft is already gone says the claim was received", async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    const draft = await startSubmittableDraft(context, baseURL!, tripData(DELAYS.eligible));
+    await page.goto("/reclamar/enviado");
+    await expect(page.getByRole("button", { name: "Enviar reclamación" })).toBeVisible();
+
+    // The other tab submitted and cleaned up; this browser has no result cookie yet.
+    await deleteDraftRow(draft.id);
+    await page.getByRole("button", { name: "Enviar reclamación" }).click();
+
+    await expect(page).toHaveURL(/\/reclamar\/enviado/);
+    await expect(
+      page.getByRole("status").filter({ hasText: "Ya hemos recibido tu reclamación" }),
+    ).toContainText("revisa tu email");
+    await expect(page.getByRole("button", { name: "Enviar reclamación" })).toHaveCount(0);
+  });
+
+  test("the same screen is there on a reload", async ({ page }) => {
+    await page.goto("/reclamar/enviado?aviso=recibida");
+    await expect(page).toHaveURL(/aviso=recibida/);
+    await expect(page.getByText("Ya hemos recibido tu reclamación")).toBeVisible();
   });
 });

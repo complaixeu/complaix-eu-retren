@@ -9,10 +9,14 @@ import { intakeStepHref, submitCurrentDraft } from "@/features/intake";
  * shows the result or says what is missing. The mandate step hands off to this action.
  */
 export async function submitClaim(): Promise<never> {
-  let notice: "fallo" | "ocupado" | null = null;
+  let notice: "fallo" | "ocupado" | "recibida" | null = null;
   try {
     const out = await submitCurrentDraft();
     if (!out.ok && out.reason === "busy") notice = "ocupado";
+    // Another request got there first and cleaned up; its cookie may not have reached us yet.
+    if (!out.ok && (out.reason === "already_submitted" || out.reason === "no_draft")) {
+      notice = "recibida";
+    }
   } catch (error) {
     // Only the error name: the message may quote the submission.
     console.error(`[intake] submit failed (${error instanceof Error ? error.name : "unknown"})`);
