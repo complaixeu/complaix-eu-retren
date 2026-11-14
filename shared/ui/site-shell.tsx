@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { RetrenLogo } from "./retren-logo";
 import styles from "./site-shell.module.css";
 
 /** Shared public website frame for the landing page and every intake step. */
@@ -18,6 +19,7 @@ function SiteHeader() {
     <header className={styles.header}>
       <div className={styles.headerInner}>
         <Link href="/" className={styles.wordmark} aria-label="ReTren, inicio">
+          <RetrenLogo />
           ReTren
         </Link>
         <nav className={styles.nav} aria-label="Navegación principal">
@@ -39,6 +41,7 @@ function SiteFooter() {
       <div className={styles.footerInner}>
         <div className={styles.footerBrand}>
           <Link href="/" className={styles.footerWordmark}>
+            <RetrenLogo />
             ReTren
           </Link>
           <p>Prepara tu reclamación por el retraso del tren.</p>

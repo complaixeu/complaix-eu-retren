@@ -12,6 +12,7 @@ test("the public pages share a light ReTren website frame on phone and desktop",
 
     await expect(page.getByRole("banner")).toBeVisible();
     await expect(page.getByRole("link", { name: "ReTren, inicio" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "ReTren, inicio" }).locator("svg")).toBeVisible();
     await expect(page.getByRole("link", { name: "Empezar reclamación" }).first()).toBeVisible();
     await expect(page.getByRole("contentinfo")).toBeVisible();
 
@@ -23,4 +24,12 @@ test("the public pages share a light ReTren website frame on phone and desktop",
     expect(layout.pageWidth).toBeLessThanOrEqual(layout.viewportWidth);
     expect(layout.background).toBe("rgb(250, 250, 250)");
   }
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  const introAnimation = await page
+    .locator("main > section > div")
+    .first()
+    .evaluate((element) => getComputedStyle(element).animationName);
+  expect(introAnimation).toBe("none");
 });
