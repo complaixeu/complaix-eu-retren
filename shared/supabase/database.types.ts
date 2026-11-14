@@ -257,6 +257,7 @@ export type Database = {
           sent_at: string | null;
           status: Database["public"]["Enums"]["message_status"];
           subject: string;
+          team_resolved_at: string | null;
           template: string | null;
           thread_references: string[] | null;
           to_address: string;
@@ -281,6 +282,7 @@ export type Database = {
           sent_at?: string | null;
           status: Database["public"]["Enums"]["message_status"];
           subject: string;
+          team_resolved_at?: string | null;
           template?: string | null;
           thread_references?: string[] | null;
           to_address: string;
@@ -304,6 +306,7 @@ export type Database = {
           sent_at?: string | null;
           status?: Database["public"]["Enums"]["message_status"];
           subject?: string;
+          team_resolved_at?: string | null;
           template?: string | null;
           thread_references?: string[] | null;
           to_address?: string;
@@ -317,6 +320,22 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      team_members: {
+        Row: {
+          created_at: string;
+          email: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          email: string;
+        };
+        Update: {
+          created_at?: string;
+          email?: string;
+        };
+        Relationships: [];
       };
     };
     Views: {
@@ -434,6 +453,7 @@ export type Database = {
           isSetofReturn: true;
         };
       };
+      is_team_member: { Args: Record<PropertyKey, never>; Returns: boolean };
     };
     Enums: {
       attachment_kind: "eu_form" | "mandate" | "ticket" | "user_document";

@@ -64,6 +64,8 @@ export interface TickDeps {
   render?: typeof renderTemplate;
   /** From address of the queued mail; defaults to MAIL_FROM, then DEFAULT_NOTICE_FROM. */
   from?: string;
+  /** Only this case (the team view's demo clock). Every due case when left out. */
+  caseId?: string;
 }
 
 type CaseRow = {
@@ -108,7 +110,7 @@ export async function runTick(
   const render = deps.render ?? renderTemplate;
   const from = deps.from ?? process.env.MAIL_FROM ?? DEFAULT_NOTICE_FROM;
 
-  const { data, error } = await db
+  let query = db
     .from("cases")
     .select(
       "id, public_ref, operator, status, user_email, sent_at, send_count, paused, next_action_at",
@@ -118,6 +120,8 @@ export async function runTick(
     .or(`next_action_at.is.null,next_action_at.lte.${now.toISOString()}`)
     .order("next_action_at", { ascending: true, nullsFirst: true })
     .limit(TICK_CASE_LIMIT);
+  if (deps.caseId) query = query.eq("id", deps.caseId);
+  const { data, error } = await query;
   if (error) throw error;
   const cases = data as CaseRow[];
   const fired = await firedActions(
