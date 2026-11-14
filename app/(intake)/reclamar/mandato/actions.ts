@@ -9,6 +9,7 @@ import {
   requireDraft,
   type AcceptConsentResult,
 } from "@/features/intake";
+import { submitClaim } from "../enviado/actions";
 import type { ConsentFormState } from "./consent-state";
 
 /**
@@ -31,7 +32,8 @@ export async function acceptMandate(
     console.error(`[intake] consent insert failed (${code})`);
     return { status: "failed" };
   }
-  if (result.ok) redirect(intakeStepHref("enviado"));
+  // The case is created there ([A7]); it always ends on the last step.
+  if (result.ok) return submitClaim();
   if (result.reason === "not_accepted") return { status: "missing", missing: result.missing };
   redirect(intakeStepHref(result.reason === "answers_invalid" ? "preguntas" : "revision"));
 }

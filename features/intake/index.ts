@@ -163,3 +163,20 @@ export {
   type MandateText,
   type PrivacyNotice,
 } from "./consent/texts";
+
+// Server-side only: submitting the finished draft as a case ([A7]). `submitCurrentDraft` is for
+// server actions (it sets cookies); `currentResult` reads the last result for the final step.
+export {
+  draftToSubmission,
+  type DraftToSubmissionResult,
+  type SubmissionError,
+} from "./submit/mapping";
+export { describeResult, madridLongDate, type ResultView } from "./submit/present";
+export { RESULT_COOKIE } from "./submit/result-cookie";
+export { currentResult, submitCurrentDraft, type SubmitSessionDeps } from "./submit/session";
+export {
+  SUBMITTED_PREFIX,
+  submitDraft,
+  type SubmitDeps,
+  type SubmitDraftResult,
+} from "./submit/submit";
