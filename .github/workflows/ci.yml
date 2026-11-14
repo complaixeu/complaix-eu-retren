@@ -5,7 +5,7 @@
 #                   Runs on every non-draft PR and on push to develop.
 #                   Uses placeholder env only: no secrets, safe for fork PRs.
 #   security-audit  pnpm audit, non-blocking.
-#   migrate_dev     push to develop only → supabase db push to the DEV project.
+#   migrate_dev     push to develop (or manual run on develop) → supabase db push to DEV.
 #   deploy_dev      after migrate_dev → vercel build + deploy --prebuilt
 #                   (Preview target, never --prod) → /api/health smoke check.
 #
@@ -95,7 +95,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     needs: [verify]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    # push to develop, or a manual run (Actions → CI → Run workflow) on develop.
+    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     environment: development
     steps:
       - uses: actions/checkout@v4
@@ -120,7 +121,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     needs: [migrate_dev]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    # push to develop, or a manual run (Actions → CI → Run workflow) on develop.
+    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     environment: development
     # One dev deploy at a time, in push order.
     concurrency:
