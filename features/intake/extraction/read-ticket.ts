@@ -19,7 +19,7 @@ import { createExtractor } from "./index";
 import {
   decideAfterReading,
   manualExtraction,
-  ocrAttemptsOf,
+  priorAttemptsOf,
   photoReading,
   type ReadingNext,
 } from "./decision";
@@ -99,17 +99,22 @@ export type FinishAndReadResult =
 /**
  * The upload step's second server call: finishes the direct upload, then reads the new ticket.
  * Each upload makes a new draft and deletes the previous one, so the unreadable count is taken
- * from the previous draft first. A reading failure keeps the upload (`next: "failed"`): the page
- * then offers to read it again (`readCurrentTicket`).
+ * from the previous draft first and written into the new one (`ocrCarried`) before reading. A
+ * reading failure keeps the upload and that count (`next: "failed"`): the page then offers to
+ * read it again (`readCurrentTicket`).
  */
 export async function finishUploadAndRead(
   deps: DraftSessionDeps & ReadTicketDeps = {},
 ): Promise<FinishAndReadResult> {
   const previous = await getCurrentDraft(deps);
-  const priorAttempts = ocrAttemptsOf(previous?.data);
+  const priorAttempts = priorAttemptsOf(previous?.data);
   const done = await finishTicketUpload(deps);
   if (!done.ok) return done;
   try {
+    if (priorAttempts > 0) {
+      const carried = await mergeDraftData(done.draft.id, { ocrCarried: priorAttempts }, deps);
+      if (!carried) throw new Error("draft vanished before reading its ticket");
+    }
     const { next } = await readUploadedTicket(done.draft, { ...deps, priorAttempts });
     return { ok: true, draft: done.draft, next };
   } catch (error) {
@@ -123,7 +128,7 @@ export async function finishUploadAndRead(
 
 /**
  * Reads the current draft's ticket if it is still unread (`pending`); a ticket already read is
- * left as it is. Throws if reading fails again.
+ * left as it is. It counts on from the draft's carried count. Throws if reading fails again.
  */
 export async function readCurrentTicket(
   deps: DraftSessionDeps & ReadTicketDeps = {},
@@ -135,5 +140,6 @@ export async function readCurrentTicket(
     const next = reading.state === "read" ? "review" : reading.state;
     return { ok: true, next };
   }
-  return { ok: true, ...(await readUploadedTicket(draft, deps)) };
+  const priorAttempts = priorAttemptsOf(draft.data);
+  return { ok: true, ...(await readUploadedTicket(draft, { ...deps, priorAttempts })) };
 }

@@ -7,6 +7,7 @@ import {
   decideAfterReading,
   manualExtraction,
   ocrAttemptsOf,
+  priorAttemptsOf,
   photoReading,
 } from "@/features/intake/extraction/decision";
 import { DEMO_MODEL_OUTPUTS, DEMO_OCR_TEXTS } from "@/features/intake/extraction/demo-fixtures";
@@ -116,6 +117,14 @@ describe("never invent: the post-check against the OCR text", () => {
     ["origin", "Madrid Puerta de Atocha", "Origen: Madrid Puerta\nde Atocha"],
     ["operator", "iryo", "IRYO billete"],
     ["price", "45,60 €", "Total 45,60 €"],
+    // [A3 review] The whole printed token still matches.
+    ["price", "54,90 EUR", "Total: 54,90 EUR."],
+    ["bookingRef", "ABC-123", "Localizador: ABC-123"],
+    ["bookingRef", "ABC123", "(ABC123)"],
+    ["ticketNumber", "0123-4567", "Billete 0123-4567"],
+    ["trainNumber", "IRYO 6201", "Tren: IRYO 6201, coche 3"],
+    ["scheduledDeparture", "09:05", "Salida: 09:05, llegada 11:00"],
+    ["scheduledDeparture", "09:05", "Salida (9:05)"],
   ] as [TicketField, string, string][])("%s %j is found in %j", (field, value, text) => {
     expect(appearsInText(field, value, text)).toBe(true);
   });
@@ -135,6 +144,26 @@ describe("never invent: the post-check against the OCR text", () => {
     ["price", "45,60 €", "Total 45,60 EUR"], // copied as printed, or not at all
     ["operator", "renfe", "IRYO billete"],
     ["origin", " ", "Origen: Madrid"],
+    // [A3 review] Fragments of a printed number or code are not the value.
+    ["price", "90 EUR", "Total 54,90 EUR"],
+    ["price", "5", "Descuento 0,5"],
+    ["price", "54", "Total 54,90 EUR"],
+    ["bookingRef", "123", "Localizador ABC-123"],
+    ["bookingRef", "ABC", "Localizador ABC-123"],
+    ["bookingRef", "ABC12", "Localizador ABC12/7"],
+    ["ticketNumber", "4567", "Billete 0123-4567"],
+    ["ticketNumber", "0123", "Billete 0123.4567"],
+    ["trainNumber", "6201", "Tren IRYO_6201"],
+    ["trainNumber", "62", "Tren 62:01"],
+    ["scheduledDeparture", "09:05", "Emitido 10:09:05"],
+    ["scheduledDeparture", "09:05", "Salida 09:05:30"],
+    ["scheduledDeparture", "09:05", "Precio 9.05 €"],
+    ["scheduledDeparture", "09:05", "Precio 9,05"],
+    ["scheduledDeparture", "09:05", "Precio 9.05 EUR"],
+    ["scheduledDeparture", "09:05", "Ref 9.05.12"],
+    // A localizador is a code, not a word: too short to tell apart from any text.
+    ["bookingRef", "de", "Origen: Madrid Puerta de Atocha"],
+    ["bookingRef", "AB12", "Localizador AB12"],
   ] as [TicketField, string, string][])("%s %j is not found in %j", (field, value, text) => {
     expect(appearsInText(field, value, text)).toBe(false);
   });
@@ -254,6 +283,24 @@ describe("retry → manual decision", () => {
     expect(ocrAttemptsOf({})).toBe(0);
     expect(ocrAttemptsOf({ ocrAttempts: "2" })).toBe(0);
     expect(ocrAttemptsOf(null)).toBe(0);
+  });
+
+  it("priorAttemptsOf carries the count of a replaced draft, read or not", () => {
+    expect(priorAttemptsOf({ ocrAttempts: 1 })).toBe(1);
+    // A photo that couldn't be read because of a provider failure keeps the count it carried.
+    expect(priorAttemptsOf({ ocrCarried: 1 })).toBe(1);
+    // Once read, its own count wins (0 after a readable photo).
+    expect(priorAttemptsOf({ ocrCarried: 1, ocrAttempts: 0 })).toBe(0);
+    expect(priorAttemptsOf({ ocrCarried: 1, ocrAttempts: 2 })).toBe(2);
+    expect(priorAttemptsOf({})).toBe(0);
+    expect(priorAttemptsOf(null)).toBe(0);
+  });
+
+  it("a carried count alone means the photo is still unread, not 'otra foto'", () => {
+    expect(photoReading({ ocrCarried: 1 }, "image/jpeg")).toEqual({
+      state: "pending",
+      heic: false,
+    });
   });
 
   it("photoReading tells the upload step what to show", () => {

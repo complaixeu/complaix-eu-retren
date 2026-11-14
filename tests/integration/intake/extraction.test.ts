@@ -201,6 +201,7 @@ describe("finishUploadAndRead: the upload step's server flow", () => {
     const current = await getCurrentDraft({ db, clock, jar });
     expect(current!.id).not.toBe(firstDraft!.id);
     expect(current!.data).toEqual({
+      ocrCarried: 1,
       ocrAttempts: 2,
       extraction: { quality: "unreadable", data: {}, missing: [...TICKET_FIELDS] },
     });
@@ -242,6 +243,50 @@ describe("finishUploadAndRead: the upload step's server flow", () => {
     expect(again).toEqual({ ok: true, next: "review" });
     const read = await getCurrentDraft({ db, clock, jar });
     expect(TicketExtraction.parse(read!.data.extraction).data).toEqual(expectedData.iryo);
+  });
+
+  // [A3 review] A provider failure must not reset the count of unreadable photos.
+  const failingOcr: OcrProvider = {
+    readText: async () => {
+      throw new Error("Vision OCR request failed with HTTP 503");
+    },
+  };
+
+  it("unreadable → provider failure → unreadable ends in manual entry", async () => {
+    const jar = memoryJar();
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const first = await uploadAndRead(jar, PLACEHOLDER_JPEG_UNREADABLE, "a.jpg", "image/jpeg");
+    expect(first).toMatchObject({ next: "retry" });
+    const failed = await uploadAndRead(jar, PLACEHOLDER_JPEG_UNREADABLE, "b.jpg", "image/jpeg", {
+      ocr: failingOcr,
+      extractor: extractor(),
+    });
+    expect(failed).toMatchObject({ next: "failed" });
+    // The new draft carries the count, but is still unread.
+    expect((await getCurrentDraft({ db, clock, jar }))!.data).toEqual({ ocrCarried: 1 });
+
+    const third = await uploadAndRead(jar, PLACEHOLDER_JPEG_UNREADABLE, "c.jpg", "image/jpeg");
+    quiet.mockRestore();
+    expect(third).toMatchObject({ next: "manual" });
+  });
+
+  it("unreadable → provider failure → 'Leer el billete' still unreadable ends in manual", async () => {
+    const jar = memoryJar();
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await uploadAndRead(jar, PLACEHOLDER_JPEG_UNREADABLE, "a.jpg", "image/jpeg");
+    const failed = await uploadAndRead(jar, PLACEHOLDER_JPEG_UNREADABLE, "b.jpg", "image/jpeg", {
+      ocr: failingOcr,
+      extractor: extractor(),
+    });
+    quiet.mockRestore();
+    expect(failed).toMatchObject({ next: "failed" });
+
+    const again = await readCurrentTicket({ db, clock, jar, ocr: ocr(), extractor: extractor() });
+    expect(again).toEqual({ ok: true, next: "manual" });
+    expect((await getCurrentDraft({ db, clock, jar }))!.data).toMatchObject({
+      ocrAttempts: 2,
+      extraction: { quality: "unreadable", data: {}, missing: [...TICKET_FIELDS] },
+    });
   });
 
   it("a refused upload is passed through and reads nothing", async () => {

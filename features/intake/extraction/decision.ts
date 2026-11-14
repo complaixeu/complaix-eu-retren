@@ -11,8 +11,10 @@ import { TICKET_FIELDS } from "./schema";
  *   after the last unreadable photo, as manual entry (`quality: "unreadable"`, no data, every
  *   field missing). Never written for a photo that only asks for another one. A4 reads it.
  * - `ocrAttempts`: how many photos in a row could not be read, this ticket included; 0 once one
- *   is read. Each upload makes a new draft, so the upload step carries the count over from the
- *   draft it replaces (see `finishUploadAndRead`).
+ *   is read. Written only once the photo has been read, so a draft without it is still unread.
+ * - `ocrCarried`: the count carried over from the draft this one replaced (each upload makes a
+ *   new draft). Written before reading, only when it isn't 0, so a provider failure between the
+ *   two can't reset the count (see `finishUploadAndRead` and `priorAttemptsOf`).
  */
 
 /** Photos the user may try before typing the data by hand. */
@@ -43,6 +45,17 @@ type DraftData = { [key: string]: Json | undefined } | null | undefined;
 export function ocrAttemptsOf(data: DraftData): number {
   const value = data?.ocrAttempts;
   return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : 0;
+}
+
+/**
+ * How many unreadable photos a draft hands on to the one that replaces it: its own `ocrAttempts`
+ * once its photo was read, otherwise the `ocrCarried` it was given (its photo is still unread,
+ * e.g. after a provider failure, so it neither adds to the count nor resets it).
+ */
+export function priorAttemptsOf(data: DraftData): number {
+  if (typeof data?.ocrAttempts === "number") return ocrAttemptsOf(data);
+  const carried = data?.ocrCarried;
+  return typeof carried === "number" && Number.isInteger(carried) && carried > 0 ? carried : 0;
 }
 
 /**

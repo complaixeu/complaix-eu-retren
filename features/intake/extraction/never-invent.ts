@@ -12,8 +12,21 @@ import { TICKET_FIELDS, parseModelOutput } from "./schema";
  * - dates (stored `YYYY-MM-DD`): one of the ways a date is printed in Spain, day first:
  *   14/11/2026, 14-11-2026, 14.11.2026, 14/11/26, 5/3/2026, 2026-11-14, "14 de noviembre de
  *   2026", "14 nov 2026";
- * - times (stored `HH:MM`): 09:05, 9:05, 09.05 or 9h05;
+ * - times (stored `HH:MM`): 09:05, 9:05, 09.05 or 9h05, but not followed by a currency (a
+ *   price "9.05 €" is not a time);
+ * - numbers, codes and times (`price`, `bookingRef`, `ticketNumber`, `trainNumber`, the times)
+ *   must match the whole printed token: `, . - / : _` joining the match to another letter or
+ *   digit glue it to that token, so "90 EUR" is not in "54,90 EUR", "123" is not in "ABC-123"
+ *   and "09:05" is not in "10:09:05". Punctuation that ends a phrase ("54,90 EUR." or
+ *   "09:05, llegada") does not;
+ * - `bookingRef` must also look like a localizador: at least 5 letters or digits, so a short
+ *   word like "de" can never pass as one;
  * - `purchaseChannel` is our own label, never printed as such, so it is always dropped.
+ *
+ * What this proves is presence in the text, not which field a value belongs to: a departure time
+ * returned as the arrival, or a ticket number returned as the localizador, still passes. The guard
+ * for that is the mandatory review step ([A4], ARCHITECTURE §2), where the user confirms every
+ * field and the localizador explicitly.
  */
 
 /** Lower case, no accents, single spaces. */
@@ -22,12 +35,26 @@ export function normalizeText(value: string): string {
 }
 
 const isWordChar = (c: string | undefined) => c !== undefined && /[a-z0-9]/.test(c);
+const isJoiner = (c: string | undefined) => c !== undefined && /[,./:_-]/.test(c);
 
-/** `needle` occurs in `haystack` (both normalized) not glued to a letter or digit on either side. */
-function occurs(haystack: string, needle: string): boolean {
+type Match = { strict: boolean; notBefore?: RegExp };
+
+/**
+ * `needle` occurs in `haystack` (both normalized) not glued to a letter or digit on either side.
+ * With `strict`, a joiner (`, . - / : _`) followed, or preceded, by a letter or digit is glue
+ * too. `notBefore` rejects a match the rest of the text continues with.
+ */
+function occurs(haystack: string, needle: string, match: Match = { strict: false }): boolean {
   if (!needle) return false;
   for (let at = haystack.indexOf(needle); at !== -1; at = haystack.indexOf(needle, at + 1)) {
-    if (!isWordChar(haystack[at - 1]) && !isWordChar(haystack[at + needle.length])) return true;
+    const end = at + needle.length;
+    if (isWordChar(haystack[at - 1]) || isWordChar(haystack[end])) continue;
+    if (match.strict) {
+      if (isJoiner(haystack[at - 1]) && isWordChar(haystack[at - 2])) continue;
+      if (isJoiner(haystack[end]) && isWordChar(haystack[end + 1])) continue;
+    }
+    if (match.notBefore?.test(haystack.slice(end))) continue;
+    return true;
   }
   return false;
 }
@@ -80,17 +107,35 @@ function timeForms(time: string): string[] {
 const DATE_FIELDS = new Set<TicketField>(["travelDate", "purchaseDate"]);
 const TIME_FIELDS = new Set<TicketField>(["scheduledDeparture", "scheduledArrival"]);
 const NEVER_PRINTED = new Set<TicketField>(["purchaseChannel"]);
+/** Numbers and codes: the value must be the whole printed token. */
+const TOKEN_FIELDS = new Set<TicketField>(["price", "bookingRef", "ticketNumber", "trainNumber"]);
+/** A time followed by a currency is a price. */
+const CURRENCY_NEXT = /^ ?(€|eur(?![a-z0-9]))/;
+/** The fewest letters or digits a localizador can have. */
+export const MIN_BOOKING_REF_CHARS = 5;
+
+function matchFor(field: TicketField): Match {
+  if (TIME_FIELDS.has(field)) return { strict: true, notBefore: CURRENCY_NEXT };
+  return { strict: TOKEN_FIELDS.has(field) };
+}
 
 /** Whether `value`, extracted for `field`, appears in the OCR text. */
 export function appearsInText(field: TicketField, value: string, text: string): boolean {
   if (NEVER_PRINTED.has(field)) return false;
+  if (
+    field === "bookingRef" &&
+    normalizeText(value).replace(/[^a-z0-9]/g, "").length < MIN_BOOKING_REF_CHARS
+  ) {
+    return false;
+  }
   const haystack = normalizeText(text);
   const forms = DATE_FIELDS.has(field)
     ? dateForms(value)
     : TIME_FIELDS.has(field)
       ? timeForms(value)
       : [normalizeText(value)];
-  return forms.some((form) => occurs(haystack, form));
+  const match = matchFor(field);
+  return forms.some((form) => occurs(haystack, form, match));
 }
 
 /** Keeps only the values found in `text`; the rest are `dropped`. */

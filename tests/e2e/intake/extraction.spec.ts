@@ -103,6 +103,7 @@ test("unreadable → another photo → unreadable again → manual entry in the 
     page.getByRole("heading", { level: 1, name: "Revisa los datos del billete" }),
   ).toBeVisible();
   expect(await storedDraft(context)).toEqual({
+    ocrCarried: 1,
     ocrAttempts: 2,
     extraction: { quality: "unreadable", data: {}, missing: ALL_FIELDS },
   });
