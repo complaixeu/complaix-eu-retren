@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { createCase } from "@/features/claims";
+// The mock on purpose: this is a no-DB unit test of the mock chain. The real createCase needs
+// the DB and is covered by tests/unit/claims/create-case.test.ts and tests/integration/claims/.
+import { createCase } from "@/features/claims/mock";
 import { renderTemplate } from "@/features/documents";
 import { evaluateEligibility, getOperatorConfig } from "@/features/rules";
 import { fixedClock } from "@/shared/clock";
