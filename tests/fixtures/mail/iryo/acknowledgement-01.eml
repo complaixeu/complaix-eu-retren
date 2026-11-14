@@ -1,0 +1,17 @@
+From: Iryo Atencion al Cliente <atencion.cliente@iryo.eu>
+To: Retren Reclamaciones <reclamaciones@retren.example>
+Subject: Re: Reclamacion por retraso [RTN-T001]
+Date: Mon, 02 Nov 2026 10:01:00 +0100
+Message-ID: <fixture-acknowledgement-01@mail.example>
+In-Reply-To: <claim-rtn-t001@retren.example>
+References: <claim-rtn-t001@retren.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Buenos días,
+
+Hemos recibido su reclamación y la hemos registrado con el número de incidencia 0000-PRUEBA-01. Le responderemos en el plazo máximo de un mes.
+
+Un saludo,
+Atención al Cliente (texto de prueba ficticio)

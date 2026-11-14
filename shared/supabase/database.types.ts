@@ -228,7 +228,37 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      claims_apply_timer_action: {
+        Args: {
+          p_case_id: string;
+          p_event_data: Json;
+          p_extra_events?: Json;
+          p_from_status: Database["public"]["Enums"]["case_status"];
+          p_message: Json;
+          p_next_action_at: string;
+          p_paused: boolean;
+          p_send_count: number;
+          p_send_increment: number;
+          p_to_status: Database["public"]["Enums"]["case_status"];
+        };
+        Returns: string;
+      };
+      claims_create_case: {
+        Args: {
+          p_earliest_send_at: string;
+          p_eligibility: Json;
+          p_event_data: Json;
+          p_next_action_at: string;
+          p_notice?: Json;
+          p_operator: string;
+          p_public_ref: string;
+          p_status: Database["public"]["Enums"]["case_status"];
+          p_submission: Json;
+          p_user_email: string;
+        };
+        Returns: string;
+      };
+      claims_new_public_ref: { Args: Record<PropertyKey, never>; Returns: string };
     };
     Enums: {
       attachment_kind: "eu_form" | "mandate" | "ticket" | "user_document";
