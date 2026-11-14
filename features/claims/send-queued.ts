@@ -10,6 +10,7 @@ import { createServiceClient, type ServiceClient } from "@/shared/supabase/serve
 import { purgeForwardedDocuments, USER_DOCUMENTS_BUCKET } from "./actions";
 import { DOCUMENTS_BUCKET, TICKET_BUCKET } from "./buckets";
 import { DEFAULT_SENDING_DOMAIN } from "./classifier";
+import { operatorInboxes } from "./operator-inboxes";
 import {
   buildMailMessage,
   checkAttachments,
@@ -74,6 +75,8 @@ export function sendingDomain(env: Env = process.env): string {
  */
 export function assertSendConfig(providerName: string, env: Env): void {
   redirectRecipients([], env, providerName);
+  // A malformed MAIL_OPERATOR_INBOXES throws here too, before any row is touched.
+  operatorInboxes(env);
 }
 
 /** Who writes to the team queue: ids and reason codes only, never an address or a body. */
@@ -248,6 +251,8 @@ async function deliver(
       inReplyTo: m.in_reply_to,
       attachments: attachments.data as AttachmentRow[],
       providerName,
+      // Only operator mail may take the operator's test inbox; user notices always the redirect.
+      operator: toUser ? undefined : OperatorId.parse(c.operator),
     },
     env,
   );
