@@ -1,5 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -10,6 +9,7 @@ import {
   nextDemoNow,
   scriptedReply,
 } from "@/features/claims/team";
+import { DEMO_FIXTURES } from "@/features/claims/demo-fixtures";
 import { fixedClock } from "@/shared/clock";
 
 // [C9] The pure parts of the team view: the demo gate, the demo clock, the fixture rewrite.
@@ -107,18 +107,26 @@ describe("scriptedReply", () => {
 
 describe("listFixtures", () => {
   it("lists the fixtures of an operator, labelled, and nothing for an unknown one", () => {
-    const dir = mkdtempSync(join(tmpdir(), "c9-fixtures-"));
-    mkdirSync(join(dir, "iryo"));
-    for (const f of ["approved-01.eml", "asks_for_data-02.eml", "notes.txt", "odd name.eml"]) {
-      writeFileSync(join(dir, "iryo", f), "x");
-    }
-    const env = { TEAM_FIXTURES_DIR: dir };
-    expect(listFixtures("iryo", env).map((f) => f.name)).toEqual([
+    const fx = { iryo: { "approved-01": "x", "asks_for_data-02": "x", "odd name": "x" } };
+    expect(listFixtures("iryo", fx).map((f) => f.name)).toEqual([
       "approved-01",
       "asks_for_data-02",
     ]);
-    expect(listFixtures("iryo", env)[1]?.label).toContain("IBAN");
-    expect(listFixtures("renfe", env)).toEqual([]);
-    expect(listFixtures("../etc", env)).toEqual([]);
+    expect(listFixtures("iryo", fx)[1]?.label).toContain("IBAN");
+    expect(listFixtures("renfe", fx)).toEqual([]);
+    expect(listFixtures("../etc", fx)).toEqual([]);
+  });
+
+  it("bundles every operator's golden .eml, byte for byte (regenerate features/claims/demo-fixtures.ts)", () => {
+    const root = join(process.cwd(), "tests", "fixtures", "mail");
+    for (const op of readdirSync(root).filter((d) => statSync(join(root, d)).isDirectory())) {
+      const files = readdirSync(join(root, op)).filter((f) => f.endsWith(".eml"));
+      expect(Object.keys(DEMO_FIXTURES[op] ?? {}).sort()).toEqual(
+        files.map((f) => f.slice(0, -4)).sort(),
+      );
+      for (const f of files) {
+        expect(DEMO_FIXTURES[op]?.[f.slice(0, -4)]).toBe(readFileSync(join(root, op, f), "utf8"));
+      }
+    }
   });
 });

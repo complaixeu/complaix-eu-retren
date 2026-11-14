@@ -6,11 +6,10 @@
 // (./team-access.ts) and only then use the service-role client. Nothing here is ever sent to a
 // browser as raw rows: the callers get the small shapes below, with ids, codes and subjects only.
 import { randomUUID } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { Clock, CaseStatus } from "@/shared/contracts";
 import { systemClock } from "@/shared/clock";
 import type { ServiceClient } from "@/shared/supabase/server";
+import { DEMO_FIXTURES } from "./demo-fixtures";
 import { runOutbound } from "./outbound-tick";
 import { runTick } from "./tick";
 
@@ -412,27 +411,16 @@ const FIXTURE_LABELS: Record<string, string> = {
   "spoofed-ref": "Referencia falsificada",
 };
 
-/**
- * Where an operator's scripted replies are: tests/fixtures/mail/<operator> (statically scoped, so
- * the build traces that folder only). TEAM_FIXTURES_DIR is a test-only override.
- */
-const operatorDir = (env: Env, operator: string) =>
-  env.TEAM_FIXTURES_DIR
-    ? join(/* turbopackIgnore: true */ env.TEAM_FIXTURES_DIR, operator)
-    : join(process.cwd(), "tests", "fixtures", "mail", operator);
+type FixtureSet = Record<string, Record<string, string>>;
 
-/** The scripted replies available for an operator: tests/fixtures/mail/<operator>/*.eml. */
-export function listFixtures(operator: string, env: Env = process.env): MailFixture[] {
+/** The scripted replies available for an operator (the bundled copy of tests/fixtures/mail). */
+export function listFixtures(
+  operator: string,
+  fixtures: FixtureSet = DEMO_FIXTURES,
+): MailFixture[] {
   if (!/^[a-z]+$/.test(operator)) return [];
-  let files: string[];
-  try {
-    files = readdirSync(operatorDir(env, operator));
-  } catch {
-    return [];
-  }
-  return files
-    .filter((f) => f.endsWith(".eml") && FIXTURE_NAME.test(f.slice(0, -4)))
-    .map((f) => f.slice(0, -4))
+  return Object.keys(fixtures[operator] ?? {})
+    .filter((name) => FIXTURE_NAME.test(name))
     .sort()
     .map((name) => {
       const kind = name.replace(/-\d{2}$/, "");
@@ -488,6 +476,8 @@ export interface InjectDeps {
   ingest: (raw: string) => Promise<IngestOutcome>;
   env?: Env;
   newMessageId?: () => string;
+  /** Test override of the bundled fixtures. */
+  fixtures?: FixtureSet;
 }
 
 /**
@@ -514,7 +504,7 @@ export async function injectOperatorReply(
   const row = c.data;
   if (!row) throw new TeamActionError("not_found");
 
-  const available = listFixtures(row.operator, env);
+  const available = listFixtures(row.operator, deps.fixtures);
   if (available.length === 0) throw new TeamActionError("no_fixtures");
   if (!available.some((f) => f.name === input.fixture)) throw new TeamActionError("bad_fixture");
 
@@ -532,7 +522,7 @@ export async function injectOperatorReply(
     sent.data.find((m) => m.to_address.toLowerCase() !== row.user_email.toLowerCase());
   if (!claim?.message_id) throw new TeamActionError("no_initial_claim");
 
-  const raw = readFileSync(join(operatorDir(env, row.operator), `${input.fixture}.eml`), "utf8");
+  const raw = (deps.fixtures ?? DEMO_FIXTURES)[row.operator]?.[input.fixture] ?? "";
   const mail = scriptedReply(raw, {
     fixture: input.fixture,
     publicRef: row.public_ref,
