@@ -4,12 +4,13 @@
   justify-content: center;
   gap: var(--space-2);
   width: 100%;
-  min-height: var(--tap-target);
+  min-height: var(--control-height);
   padding: var(--space-3) var(--space-5);
   border: var(--border-width) solid transparent;
   border-radius: var(--radius-md);
   font: inherit;
-  font-weight: var(--weight-medium);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
   line-height: var(--leading-tight);
   text-align: center;
   text-decoration: none;
@@ -30,6 +31,7 @@
   width: 100%;
 }
 
+/* The one dark action on a screen */
 .primary {
   background: var(--color-primary);
   color: var(--color-on-primary);
@@ -39,6 +41,7 @@
   background: var(--color-primary-hover);
 }
 
+/* A white button with a hairline border */
 .secondary {
   background: var(--color-surface);
   border-color: var(--color-border-strong);
@@ -51,7 +54,7 @@
 
 .quiet {
   background: transparent;
-  color: var(--color-primary);
+  color: var(--color-accent);
 }
 
 .quiet:hover {
@@ -62,7 +65,7 @@
   cursor: not-allowed;
   background: var(--color-surface-sunken);
   border-color: var(--color-border);
-  color: var(--color-text-muted);
+  color: var(--color-placeholder);
 }
 
 .button[aria-busy="true"] {

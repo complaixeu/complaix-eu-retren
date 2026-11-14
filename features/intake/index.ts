@@ -85,6 +85,7 @@ export {
 } from "./review/fields";
 export { StoredReview, readReview, type ReviewStart } from "./review/read";
 export { submitReview, type ReviewSubmitResult } from "./review/submit";
+export { parseAnswers, validIdentityNumber } from "./answers";
 export {
   BOOKING_REF_CONFIRMED,
   parseReviewDate,

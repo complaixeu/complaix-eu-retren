@@ -1,21 +1,40 @@
 import type { Metadata } from "next";
-import { PendingNotice } from "../_components/pending-notice";
-import { StepActions, StepPage, stepTitle } from "../_components/step-page";
-import styles from "../_components/intake.module.css";
+import { Suspense } from "react";
+import { intakeStepHref, intakeStepNeighbours, requireDraft } from "@/features/intake";
+import { StepPage, stepTitle } from "../_components/step-page";
+import { saveAnswers } from "./actions";
+import { QuestionsForm } from "./questions-form";
 
 export const metadata: Metadata = stepTitle("preguntas");
 
 export default function PreguntasPage() {
   return (
-    <>
-      <StepPage step="preguntas">
-        <p className={styles.lead}>
-          Tu documento de identidad, tu email, la hora real a la que llegaste y poco más. Lo que ya
-          sale en el billete no te lo preguntamos.
-        </p>
-        <PendingNotice />
-      </StepPage>
-      <StepActions step="preguntas" />
-    </>
+    <Suspense>
+      <QuestionsStep />
+    </Suspense>
+  );
+}
+
+async function QuestionsStep() {
+  const draft = await requireDraft();
+  const data = draft.data.answers as Record<string, unknown> | undefined;
+  const previous = data?.previousClaim as Record<string, unknown> | undefined;
+  const saved = {
+    documentType: String(data?.documentType ?? "dni"),
+    documentNumber: String(data?.documentNumber ?? ""),
+    email: String(data?.email ?? ""),
+    arrivalDate: String((data?.actualArrival as Record<string, unknown> | undefined)?.date ?? ""),
+    arrivalTime: String((data?.actualArrival as Record<string, unknown> | undefined)?.time ?? ""),
+    previousClaim: previous?.made === true ? "yes" : "no",
+    claimDate: String(previous?.date ?? ""),
+    claimRecipient: String(previous?.recipient ?? ""),
+    claimMeans: String(previous?.means ?? ""),
+    paymentPreference: String(data?.paymentPreference ?? "money"),
+  };
+  const { previous: prev } = intakeStepNeighbours("preguntas");
+  return (
+    <StepPage step="preguntas">
+      <QuestionsForm action={saveAnswers} saved={saved} backHref={intakeStepHref(prev!)} />
+    </StepPage>
   );
 }

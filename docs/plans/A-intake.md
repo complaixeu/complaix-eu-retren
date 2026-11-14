@@ -7,18 +7,15 @@ Uses: `@/features/claims` (`createCase`, mock until C2). Never imports B directl
 
 ## Design direction (every UI task: A0, A1, A3, A4, A5, A6, A7)
 
-Decided by Nestor, 2026-11-14.
+Decided by Nestor, 2026-11-14; visual reference clarified by the project owner in this session.
 
-- **Visual reference: [Vuestic Admin](https://github.com/epicmaxco/vuestic-admin)** (MIT,
-  live demo admin.vuestic.dev). Take its look, not its code: it is Vue 3 + Vuestic UI, and we are
-  Next.js 16 + React 19. Copy no components, assets, logo or brand colours. What to take from it:
-  - calm neutral surfaces with content in white cards (subtle border, small radius, light shadow)
-    on a slightly tinted page background;
-  - **one** primary colour for actions and the current step; everything else neutral grey;
-  - a consistent 4/8 px spacing scale, generous padding inside cards, aligned edges;
-  - forms: label above the field, help text below, the error in red under the field, one column;
-  - clear type hierarchy with a single system font stack, no decorative fonts;
-  - a real dark theme from the same tokens (`prefers-color-scheme`), not an afterthought.
+- **Visual reference: the local Complaix app** at `/home/developer/projects/complaix` and its
+  `DESIGN_SYSTEM.md`. Recreate its design language in native Next.js and CSS; do not copy its
+  React Router/Tailwind implementation, logos or product-specific layouts. Use its self-hosted
+  Montserrat headings, DM Sans body text, zinc neutrals, near-black primary action, compact
+  radii, and restrained semantic colours. Keep the ReTren mobile claim flow's own structure.
+  Maintain WCAG AA contrast in both light and dark themes; tokens may be adjusted where the
+  reference values do not pass on the intake surfaces.
 - **This is a public, mobile-first flow, not a dashboard.** No sidebar, no data tables, no
   charts. One task per screen, a narrow centred column (~ 36rem), large tap targets (≥ 44 px), the
   stepper at the top, the primary button at the bottom. Most users arrive on a phone with the
