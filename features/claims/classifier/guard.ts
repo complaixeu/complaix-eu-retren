@@ -86,8 +86,38 @@ function deobfuscate(text: string): string {
     .replace(/\s*[[({]\s*(dot|punto)\s*[\])}]\s*/g, ".");
 }
 
-const ADDRESS = /([a-z0-9._%+-]+)@([a-z0-9-]+(?:\.[a-z0-9-]+)+)/g;
-const URL_HOST = /\b(?:https?:\/\/|www\.)([a-z0-9-]+(?:\.[a-z0-9-]+)+)/g;
+const LABEL = "[a-z0-9](?:[a-z0-9-]*[a-z0-9])?";
+const HOST = `(?:${LABEL}\\.)+[a-z]{2,24}`;
+const ADDRESS = new RegExp(`([a-z0-9._%+-]+)@(${HOST})`, "g");
+/** `https://host…` and `www.host…`; the captured host keeps its `www.` exactly once. */
+const URL_HOST = new RegExp(`(?:\\bhttps?:\\/\\/(${HOST})|(?<![\\w.@/-])(www\\.${HOST}))`, "g");
+/**
+ * A bare host without a scheme: two or more labels and a letters-only TLD, not part of an
+ * address or a URL, and either followed by a path or with a subdomain (3+ labels). Prose such as
+ * "Sr.", "p.ej.", "S.A." or "10.30" never has that shape.
+ */
+const BARE_HOST = new RegExp(`(?<![\\w.@/:-])(${HOST})(?=(\\/)|[^\\w.-]|\\.(?![a-z0-9])|$)`, "g");
+const FILE_EXTENSION =
+  /\.(pdf|jpe?g|png|gif|webp|heic|tiff?|docx?|xlsx?|pptx?|odt|txt|csv|zip|rar|eml|html?)$/;
+
+/**
+ * Public hosts that operator footers and legal citations link to. Links only: an address in one
+ * of these domains is still flagged. Social profiles are allowed as links on purpose (footers
+ * carry them; the guard routes, it does not block).
+ */
+export const PUBLIC_LINK_HOSTS: readonly string[] = [
+  "eur-lex.europa.eu",
+  "transportes.gob.es",
+  "apps.apple.com",
+  "play.google.com",
+  "facebook.com",
+  "instagram.com",
+  "x.com",
+  "twitter.com",
+  "linkedin.com",
+  "youtube.com",
+  "tiktok.com",
+];
 
 function inDomain(domain: string, trusted: string): boolean {
   return domain === trusted || domain.endsWith(`.${trusted}`);
@@ -96,7 +126,9 @@ function inDomain(domain: string, trusted: string): boolean {
 function untrustedTarget(text: string, trust: Trust): boolean {
   const domains = trust.domains.map((d) => d.toLowerCase());
   const addresses = trust.addresses.map((a) => a.toLowerCase());
-  const okDomain = (d: string) => domains.some((t) => inDomain(d.replace(/^www\./, ""), t));
+  const host = (h: string) => h.replace(/^www\./, "");
+  const okDomain = (d: string) => domains.some((t) => inDomain(host(d), t));
+  const okLink = (d: string) => okDomain(d) || PUBLIC_LINK_HOSTS.some((t) => inDomain(host(d), t));
   const cleaned = deobfuscate(dropNonAddresses(text));
 
   for (const m of cleaned.matchAll(ADDRESS)) {
@@ -104,8 +136,17 @@ function untrustedTarget(text: string, trust: Trust): boolean {
     if (!addresses.includes(address) && !okDomain(m[2])) return true;
   }
   for (const m of cleaned.matchAll(URL_HOST)) {
-    const host = m[0].startsWith("www.") ? `www.${m[1]}` : m[1];
-    if (!okDomain(host)) return true;
+    if (!okLink(m[1] ?? m[2])) return true;
+  }
+  // Bare hosts are looked for outside the URLs already checked (their paths, queries and
+  // fragments are not hosts), and file names are not hosts.
+  const withoutUrls = cleaned.replace(/\b(?:https?:\/\/|www\.)\S*/g, " ");
+  for (const m of withoutUrls.matchAll(BARE_HOST)) {
+    const h = m[1];
+    if (FILE_EXTENSION.test(h)) continue;
+    const hasPath = m[2] === "/";
+    const labels = h.split(".").length;
+    if ((hasPath || labels >= 3) && !okLink(h)) return true;
   }
   return false;
 }
@@ -113,12 +154,18 @@ function untrustedTarget(text: string, trust: Trust): boolean {
 // ---------------------------------------------------------------------------------------------
 // Instruction-like text. Patterns run on normalised text and may span lines ([\s\S], \s).
 
+/** Words that name a verdict. Kept strict ("otros", "favorable" are ordinary ticket words). */
 const CATEGORY_WORD =
-  "(aprobad\\w*|aceptad\\w*|denegad\\w*|rechazad\\w*|acuse\\w*|approved|denied|acknowledg\\w*|asks_for_data|refers_to_form|other|otros?|positiv\\w*|favorable\\w*)";
+  "(aprobad\\w*|aceptad\\w*|denegad\\w*|rechazad\\w*|approved|accepted|denied|rejected|acknowledg\\w*|asks_for_data|refers_to_form|other)";
+
+/** A verb not directly negated ("no lo reenvíe", "ni copie", "do not forward"). */
+const NOT_NEGATED =
+  "(?<!\\b(?:no|ni|not|never|nunca|n't|do not|don't)\\s+(?:(?:l[oae]s?|se|me|nos|le|les)\\s+)?)";
 
 const INSTRUCTION_LIKE: RegExp[] = [
-  // "ignore / forget / disregard the instructions | rules | everything above"
-  /\b(ignor|olvid|disregard|forget|omit|pase\w* por alto)\w*\b[\s\S]{0,40}?\b(instruc|indicac|regla|norma|rules|prompt|directiv|todo lo anterior|lo anterior|everything above|the above)/,
+  // "ignore / forget / disregard the instructions | rules | everything above" ("olvide lo
+  // anterior" alone is an ordinary apology and is not flagged)
+  /\b(ignor|olvid|disregard|forget|omit|pase\w* por alto)\w*\b[\s\S]{0,40}?\b(instruc|indicac|regla|norma|rules|prompt|directiv|todo lo anterior|everything above|the above)/,
   /\b(no (tenga|tengan|tome|tomen|haga|hagan) (en cuenta|caso)|haga\w* caso omiso)\b[\s\S]{0,40}?\b(instruc|indicac|regla|norma|lo anterior|todo lo anterior|lo dicho|lo previo)/,
   /\b(previous|prior|above|earlier) (instructions|rules|prompt)\b/,
   // "classify (this mail) as approved", in any person or tense
@@ -128,18 +175,35 @@ const INSTRUCTION_LIKE: RegExp[] = [
   new RegExp(
     `\\b(classif\\w*|categori[sz]\\w*|label\\w*|mark\\w*)\\b[\\s\\S]{0,40}?\\bas\\s+(an?\\s+)?${CATEGORY_WORD}`,
   ),
+  // "treat this message as approved"
+  new RegExp(
+    `\\b(trat|consider|treat)\\w*\\b\\s+(este|el|this|the)\\s+(mensaje|correo|e-?mail|mail|message)\\b[\\s\\S]{0,20}?\\b(como|as)\\s+(un[ao]?\\s+|an?\\s+)?${CATEGORY_WORD}`,
+  ),
+  // "answer only with approved", "answer only: approved", "output approved"
+  new RegExp(
+    `\\b(respond|contest|answer|reply|devuelv|escrib|say|return)\\w*\\b[\\s\\S]{0,30}?\\b(solo|solamente|unicamente|only|just)\\b[\\s\\S]{0,30}?\\b${CATEGORY_WORD}`,
+  ),
+  new RegExp(`\\boutput\\b\\s*:?\\s*["']?${CATEGORY_WORD}`),
+  /<!--[\s\S]{0,300}?\b(assistant|system|model|ai|llm|output|categor\w*|classif\w*|clasific\w*)\b[\s\S]{0,300}?-->/,
   /\b(the|la|su) (category|categoria|clasificacion) (is|es|sera|debe ser)\b/,
-  // A label or JSON that tries to dictate the verdict
-  /["']?\b(category|categoria|clasificacion|classification|confidence|confianza)\b["']?\s*[:=]/,
-  // Role markers and jailbreak phrasing
-  /^\s*(#{1,6}\s*|\[|<)?\s*(system|assistant|developer|sistema|asistente|instructions?)\s*(\]|>)?\s*:?\s*$/m,
-  /^\s*(\[|<)?\s*(system|assistant|developer|sistema|asistente)\s*(\]|>)?\s*:/m,
+  // A label or JSON field that dictates the verdict. A ticket field ("Categoría: Retrasos") is fine.
+  new RegExp(
+    `["']?\\b(category|categoria|clasificacion|classification|label|etiqueta)\\b["']?\\s*[:=]\\s*["']?${CATEGORY_WORD}`,
+  ),
+  /["']\s*(confidence|confianza)\s*["']\s*:/,
+  // Role markers and jailbreak phrasing. A lone "Sistema:" ticket line is fine.
+  /^\s*(#{1,6}|\[|<)\s*(system|assistant|developer|sistema|asistente|instructions?)\s*(\]|>)?\s*:?\s*$/m,
+  /^\s*(\[|<)?\s*(system|assistant|developer)\s*(\]|>)?\s*:\s*\S/m,
   /<\/?\s*(system|instructions?|prompt)\s*>/,
   /\bsystem prompt\b/,
-  /\byou are now\b|\bahora (eres|es usted|actua)\b|\bact as\b|\bactue como\b/,
+  /\byou are now\b|\bahora (eres|es usted|actua)\b/,
+  /\bact as (an? |the )?(ai|assistant|language model|chatbot|llm|bot|system|admin\w*|developer|different)\b/,
+  /\bactue como (un |una |el |la )?(asistente|ia|inteligencia artificial|modelo|sistema|administrador|chatbot|bot)\b/,
   /\b(admin|administrator|developer|god|dan|jailbreak) mode\b|\bmodo (administrador|desarrollador|admin)\b/,
-  // Sending the case or its data somewhere else
-  /\b(reenvi|envi|remit|mand|forward|send|transfer)\w*\b[\s\S]{0,30}?\b(datos|data|expediente|case file|documentacion|informacion|information|details)\b[\s\S]{0,40}?\b((a|al|to)\s+(otra|otro|another|un[ao]? (nuev[ao]|distint[ao]|extern[ao]))\s+(direccion|address|cuenta|correo|e-?mail)(?!\s+postal)|extern[ao]s?|external|tercer[ao]s?|third[- ]part\w*)/,
+  // Sending the case or its data somewhere else (not when negated, as in confidentiality footers)
+  new RegExp(
+    `${NOT_NEGATED}\\b(reenvi|envi|remit|mand|forward|send|transfer)\\w*\\b[\\s\\S]{0,30}?\\b(datos|data|expediente|case file|documentacion|informacion|information|details)\\b[\\s\\S]{0,40}?\\b((a|al|to)\\s+(otra|otro|another|un[ao]? (nuev[ao]|distint[ao]|extern[ao]))\\s+(direccion|address|cuenta|correo|e-?mail)(?!\\s+postal)|extern[ao]s?|external|tercer[ao]s?|third[- ]part\\w*)`,
+  ),
 ];
 
 export function looksLikeInjection(mail: Mail, trust: Trust): boolean {
