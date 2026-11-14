@@ -7,11 +7,11 @@ import { Alert, Button, Field, Input } from "@/shared/ui";
 import { login } from "../actions";
 import styles from "../team.module.css";
 
-export const metadata: Metadata = { title: "Acceso del equipo" };
+export const metadata: Metadata = { title: "Team sign-in" };
 
 export default function TeamLoginPage({ searchParams }: PageProps<"/equipo/entrar">) {
   return (
-    <Suspense fallback={<p>Cargando…</p>}>
+    <Suspense fallback={<p>Loading…</p>}>
       <LoginForm searchParams={searchParams} />
     </Suspense>
   );
@@ -27,18 +27,20 @@ async function LoginForm({ searchParams }: Pick<PageProps<"/equipo/entrar">, "se
 
   return (
     <section className={`${styles.card} ${styles.narrow}`}>
-      <h1 className={styles.title}>Acceso del equipo</h1>
+      <h1 className={styles.title}>Team sign-in</h1>
       {error && (
         // Same message for a wrong password and for an address that is not on the list.
-        <Alert tone="error">Correo o contraseña incorrectos, o sin acceso al equipo.</Alert>
+        <Alert tone="error">
+          Email or password is incorrect, or this account does not have team access.
+        </Alert>
       )}
       <form action={login} className={styles.list}>
-        <Field label="Correo electrónico">
+        <Field label="Email">
           {(control) => (
             <Input {...control} name="email" type="email" autoComplete="username" required />
           )}
         </Field>
-        <Field label="Contraseña">
+        <Field label="Password">
           {(control) => (
             <Input
               {...control}
@@ -49,7 +51,7 @@ async function LoginForm({ searchParams }: Pick<PageProps<"/equipo/entrar">, "se
             />
           )}
         </Field>
-        <Button type="submit">Entrar</Button>
+        <Button type="submit">Sign in</Button>
       </form>
     </section>
   );

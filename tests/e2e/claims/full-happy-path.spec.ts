@@ -98,7 +98,15 @@ test("upload → eligible claim sent to Iryo → approved → user gets the fina
   const daysPastEarliest = Math.ceil((Date.parse(stored.earliest_send_at) - Date.now()) / DAY) + 1;
   await advanceClock(page, Math.max(1, daysPastEarliest));
   await expectStatus(page, "sent");
-  await expect(messageItem(page, "initial_claim")).toContainText("sent");
+  await expect(messageItem(page, "initial_claim")).toContainText("Sent");
+  await expect(page.getByRole("region", { name: "Claim process" })).toContainText("Claim sent");
+  await expect(messageItem(page, "initial_claim")).toContainText("Initial claim");
+  await expect(messageItem(page, "initial_claim")).toContainText("EU claim form (PDF)");
+  await expect(messageItem(page, "initial_claim")).toContainText("Mandate (PDF)");
+  await expect(messageItem(page, "initial_claim")).toContainText("Ticket");
+  await expect(messageItem(page, "initial_claim").locator("ul").getByRole("listitem")).toHaveCount(
+    3,
+  );
 
   const sentRows = await caseRows(caseId);
   const initial = sentRows.messages.filter((message) => message.direction === "outbound");
@@ -119,12 +127,15 @@ test("upload → eligible claim sent to Iryo → approved → user gets the fina
     "ticket",
   ]);
 
-  await inject(page, "Aprobada (01)", "el caso ha cambiado de estado");
+  await inject(page, "Approved (01)", "status updated");
   await expectStatus(page, "resolved");
-  await expect(messageItem(page, "user_final_result")).toContainText("queued");
+  await expect(page.getByText("AI classification: Approved")).toBeVisible();
+  await expect(page.getByText("Case resolved and passenger notified")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Claim process" })).toContainText("Resolved");
+  await expect(messageItem(page, "user_final_result")).toContainText("Queued");
   await advanceClock(page, 1);
   await expectStatus(page, "resolved");
-  await expect(messageItem(page, "user_final_result")).toContainText("sent");
+  await expect(messageItem(page, "user_final_result")).toContainText("Sent");
 
   const finalRows = await caseRows(caseId);
   expect(finalRows.case.status).toBe("resolved");

@@ -39,14 +39,14 @@ test("asks for the IBAN → the user's document is forwarded to the operator onl
   await openCase(page, c);
 
   // 1. The operator asks for data: the case waits on the user, our request is queued for them.
-  await inject(page, "Pide datos (IBAN) (01)", "el caso ha cambiado de estado");
+  await inject(page, "Asks for the IBAN (01)", "status updated");
   await expectStatus(page, "waiting_user");
   await expect(messageItem(page, "asks_for_data")).toHaveCount(1);
-  await expect(messageItem(page, "user_request_document")).toContainText("queued");
+  await expect(messageItem(page, "user_request_document")).toContainText("Queued");
 
   // The next tick sends the request to the user.
   await advanceClock(page, 1);
-  await expect(messageItem(page, "user_request_document")).toContainText("sent");
+  await expect(messageItem(page, "user_request_document")).toContainText("Sent");
 
   // 2. The user answers it with one PDF, through the same path as a mail read from the inbox.
   const ingested = await userRepliesWithDocument(c.id);
@@ -73,7 +73,7 @@ test("asks for the IBAN → the user's document is forwarded to the operator onl
 
   // 3. The next tick sends the forward to the operator, and only then deletes the document.
   await advanceClock(page, 1);
-  await expect(messageItem(page, "reply_asks_for_data")).toContainText("sent");
+  await expect(messageItem(page, "reply_asks_for_data")).toContainText("Sent");
   await expect(historyOf(page)).toContainText("user_document_deleted");
 
   const after = await caseRows(c.id);

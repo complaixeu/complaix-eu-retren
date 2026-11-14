@@ -11,12 +11,12 @@ import { Notice } from "./_components/notice";
 import { ResolveForm } from "./_components/resolve-form";
 import styles from "./team.module.css";
 
-export const metadata: Metadata = { title: "Cola del equipo" };
+export const metadata: Metadata = { title: "Team queue" };
 
 export default function TeamPage({ searchParams }: PageProps<"/equipo">) {
   // Everything here depends on the session, so it renders at request time (Cache Components).
   return (
-    <Suspense fallback={<p>Cargando…</p>}>
+    <Suspense fallback={<p>Loading…</p>}>
       <Queue searchParams={searchParams} />
     </Suspense>
   );
@@ -33,38 +33,38 @@ async function Queue({ searchParams }: Pick<PageProps<"/equipo">, "searchParams"
   return (
     <>
       <div className={styles.header}>
-        <span className={styles.wordmark}>ReTren · Equipo</span>
+        <span className={styles.wordmark}>ReTren · Team</span>
         {session.email && (
           <form action={logout} className={styles.inline}>
             <span className={styles.muted}>{session.email}</span>
             <Button type="submit" variant="quiet">
-              Cerrar sesión
+              Sign out
             </Button>
           </form>
         )}
       </div>
 
-      <h1 className={styles.title}>Cola del equipo</h1>
+      <h1 className={styles.title}>Team queue</h1>
       <Notice aviso={one(params.aviso)} error={one(params.error)} />
 
       <section aria-labelledby="cola" className={styles.card}>
         <h2 id="cola" className={styles.subtitle}>
-          Pendiente de revisar
+          Needs team review
         </h2>
         {queue.length === 0 ? (
-          <p>No hay nada pendiente.</p>
+          <p>Nothing needs review.</p>
         ) : (
           <div className={styles.tableWrap}>
             <table className={styles.table}>
               <caption className={styles.muted}>
-                Casos y correos que necesitan a una persona, los más recientes primero.
+                Cases and emails that need a person, newest first.
               </caption>
               <thead>
                 <tr>
-                  <th scope="col">Fecha</th>
-                  <th scope="col">Caso</th>
-                  <th scope="col">Motivo</th>
-                  <th scope="col">Acción</th>
+                  <th scope="col">Date</th>
+                  <th scope="col">Case</th>
+                  <th scope="col">Reason</th>
+                  <th scope="col">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -75,10 +75,18 @@ async function Queue({ searchParams }: Pick<PageProps<"/equipo">, "searchParams"
                       {item.caseId ? (
                         <Link href={`/equipo/casos/${item.caseId}`}>{item.publicRef}</Link>
                       ) : (
-                        "Sin caso"
+                        "No case"
                       )}
                     </td>
                     <td>
+                      {item.source === "message" ||
+                      ["wrong_sender", "spoofed_reference", "unknown_reference", "other"].includes(
+                        item.reason,
+                      ) ? (
+                        <strong className={styles.blockedQueue}>
+                          Blocked — sent to the team for review
+                        </strong>
+                      ) : null}
                       {reasonLabel(item.reason)} <code className={styles.code}>{item.reason}</code>
                     </td>
                     <td>
@@ -99,20 +107,20 @@ async function Queue({ searchParams }: Pick<PageProps<"/equipo">, "searchParams"
 
       <section aria-labelledby="casos" className={styles.card}>
         <h2 id="casos" className={styles.subtitle}>
-          Casos
+          Cases
         </h2>
         {cases.length === 0 ? (
-          <p>Todavía no hay casos.</p>
+          <p>No cases yet.</p>
         ) : (
           <div className={styles.tableWrap}>
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th scope="col">Referencia</th>
-                  <th scope="col">Operador</th>
-                  <th scope="col">Estado</th>
-                  <th scope="col">Enviada</th>
-                  <th scope="col">Próxima acción</th>
+                  <th scope="col">Reference</th>
+                  <th scope="col">Operator</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Sent</th>
+                  <th scope="col">Next action</th>
                 </tr>
               </thead>
               <tbody>

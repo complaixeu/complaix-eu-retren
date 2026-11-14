@@ -1,40 +1,40 @@
-// Plain-Spanish labels for the codes the team view shows. The code itself is always shown too.
+// English labels for the codes shown in the team view.
 const REASONS: Record<string, string> = {
-  other: "Respuesta que no se ha podido clasificar",
-  wrong_sender: "Remitente que no es el operador",
-  unknown_reference: "Referencia desconocida",
-  spoofed_reference: "Referencia sospechosa",
-  invalid_transition: "Respuesta que no encaja con el estado del caso",
-  user_reply: "Respuesta del usuario",
-  user_document_not_allowed: "Documento del usuario no permitido",
-  forward_failed: "Fallo al reenviar un documento",
-  action_failed: "Fallo al aplicar la acción",
-  send_cap: "Límite de envíos alcanzado",
-  delivery_unknown: "Envío con resultado incierto",
-  internal_error: "Error interno al enviar",
-  escalation_filing_required: "Hay que presentar la reclamación ante el organismo",
-  escalation_signature_needed: "Hace falta la firma del usuario para escalar",
+  other: "Unclassified operator reply",
+  wrong_sender: "Sender is not the operator",
+  unknown_reference: "Unknown case reference",
+  spoofed_reference: "Suspicious case reference",
+  invalid_transition: "Reply does not fit the case status",
+  user_reply: "Passenger reply",
+  user_document_not_allowed: "Passenger document not allowed",
+  forward_failed: "Document forwarding failed",
+  action_failed: "Action failed",
+  send_cap: "Send limit reached",
+  delivery_unknown: "Delivery result is unknown",
+  internal_error: "Internal sending error",
+  escalation_filing_required: "File the claim with the authority",
+  escalation_signature_needed: "Passenger signature needed to escalate",
 };
 
-export const reasonLabel = (code: string) => REASONS[code] ?? "Aviso sin descripción";
+export const reasonLabel = (code: string) => REASONS[code] ?? "Unspecified notice";
 
 const STATUSES: Record<string, string> = {
-  draft: "Borrador",
-  waiting_period: "En periodo de espera",
-  sent: "Enviada",
-  reply_received: "Respuesta recibida",
-  waiting_user: "Esperando al usuario",
-  escalated: "Escalada",
-  resolved: "Resuelta",
-  denied: "Denegada",
-  closed: "Cerrada",
+  draft: "Draft",
+  waiting_period: "Waiting period",
+  sent: "Sent",
+  reply_received: "Operator replied",
+  waiting_user: "Waiting for passenger",
+  escalated: "Escalated",
+  resolved: "Resolved",
+  denied: "Denied",
+  closed: "Closed",
 };
 
 export const statusLabel = (code: string) => STATUSES[code] ?? code;
 
 export const dateTime = (iso: string | null) =>
   iso
-    ? new Date(iso).toLocaleString("es-ES", {
+    ? new Date(iso).toLocaleString("en-GB", {
         dateStyle: "short",
         timeStyle: "short",
         timeZone: "Europe/Madrid",

@@ -186,7 +186,9 @@ describe("resolveQueueItem", () => {
 });
 
 describe("getCaseView and listCases", () => {
-  it("shows events and messages, with the body of operator mail only", async () => {
+  // The demo view also shows our own outbound bodies (our templates), still as plain text and
+  // only to signed-in team members, so the judges can read the actual claim that was sent.
+  it("shows events and messages, with the plain-text body of every mail", async () => {
     const c = await seedCase();
     await db.from("messages").insert({
       case_id: c.id,
@@ -207,7 +209,7 @@ describe("getCaseView and listCases", () => {
       ["outbound", "initial_claim", "sent"],
       ["inbound", "other", "received"],
     ]);
-    expect(view?.messages[0]?.body).toBeNull();
+    expect(view?.messages[0]?.body).toBe("initial claim");
     expect(view?.messages[1]?.body).toBe("<b>texto del operador</b>");
     expect(view?.open.map((i) => i.id)).toEqual([open]);
     expect(JSON.stringify(view)).not.toContain(PII.email);

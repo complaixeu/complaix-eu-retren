@@ -143,3 +143,128 @@
   padding: 0;
   list-style: none;
 }
+
+.steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.step {
+  flex: 1 1 8rem;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+.step[aria-current="step"] {
+  border-color: var(--color-accent);
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
+}
+.quickDays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.demoControls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  align-items: stretch;
+}
+.demoControls > section {
+  min-width: 0;
+}
+.mailCard {
+  max-width: 90%;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  overflow-wrap: anywhere;
+}
+.incoming {
+  align-self: flex-start;
+  border-left: 4px solid #2563eb;
+}
+.outgoing {
+  align-self: flex-end;
+  border-right: 4px solid #15803d;
+}
+.passengerMail {
+  align-self: center;
+  border: 2px solid #7c3aed;
+  background: #f5f3ff;
+}
+.blocked {
+  border: 2px solid #b91c1c;
+  background: #fff1f2;
+}
+.blockedLabel {
+  color: #991b1b;
+  font-weight: var(--weight-semibold);
+}
+.blockedQueue {
+  display: block;
+  color: #991b1b;
+  margin-bottom: var(--space-1);
+}
+.mailTop {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.pill {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  background: var(--color-surface-sunken);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+.meta {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.chips li {
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  font-size: var(--text-sm);
+}
+.bodyDetails summary {
+  cursor: pointer;
+  font-weight: var(--weight-semibold);
+}
+.bodyPreview {
+  margin: 0;
+  padding: var(--space-2) 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 40rem) {
+  .demoControls {
+    grid-template-columns: 1fr;
+  }
+  .mailCard {
+    max-width: 100%;
+    width: 100%;
+  }
+  .table {
+    min-width: 36rem;
+  }
+}

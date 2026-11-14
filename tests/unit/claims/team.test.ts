@@ -114,12 +114,26 @@ describe("scriptedReply", () => {
 
 describe("listFixtures", () => {
   it("lists the fixtures of an operator, labelled, and nothing for an unknown one", () => {
-    const fx = { iryo: { "approved-01": "x", "asks_for_data-02": "x", "odd name": "x" } };
+    const fx = {
+      iryo: {
+        "approved-01": "x",
+        "asks_for_data-02": "x",
+        "injection-01": "x",
+        "odd name": "x",
+      },
+    };
     expect(listFixtures("iryo", fx).map((f) => f.name)).toEqual([
       "approved-01",
       "asks_for_data-02",
+      "injection-01",
     ]);
     expect(listFixtures("iryo", fx)[1]?.label).toContain("IBAN");
+    expect(listFixtures("iryo", fx).find((f) => f.name === "approved-01")?.label).toBe(
+      "Approved (01)",
+    );
+    expect(listFixtures("iryo", fx).find((f) => f.name === "injection-01")?.label).toBe(
+      "Malicious email (prompt injection) (01)",
+    );
     expect(listFixtures("renfe", fx)).toEqual([]);
     expect(listFixtures("../etc", fx)).toEqual([]);
   });

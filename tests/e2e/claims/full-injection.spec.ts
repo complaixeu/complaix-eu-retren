@@ -37,9 +37,10 @@ test("a reply asking to send the data to x@evil.example: nothing goes there, the
   await signIn(page, member);
   await openCase(page, c);
 
-  await inject(page, "Intento de inyección (01)", "el caso ha cambiado de estado");
+  await inject(page, "Malicious email (prompt injection) (01)", "status updated");
   // Shown to the team as plain text, classified `other`, and waiting for a person.
   await expect(messageItem(page, "other")).toContainText("x@evil.example");
+  await expect(messageItem(page, "other")).toContainText("Blocked — sent to the team for review");
   await expectStatus(page, "reply_received");
   await expect(pendingOf(page)).toContainText("other");
 
@@ -50,7 +51,7 @@ test("a reply asking to send the data to x@evil.example: nothing goes there, the
   // The team queue lists it.
   await page.goto("/equipo");
   const queued = page
-    .getByRole("region", { name: "Pendiente de revisar" })
+    .getByRole("region", { name: "Needs team review" })
     .getByRole("row")
     .filter({ has: page.getByRole("link", { name: c.ref }) });
   await expect(queued).toContainText("other");
