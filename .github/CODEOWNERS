@@ -10,6 +10,7 @@
 /pnpm-workspace.yaml      @complaix-eu
 /scripts/local-ci.sh      @complaix-eu
 /scripts/local-env.sh     @complaix-eu
+/scripts/supabase-local.sh @complaix-eu
 /CLAUDE.md                @complaix-eu
 /AGENTS.md                @complaix-eu
 /.claude/                 @complaix-eu

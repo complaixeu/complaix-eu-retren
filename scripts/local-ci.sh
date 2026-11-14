@@ -15,7 +15,7 @@ cd "$(dirname "$0")/.."
 
 # Clean environment like a GitHub runner, so local secrets can't leak in.
 if [ -z "${LOCAL_CI_CLEAN:-}" ]; then
-  exec env -i LOCAL_CI_CLEAN=1 CI=true HOME="$HOME" USER="${USER:-}" PATH="$PATH" \
+  exec env -i LOCAL_CI_CLEAN=1 CI=true HOME="$HOME" USER="${USER:-}" PATH="$PATH" APP_PORT="${APP_PORT:-3100}" \
     LANG="${LANG:-C.UTF-8}" TERM="${TERM:-dumb}" bash "$PWD/scripts/local-ci.sh" "$@"
 fi
 
@@ -70,7 +70,7 @@ command -v jq >/dev/null || fail "jq is required"
 
 step "[migrate_dev] Start throwaway local Supabase (applies every migration from empty)"
 pnpm exec supabase stop --no-backup >/dev/null 2>&1 || true
-pnpm exec supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta,realtime,mailpit
+bash scripts/supabase-local.sh start   # bound to 127.0.0.1 only
 supabase_up=1
 
 step "[migrate_dev] supabase db push (same command as CI, local target)"
