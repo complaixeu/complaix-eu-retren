@@ -14,8 +14,6 @@ import {
   checkRecipient,
   isStale,
   newMessageId,
-  USER_DOCUMENTS_BUCKET,
-  userDocumentsToDelete,
   type AttachmentRow,
   type OutboundRefusal,
 } from "./outbound";
@@ -33,6 +31,11 @@ export interface OutboundDeps {
   providerName?: string;
   /** Env for MAIL_REDIRECT_ALL_TO, RETREN_ENV, MAIL_SENDING_DOMAIN; process.env when left out. */
   env?: Env;
+  /**
+   * Runs after a row is marked `sent`, never after a failed send: deletes the forwarded user
+   * documents linked to it (C6's purgeForwardedDocuments, idempotent).
+   */
+  purgeForwardedDocuments?: (messageId: string) => Promise<unknown>;
 }
 
 export type SendQueuedResult =
@@ -63,6 +66,7 @@ export async function sendQueued(
   const env = deps.env ?? process.env;
   const now = (deps.clock ?? systemClock).now();
   const providerName = deps.providerName ?? provider("MAIL_PROVIDER", env);
+  const purge = deps.purgeForwardedDocuments ?? (async () => {}); // TODO(C6): default helper
 
   const claimed = await db
     .from("messages")
@@ -90,7 +94,7 @@ export async function sendQueued(
       .single(),
     db
       .from("attachments")
-      .select("id, kind, case_id, deleted_at, filename, content_type, storage_path")
+      .select("kind, case_id, deleted_at, filename, content_type, storage_path")
       .eq("message_id", row.id),
     db
       .from("messages")
@@ -177,24 +181,10 @@ export async function sendQueued(
   if (done.error) throw done.error;
   await event(db, caseId, MESSAGE_SENT_EVENT, { message_id: row.id, template: row.template });
 
-  // Only now that the mail is out: a forwarded user document is deleted (C6, ARCHITECTURE §7.1).
-  // A failed send returned above, so the file stays for a retry.
-  const result: SendQueuedResult = { status: "sent", providerId };
-  for (const doc of userDocumentsToDelete(result, attachments.data)) {
-    const removed = await db.storage.from(USER_DOCUMENTS_BUCKET).remove([doc.key]);
-    if (removed.error) throw removed.error;
-    const marked = await db
-      .from("attachments")
-      .update({ deleted_at: now.toISOString() })
-      .eq("id", doc.id)
-      .is("deleted_at", null)
-      .select("id");
-    if (marked.error) throw marked.error;
-    if (marked.data.length) {
-      await event(db, caseId, "user_document_deleted", { attachment_id: doc.id });
-    }
-  }
-  return result;
+  // Only now that the mail is out (and marked sent): C6 deletes the forwarded user documents
+  // linked to it (ARCHITECTURE §7.1). A failed send returned above, so the files stay for a retry.
+  await purge(row.id);
+  return { status: "sent", providerId };
 }
 
 /**

@@ -10,7 +10,6 @@ import {
 import { MAX_SENDS_PER_CASE } from "@/features/claims/timers";
 import { sendPending, sendQueued } from "@/features/claims/send-queued";
 import { createFakeTransport } from "@/features/claims/transport";
-import { USER_DOCUMENTS_BUCKET } from "@/features/claims/outbound";
 import { getOperatorConfig } from "@/features/rules";
 import { fixedClock } from "@/shared/clock";
 import type { OperatorId } from "@/shared/contracts";
@@ -21,6 +20,8 @@ import { TICKET_PLACEHOLDER_PNG } from "../../fixtures/claims/ticket";
 // Outbound (plan C3) against the local Supabase: sendInitialClaim moves a ready case to `sent`
 // with the claim and its 3 attachments in the outbox, and sendQueued is the one place a queued
 // row is sent (fake transport only, never the network).
+// TODO(C6 merge): import USER_DOCUMENTS_BUCKET from features/claims/actions.
+const USER_DOCUMENTS_BUCKET = "claims-user-documents";
 const CREATED = fixedClock("2026-01-16T10:00:00.000Z");
 // submissionFixture(90): arrival 13:30 Madrid (12:30 UTC) on 2026-01-15; the rules mock waits 48 h.
 const EARLIEST = "2026-01-17T12:30:00.000Z";
@@ -519,6 +520,31 @@ describe("sendQueued (local Supabase)", () => {
     expect(await fileExists(f.key)).toBe(true);
     const att = await db.from("attachments").select("deleted_at").eq("id", f.attachmentId).single();
     expect(att.data?.deleted_at).toBeNull();
+  });
+
+  it("the purge runs once the row is marked sent, and never after a failed send", async () => {
+    const calls: { id: string; status: string | undefined }[] = [];
+    const purgeForwardedDocuments = async (id: string) => {
+      calls.push({ id, status: (await message(id)).status });
+    };
+    const ok = await forwarded();
+    await sendQueued(ok.queuedId, {
+      db,
+      transport: createFakeTransport(),
+      purgeForwardedDocuments,
+    });
+    expect(calls).toEqual([{ id: ok.queuedId, status: "sent" }]);
+
+    const bad = await forwarded();
+    const broken = {
+      send: async () => {
+        throw new Error("boom");
+      },
+    };
+    await sendQueued(bad.queuedId, { db, transport: broken, purgeForwardedDocuments });
+    const refused = await sentCaseWithQueued({ to: "x@evil.com" });
+    await sendQueued(refused.queuedId, { db, purgeForwardedDocuments });
+    expect(calls).toHaveLength(1);
   });
 
   it("sendPending sends every queued row once", async () => {

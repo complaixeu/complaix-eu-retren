@@ -261,29 +261,3 @@ export function buildMailMessage(
     })),
   };
 }
-
-// ---------------------------------------------------------------------------------------------
-// Forwarded user documents (C6)
-
-/** C6's private bucket of the documents users send for their case (deleted once forwarded). */
-export const USER_DOCUMENTS_BUCKET = "claims-user-documents";
-
-/**
- * The user documents to delete from storage after a send: every `user_document` attached to
- * the row, and only once the mail was actually sent. After a failed or skipped send nothing is
- * deleted, so the send can be retried (ARCHITECTURE §7.1: forwarded, then deleted).
- * `storage_path` is a key in USER_DOCUMENTS_BUCKET, with or without the bucket prefix.
- */
-export function userDocumentsToDelete(
-  result: { status: "sent" | "failed" | "skipped" },
-  attachments: readonly { id: string; kind: string; storage_path: string }[],
-): { id: string; key: string }[] {
-  if (result.status !== "sent") return [];
-  const prefix = `${USER_DOCUMENTS_BUCKET}/`;
-  return attachments
-    .filter((a) => a.kind === "user_document")
-    .map((a) => ({
-      id: a.id,
-      key: a.storage_path.startsWith(prefix) ? a.storage_path.slice(prefix.length) : a.storage_path,
-    }));
-}
