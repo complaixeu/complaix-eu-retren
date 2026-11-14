@@ -172,14 +172,21 @@ export type Database = {
           case_id: string | null;
           category: Database["public"]["Enums"]["reply_category"] | null;
           created_at: string;
+          delivered_to: string[] | null;
           direction: Database["public"]["Enums"]["message_direction"];
+          failure_reason: string | null;
           from_address: string;
           id: string;
           in_reply_to: string | null;
           message_id: string | null;
+          provider_id: string | null;
           raw_path: string | null;
+          send_claimed_at: string | null;
+          sent_at: string | null;
           status: Database["public"]["Enums"]["message_status"];
           subject: string;
+          template: string | null;
+          thread_references: string[] | null;
           to_address: string;
         };
         ComputedFields: never;
@@ -188,14 +195,21 @@ export type Database = {
           case_id?: string | null;
           category?: Database["public"]["Enums"]["reply_category"] | null;
           created_at?: string;
+          delivered_to?: string[] | null;
           direction: Database["public"]["Enums"]["message_direction"];
+          failure_reason?: string | null;
           from_address: string;
           id?: string;
           in_reply_to?: string | null;
           message_id?: string | null;
+          provider_id?: string | null;
           raw_path?: string | null;
+          send_claimed_at?: string | null;
+          sent_at?: string | null;
           status: Database["public"]["Enums"]["message_status"];
           subject: string;
+          template?: string | null;
+          thread_references?: string[] | null;
           to_address: string;
         };
         Update: {
@@ -203,14 +217,21 @@ export type Database = {
           case_id?: string | null;
           category?: Database["public"]["Enums"]["reply_category"] | null;
           created_at?: string;
+          delivered_to?: string[] | null;
           direction?: Database["public"]["Enums"]["message_direction"];
+          failure_reason?: string | null;
           from_address?: string;
           id?: string;
           in_reply_to?: string | null;
           message_id?: string | null;
+          provider_id?: string | null;
           raw_path?: string | null;
+          send_claimed_at?: string | null;
+          sent_at?: string | null;
           status?: Database["public"]["Enums"]["message_status"];
           subject?: string;
+          template?: string | null;
+          thread_references?: string[] | null;
           to_address?: string;
         };
         Relationships: [
@@ -244,6 +265,17 @@ export type Database = {
         Returns: string;
       };
       claims_new_public_ref: { Args: Record<PropertyKey, never>; Returns: string };
+      claims_send_initial_claim: {
+        Args: {
+          p_attachments: Json;
+          p_case_id: string;
+          p_max_sends: number;
+          p_message: Json;
+          p_next_action_at: string;
+          p_now: string;
+        };
+        Returns: Json;
+      };
     };
     Enums: {
       attachment_kind: "eu_form" | "mandate" | "ticket" | "user_document";
