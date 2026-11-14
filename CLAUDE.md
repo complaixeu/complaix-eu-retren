@@ -41,7 +41,7 @@ A push to `develop` applies migrations to Supabase DEV and deploys Vercel DEV.
 
 ## 5. CI
 
-- Before pushing: `scripts/local-ci.sh` (same checks as the `verify` job).
+- Before pushing: `pnpm ci:local:full` — the whole pipeline (verify, migrate, deploy, smoke) against a local Supabase and localhost. See `docs/LOCAL_CI.md`. Without Docker: `pnpm ci:local` (verify only).
 - Open PRs as draft (`gh pr create --draft --base develop`); drafts run nothing. Mark ready once.
 - Keep `timeout-minutes` and `concurrency` in workflows. Never cancel a push run on `develop`.
 
