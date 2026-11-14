@@ -65,7 +65,9 @@ test("upload → eligible claim sent to Iryo → approved → user gets the fina
   await expect(
     page.getByRole("heading", { level: 1, name: "Resultado de tu reclamación" }),
   ).toBeVisible();
-  await expect(page.getByRole("status")).toContainText("Tu viaje da derecho a reclamar");
+  await expect(
+    page.getByRole("status").filter({ hasText: "Tu viaje da derecho a reclamar" }),
+  ).toBeVisible();
 
   // Resolve the case through the draft id created by this browser submission.
   const created = await casesOfDraft(draftId);

@@ -49,6 +49,9 @@ test.describe("eligible trip", () => {
     await expect(
       page.getByRole("status").filter({ hasText: "Tu viaje da derecho a reclamar" }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Hemos recibido tu solicitud" }),
+    ).toContainText("Consulta aquí el resultado y los siguientes pasos");
     const cases = await casesOfDraft(draft.id);
     expect(cases).toHaveLength(1);
     const stored = cases[0] as unknown as StoredCase;

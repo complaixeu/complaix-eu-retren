@@ -150,6 +150,20 @@ describe("sendTicket (the browser side of the direct upload)", () => {
     expect(finish).toHaveBeenCalledOnce();
   });
 
+  it("reports which upload stage is active", async () => {
+    const stages: string[] = [];
+    await sendTicket(
+      file,
+      {
+        begin: async () => ready,
+        finish: async () => ok,
+        put: async () => new Response("{}", { status: 200 }),
+      },
+      { onStage: (stage) => stages.push(stage) },
+    );
+    expect(stages).toEqual(["preparing", "uploading", "checking"]);
+  });
+
   it("stops at a refused begin, without uploading", async () => {
     const put = vi.fn<typeof fetch>();
     const out = await sendTicket(file, {

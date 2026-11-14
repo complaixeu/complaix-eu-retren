@@ -776,3 +776,28 @@
     color: #a8d7ff;
   }
 }
+
+.actionStatus {
+  width: 100%;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  animation: action-status-in 160ms ease-out both;
+}
+
+@keyframes action-status-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .actionStatus {
+    animation: none;
+  }
+}

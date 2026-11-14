@@ -7,6 +7,7 @@ import {
   ButtonLink,
   Field,
   Fieldset,
+  FormCompletion,
   Input,
   Radio,
   focusFirstInvalid,
@@ -77,6 +78,7 @@ export function QuestionsForm({
           Corrige los campos indicados y vuelve a continuar.
         </Alert>
       )}
+      <FormCompletion formRef={form} label="Tus respuestas" />
       <section className={styles.section} aria-labelledby="identidad">
         <h2 id="identidad">Tus datos</h2>
         <Fieldset legend="Tipo de documento" error={errors.documentType}>
@@ -90,6 +92,7 @@ export function QuestionsForm({
               name="documentType"
               value={v}
               label={label}
+              required
               defaultChecked={value.documentType === v}
             />
           ))}
@@ -116,6 +119,7 @@ export function QuestionsForm({
               value={v}
               label={label}
               checked={previousClaim === v}
+              required
               onChange={() => setPreviousClaim(v)}
             />
           ))}
@@ -142,6 +146,7 @@ export function QuestionsForm({
               name="paymentPreference"
               value={v}
               label={label}
+              required
               defaultChecked={value.paymentPreference === v}
             />
           ))}
@@ -155,6 +160,9 @@ export function QuestionsForm({
           Atrás
         </ButtonLink>
       </div>
+      <p role="status" aria-live="polite" className={styles.pending}>
+        {pending ? "Guardando tus respuestas…" : ""}
+      </p>
     </form>
   );
 }

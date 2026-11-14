@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
 import { createServiceClient } from "@/shared/supabase/server";
-import { Button } from "@/shared/ui";
 import { listCases, listQueue } from "../../../features/claims/team";
 import { logout } from "./actions";
 import { requireTeam } from "./_lib/session";
 import { dateTime, reasonLabel, statusLabel } from "./_components/labels";
 import { Notice } from "./_components/notice";
+import { ActionSubmit } from "./_components/action-submit";
 import { ResolveForm } from "./_components/resolve-form";
 import styles from "./team.module.css";
 
@@ -37,9 +37,9 @@ async function Queue({ searchParams }: Pick<PageProps<"/equipo">, "searchParams"
         {session.email && (
           <form action={logout} className={styles.inline}>
             <span className={styles.muted}>{session.email}</span>
-            <Button type="submit" variant="quiet">
+            <ActionSubmit pendingLabel="Signing out…" variant="quiet">
               Sign out
-            </Button>
+            </ActionSubmit>
           </form>
         )}
       </div>
