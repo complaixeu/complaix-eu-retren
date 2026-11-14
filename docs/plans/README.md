@@ -172,8 +172,12 @@ Loop until every task in the plan is done:
    - `gh pr ready`, then `gh pr merge` (merge queue), and wait for `MERGED`.
 5. **After each merge:** merge `origin/develop` into every other open worktree, re-run their tests,
    and tick the task in the domain's tracking issue.
-6. **Every 2 hours**, even mid-task: `git merge origin/develop` in every worktree.
-7. **When the plan is done:** run the domain's full e2e suite on the latest `develop`, post a final
+6. **Every merge of `develop` is checked before anything else.** If `git merge origin/develop`
+   exits non-zero or `git diff --name-only --diff-filter=U` lists files, resolve them first
+   (TEAM_WORKFLOW §4). Never chain `git add -A && git commit` after a merge without that check.
+   `tests/unit/repo/hygiene.test.ts` fails on any conflict marker that slips through.
+7. **Every 2 hours**, even mid-task: `git merge origin/develop` in every worktree.
+8. **When the plan is done:** run the domain's full e2e suite on the latest `develop`, post a final
    report on the tracking issue and stop.
 
 **Tracking issue:** at the start, the orchestrator creates (or reuses) a GitHub issue
