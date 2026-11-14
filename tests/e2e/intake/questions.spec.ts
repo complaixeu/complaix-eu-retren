@@ -1,10 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
-import { draftData, uploadPlaceholderTicket } from "./support/draft";
+import { REVIEW } from "../../fixtures/intake/review";
+import { draftData, seedDraftData, uploadPlaceholderTicket } from "./support/draft";
 
 const field = (page: Page, name: string) => page.getByLabel(name, { exact: true });
 
 async function openQuestions(page: Page) {
   await uploadPlaceholderTicket(page);
+  await seedDraftData(page.context(), { review: REVIEW });
   await page.goto("/reclamar/preguntas");
   await expect(
     page.getByRole("heading", { level: 1, name: "Unas preguntas sobre el viaje" }),

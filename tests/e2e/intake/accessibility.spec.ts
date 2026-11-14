@@ -21,7 +21,7 @@ test("photo, review, questions and mandate steps have no serious accessibility v
 
   await page.goto("/reclamar/revision");
   await check(page);
-  await page.getByLabel("Localizador").fill("ABC123");
+  await page.getByRole("textbox", { name: "Localizador" }).fill("ABC123");
   await page.getByRole("checkbox", { name: "He comprobado el localizador" }).check();
   await page.getByRole("button", { name: "Continuar" }).click();
   await expect(page).toHaveURL(/\/reclamar\/preguntas$/);
