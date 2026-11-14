@@ -188,6 +188,46 @@ export type Database = {
         };
         Relationships: [];
       };
+      intake_drafts: {
+        Row: {
+          created_at: string;
+          data: NonNullable<Json>;
+          expires_at: string;
+          id: string;
+          status: Database["public"]["Enums"]["intake_draft_status"];
+          ticket_content_type: string | null;
+          ticket_filename: string | null;
+          ticket_path: string | null;
+          ticket_size_bytes: number | null;
+          updated_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          data?: NonNullable<Json>;
+          expires_at: string;
+          id?: string;
+          status?: Database["public"]["Enums"]["intake_draft_status"];
+          ticket_content_type?: string | null;
+          ticket_filename?: string | null;
+          ticket_path?: string | null;
+          ticket_size_bytes?: number | null;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          data?: NonNullable<Json>;
+          expires_at?: string;
+          id?: string;
+          status?: Database["public"]["Enums"]["intake_draft_status"];
+          ticket_content_type?: string | null;
+          ticket_filename?: string | null;
+          ticket_path?: string | null;
+          ticket_size_bytes?: number | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       messages: {
         Row: {
           body_text: string | null;
@@ -359,6 +399,32 @@ export type Database = {
         };
         Returns: Json;
       };
+      intake_merge_draft_data: {
+        Args: {
+          p_id: string;
+          p_now?: string;
+          p_patch: Json;
+          p_status?: Database["public"]["Enums"]["intake_draft_status"];
+        };
+        Returns: {
+          created_at: string;
+          data: NonNullable<Json>;
+          expires_at: string;
+          id: string;
+          status: Database["public"]["Enums"]["intake_draft_status"];
+          ticket_content_type: string | null;
+          ticket_filename: string | null;
+          ticket_path: string | null;
+          ticket_size_bytes: number | null;
+          updated_at: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "intake_drafts";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
     };
     Enums: {
       attachment_kind: "eu_form" | "mandate" | "ticket" | "user_document";
@@ -372,6 +438,7 @@ export type Database = {
         | "resolved"
         | "denied"
         | "closed";
+      intake_draft_status: "uploaded";
       message_direction: "outbound" | "inbound";
       message_status: "queued" | "sent" | "failed" | "received";
       reply_category:
@@ -502,6 +569,7 @@ export const Constants = {
         "denied",
         "closed",
       ],
+      intake_draft_status: ["uploaded"],
       message_direction: ["outbound", "inbound"],
       message_status: ["queued", "sent", "failed", "received"],
       reply_category: [
