@@ -3,8 +3,14 @@ import type { Clock } from "@/shared/contracts";
 import { systemClock } from "@/shared/clock";
 import type { Json } from "@/shared/supabase";
 import { createServiceClient, type ServiceClient } from "@/shared/supabase/server";
-import type { TicketUpload } from "../upload/read";
-import { TICKET_TYPES, type TicketContentType } from "../upload/rules";
+import {
+  UPLOAD_PREFIX,
+  checkStoredTicket,
+  storedObjects,
+  type StoredTicketCheck,
+} from "../upload/direct";
+import { cleanFilename, type TicketUpload } from "../upload/read";
+import { TICKET_TYPES, type TicketContentType, type TicketType } from "../upload/rules";
 import { parseDraftId } from "./cookie";
 import { intakeClient, type IntakeDraftRow, type IntakeDraftStatus } from "./db";
 import { DRAFT_TTL_MS } from "./ttl";
@@ -53,7 +59,8 @@ export interface DraftDeps {
 }
 
 let defaultDb: ServiceClient | undefined;
-const dbOf = (deps: DraftDeps) => intakeClient(deps.db ?? (defaultDb ??= createServiceClient()));
+const rawDb = (deps: DraftDeps) => deps.db ?? (defaultDb ??= createServiceClient());
+const dbOf = (deps: DraftDeps) => intakeClient(rawDb(deps));
 const nowOf = (deps: DraftDeps) => (deps.clock ?? systemClock).now();
 
 const iso = (value: string) => new Date(value).toISOString();
@@ -85,15 +92,73 @@ export async function createDraft(
   deps: DraftDeps = {},
 ): Promise<IntakeDraft> {
   const db = dbOf(deps);
-  const now = nowOf(deps);
   const type = TICKET_TYPES[ticket.type];
-  const path = `drafts/${randomUUID()}.${type.extension}`;
+  const path = finalTicketPath(ticket.type);
 
   const stored = await db.storage
     .from(TICKET_BUCKET)
     .upload(path, ticket.bytes, { contentType: type.contentType, upsert: false });
   if (stored.error) throw new Error(`ticket upload failed: ${stored.error.message}`);
 
+  return insertDraft(
+    { path, type: ticket.type, filename: ticket.filename, size: ticket.bytes.byteLength },
+    deps,
+  );
+}
+
+export type DraftFromUploadResult =
+  | { ok: true; draft: IntakeDraft }
+  | { ok: false; error: Extract<StoredTicketCheck, { ok: false }>["error"] };
+
+/**
+ * The second half of a direct upload: checks the staged object (`uploads/<id>`) by its size and
+ * first bytes, deleting it if it fails; then stores the checked bytes under a new key in
+ * `drafts/` with the *detected* content type, creates the draft and deletes the staged copy. The
+ * staged key is the only one the browser ever saw.
+ *
+ * A re-upload rather than `move()`: a move keeps the metadata of the browser's PUT, whose
+ * content type the signed token doesn't bind, so a JPEG sent as `image/png` would stay `image/png`.
+ */
+export async function createDraftFromUpload(
+  upload: { id: string; filename: string },
+  deps: DraftDeps = {},
+): Promise<DraftFromUploadResult> {
+  const id = parseDraftId(upload.id);
+  if (!id) return { ok: false, error: "not_received" };
+  const db = dbOf(deps);
+  const staged = `${UPLOAD_PREFIX}${id}`;
+
+  const checked = await checkStoredTicket(staged, storedObjects(rawDb(deps), TICKET_BUCKET));
+  if (!checked.ok) return checked;
+
+  const path = finalTicketPath(checked.type);
+  const stored = await db.storage.from(TICKET_BUCKET).upload(path, checked.bytes, {
+    contentType: TICKET_TYPES[checked.type].contentType,
+    upsert: false,
+  });
+  if (stored.error) throw new Error(`ticket store failed: ${stored.error.message}`);
+
+  // insertDraft removes the final object if the row can't be created. The staged copy then
+  // stays, so finishing can be retried (the upload cookie is kept on a throw).
+  const filename = cleanFilename(upload.filename);
+  const draft = await insertDraft({ path, type: checked.type, filename, size: checked.size }, deps);
+
+  const removed = await db.storage.from(TICKET_BUCKET).remove([staged]);
+  // Best effort: the draft is made; a leftover staged copy is never served and the purge removes it.
+  if (removed.error) console.error("[intake] staged ticket delete failed:", removed.error.message);
+  return { ok: true, draft };
+}
+
+const finalTicketPath = (type: TicketType) =>
+  `drafts/${randomUUID()}.${TICKET_TYPES[type].extension}`;
+
+/** Creates the row for a ticket already stored at `path`; removes the object if that fails. */
+async function insertDraft(
+  ticket: { path: string; type: TicketType; filename: string; size: number },
+  deps: DraftDeps,
+): Promise<IntakeDraft> {
+  const db = dbOf(deps);
+  const now = nowOf(deps);
   const { data, error } = await db
     .from("intake_drafts")
     .insert({
@@ -102,15 +167,15 @@ export async function createDraft(
       updated_at: now.toISOString(),
       expires_at: new Date(now.getTime() + DRAFT_TTL_MS).toISOString(),
       status: "uploaded",
-      ticket_path: path,
-      ticket_content_type: type.contentType,
+      ticket_path: ticket.path,
+      ticket_content_type: TICKET_TYPES[ticket.type].contentType,
       ticket_filename: ticket.filename,
-      ticket_size_bytes: ticket.bytes.byteLength,
+      ticket_size_bytes: ticket.size,
     })
     .select()
     .single();
   if (error || !data) {
-    await db.storage.from(TICKET_BUCKET).remove([path]);
+    await db.storage.from(TICKET_BUCKET).remove([ticket.path]);
     throw new Error(`draft insert failed: ${error?.message ?? "no row"}`);
   }
   return toDraft(data);
