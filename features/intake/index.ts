@@ -63,3 +63,37 @@ export {
   type IntakeStepId,
   type IntakeStepperItem,
 } from "./steps";
+
+// Server-side only: the mandate and GDPR consent evidence ([A6]). A7 builds the submission's
+// `consent` with `toConsentRef(await latestConsent(draft.id))`.
+export {
+  acceptConsent,
+  readConsentChoices,
+  type AcceptConsentResult,
+  type ConsentChoices,
+} from "./consent/accept";
+export { clientIp, type HeaderReader } from "./consent/ip";
+export {
+  TripSnapshot,
+  buildTripSnapshot,
+  tripSummary,
+  type TripSnapshotResult,
+} from "./consent/snapshot";
+export {
+  ConsentStoreError,
+  insertConsent,
+  latestConsent,
+  toConsentRef,
+  type ConsentDeps,
+  type ConsentRecord,
+} from "./consent/store";
+export {
+  CONSENT_CHOICES,
+  CONSENT_DRAFT_NOTICE,
+  CONSENT_TEXT_VERSION,
+  MANDATE_TEXT,
+  PRIVACY_NOTICE,
+  type ConsentChoice,
+  type MandateText,
+  type PrivacyNotice,
+} from "./consent/texts";

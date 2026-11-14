@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PLACEHOLDER_PDF } from "../../fixtures/intake/tickets";
+import { REVIEW } from "../../fixtures/intake/review";
+import { currentDraftId, mergeIntoDraft, startDraftWith } from "./support/draft";
 
 // [A0] Flow skeleton: landing → every step renders its heading, the stepper marks the current
 // step, and the flow works from the keyboard. Roles and labels only (docs/plans/README.md §3).
@@ -28,6 +30,9 @@ async function chooseTicket(page: Page) {
   });
 }
 
+/** Since [A6] the authorization step needs a reviewed trip in the draft, or it redirects. */
+const needsReviewedDraft = (path: string) => path === "/reclamar/mandato";
+
 /** Presses Tab until `target` has focus, failing after `max` presses. */
 async function tabTo(page: Page, target: ReturnType<Page["getByRole"]>, max = 15) {
   for (let i = 0; i < max; i++) {
@@ -50,7 +55,10 @@ test("the landing page has a Reclamar button that starts the flow", async ({ pag
 for (const [index, step] of steps.entries()) {
   test(`step ${index + 1} (${step.path}) renders its heading and is the current step`, async ({
     page,
+    context,
+    baseURL,
   }) => {
+    if (needsReviewedDraft(step.path)) await startDraftWith(context, baseURL!);
     await page.goto(step.path);
     await expect(page.getByRole("heading", { level: 1, name: step.heading })).toBeVisible();
     await expect(page).toHaveTitle(new RegExp(step.heading));
@@ -85,12 +93,22 @@ test("completed steps are links back, later steps are not", async ({ page }) => 
   await expect(nav.getByRole("link")).toHaveCount(2);
 });
 
-test("continuar and atrás move through every step in order", async ({ page }) => {
+test("continuar and atrás move through every step in order", async ({ page, context }) => {
   await page.goto(steps[0].path);
   await chooseTicket(page);
   await page.getByRole("button", { name: "Subir billete" }).click();
+  await expect(page.getByRole("link", { name: "Continuar" })).toBeVisible();
+  // Until the review screen ([A4]) stores it, put the reviewed trip in the draft directly.
+  await mergeIntoDraft(await currentDraftId(context), { review: REVIEW });
   for (const next of steps.slice(1)) {
-    await page.getByRole("link", { name: "Continuar" }).click();
+    if (next.path === "/reclamar/enviado") {
+      // Since [A6] the authorization step is a form: accept both texts to go on.
+      await page.getByRole("checkbox", { name: /^Autorizo a ReTren/ }).check();
+      await page.getByRole("checkbox", { name: /aviso de privacidad/ }).check();
+      await page.getByRole("button", { name: "Aceptar y enviar" }).click();
+    } else {
+      await page.getByRole("link", { name: "Continuar" }).click();
+    }
     await expect(page.getByRole("heading", { level: 1, name: next.heading })).toBeVisible();
   }
   await expect(page.getByRole("link", { name: "Continuar" })).toHaveCount(0);
@@ -147,24 +165,29 @@ test.describe("mobile, 375 px wide", () => {
   for (const path of ["/", ...steps.map((s) => s.path)]) {
     test(`${path} fits without horizontal scrolling and has large tap targets`, async ({
       page,
+      context,
+      baseURL,
     }) => {
+      if (needsReviewedDraft(path)) await startDraftWith(context, baseURL!);
       await page.goto(path);
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
       expect(overflow).toBeLessThanOrEqual(0);
 
-      // The first step's primary action is its upload button ([A1]); the others are links.
+      // The first step's primary action is its upload button ([A1]), the authorization step's
+      // its accept button ([A6]); the others are links.
       const primary = page
         .getByRole("link", { name: /^(Reclamar|Continuar|Volver al inicio)$/ })
-        .or(page.getByRole("button", { name: "Subir billete" }));
+        .or(page.getByRole("button", { name: /^(Subir billete|Aceptar y enviar)$/ }));
       await expect(primary).toBeVisible();
       const box = await primary.boundingBox();
       expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
     });
   }
 
-  test("the stepper's links back are large enough to tap", async ({ page }) => {
+  test("the stepper's links back are large enough to tap", async ({ page, context, baseURL }) => {
+    await startDraftWith(context, baseURL!);
     await page.goto("/reclamar/mandato");
     const links = stepper(page).getByRole("link");
     await expect(links).toHaveCount(3);
