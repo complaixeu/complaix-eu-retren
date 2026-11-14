@@ -37,23 +37,47 @@ prints a line. Until then it builds against the other domain's `mock.ts`.
 
 ## 2. Phase 0: test and contract foundation
 
-One PR, merged before the kickoff, so every domain can test from its first task. Its checklist:
+One PR, merged before the kickoff, so every domain can test from its first task. **Done in
+`[P0]`.** What it gives every domain:
 
-- [ ] Folders and stubs: `features/{intake,rules,documents,claims}/{index.ts,mock.ts}`,
-      `shared/{contracts,supabase,ui}/`.
-- [ ] `shared/contracts/` types: `OperatorId`, `TicketData`, `UserAnswers`, `IntakeSubmission`,
-      `EligibilityInput`, `EligibilityResult`, `CaseStatus`, `ReplyCategory`, `EuFormData`,
-      `MailMessage`, plus zod schemas for each.
-- [ ] Provider ports with **fake** implementations, picked by env (`OCR_PROVIDER`,
-      `LLM_PROVIDER`, `MAIL_PROVIDER`, default `fake`), and a `Clock` port (`system` / `fixed`).
-- [ ] ESLint `no-restricted-imports`: only `@/features/<domain>` may be imported across domains.
-- [ ] Test tooling and scripts (section 3): `test`, `test:db`, `test:integration`, `test:e2e`,
-      `test:all`, Playwright config, a first e2e smoke test, a pgTAP smoke test and an
-      integration smoke test.
-- [ ] Mock-parity test: each `mock.ts` exports the same names and types as `index.ts`.
+- **Folders and stubs:** `features/{intake,rules,documents,claims}/`, and `shared/{contracts,supabase,ui}/`.
+- **Entry points that switch from mock to real on their own:** each `features/<domain>/index.ts`
+  starts as `export * from "./mock"`. The task that implements the real thing replaces that line,
+  so every consumer gets the real code the moment it merges, with no change on their side.
+  `mock.ts` stays as the reference stand-in, and `tests/unit/contracts/mock-parity.test.ts` keeps
+  both exporting the same names.
+- **`shared/contracts/`** (zod schemas plus types):
+  - `OperatorId`, `OperatorPublicConfig`
+  - `TicketData`, `TicketExtraction`, `SubmittedTicket`
+  - `UserAnswers`, `ConsentRef`, `IntakeSubmission`
+  - `EligibilityInput`, `EligibilityResult`
+  - `CaseStatus` (9), `ReplyCategory` (6), `CreateCaseResult`
+  - `EuFormData`, `MandateData`, `TemplateKind`, `RenderedTemplate`
+  - ports `OcrProvider`, `Extractor`, `MailTransport`, `Classifier`, `Clock`
+- **Providers:** `shared/providers.ts` picks each port by env (`OCR_PROVIDER`, `LLM_PROVIDER`,
+  `MAIL_PROVIDER`), default `fake`. `shared/clock.ts` has `systemClock` and `fixedClock`.
+- **ESLint boundaries:**
+  - only `@/features/<domain>` may be imported across domains;
+  - B (`rules`, `documents`) imports no domain, C never imports `intake`, `shared/` imports none;
+  - tests are exempt.
 
-Until the CI jobs in section 3 exist (they need Nestor), `pnpm test:all` run locally under the lock
-is the gate. Its summary is pasted into every PR.
+  A violation fails `pnpm lint`, and so CI.
+
+- **Test tooling:** `pnpm test`, `test:db` (pgTAP, `--network-id retren_local`),
+  `test:integration` (`vitest.integration.config.mts`, local Supabase via
+  `tests/support/local-supabase.ts`, which refuses any non-127.0.0.1 URL), `test:e2e`
+  (`playwright.config.ts`: production build on 127.0.0.1, fake providers, Europe/Madrid, es-ES),
+  and `test:all`.
+- **Repo-wide DB guards** in `supabase/tests/000_guards_test.sql`: RLS is on for every `public`
+  table, and no table has an unconditional `anon` read policy. These run on every gate, so a table
+  without RLS can't slip in.
+
+Until the CI jobs in section 3 exist (they need Nestor, #17), `pnpm test:all`, run locally, is the
+gate. Paste its summary into every PR.
+
+**If replacing your mock with the real code breaks another domain's tests**, stop (§6). Either the
+mock didn't match the contract or the other domain relied on mock-only behaviour, and the owners
+decide which together.
 
 ## 3. Test policy: nothing is done until it is tested
 
@@ -68,7 +92,7 @@ pass. If a test is wrong, fix it in the same PR and say why.
 | Database     | pgTAP (`supabase test db`)                 | Tables, constraints, enums, **RLS policies**, triggers, storage policies   | `supabase/tests/<domain>_*.sql` | `pnpm test:db`          | local DB |
 | Integration  | Vitest + local Supabase                    | Server actions and APIs against a real DB and storage, with fake providers | `tests/integration/<domain>/`   | `pnpm test:integration` | local DB |
 | Interface    | Playwright (Chromium)                      | Real browser flows against `next start` + local Supabase, fake providers   | `tests/e2e/<domain>/*.spec.ts`  | `pnpm test:e2e`         | local DB |
-| Everything   | the above + lint, format, typecheck, build | The gate before every push                                                 | -                               | `pnpm test:all` (lock)  | local DB |
+| Everything   | the above + lint, format, typecheck, build | The gate before every push                                                 | -                               | `pnpm test:all`         | local DB |
 
 - **Fakes, not network:** tests never call Vision, Gemini or a real mailbox. A fake is chosen by
   env, and its outputs come from fixtures in `tests/fixtures/<domain>/`.
@@ -140,7 +164,7 @@ Loop until every task in the plan is done:
 4. **Each subagent works test-first:**
    - write the tests from the task's acceptance criteria and see them fail;
    - implement until they pass;
-   - `git merge origin/develop`, then `pnpm test:all` under the lock (TEAM_WORKFLOW §3);
+   - `git merge origin/develop`, then `pnpm test:all` (it takes the local-Supabase lock itself);
    - open a draft PR titled with the task ID, with the test summary in the body;
    - get a review (C: Codex review through the plugin; others: a second subagent reviewing the
      diff against the acceptance criteria);
@@ -199,8 +223,8 @@ done
 wait
 ```
 
-Domain B has no database, so its three lanes rarely need the local-Supabase lock. They still take
-it for `pnpm test:all`. Never use `--dangerously-bypass-approvals-and-sandbox`.
+Domain B has no database, so its three lanes rarely need the local-Supabase lock. `pnpm test:all` still
+takes the lock, so they queue briefly. Never use `--dangerously-bypass-approvals-and-sandbox`.
 
 ### Subagent (the orchestrator fills this in per task)
 
@@ -209,6 +233,6 @@ it for `pnpm test:all`. Never use `--dangerously-bypass-approvals-and-sandbox`.
 > §3–§6 and the task in docs/plans/[plan].md. Edit only the files the task lists. Use other domains
 > only through `features/<domain>/index.ts` or their `mock.ts`. Work test-first: write every test in
 > the task's "Tests" list, run them and see them fail, then implement until they pass. Then
-> `git merge origin/develop`, run `pnpm test:all` under the local-Supabase lock, open a draft PR
+> `git merge origin/develop`, run `pnpm test:all` (it takes the local-Supabase lock itself), open a draft PR
 > titled "<type>(<domain>): [ID] <title>" with the test summary, get it reviewed, `gh pr ready`,
 > `gh pr merge`, and wait until it's merged. Never skip, weaken or delete a test. Stop for README §6.
