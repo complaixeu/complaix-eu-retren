@@ -15,8 +15,9 @@ pnpm, Node 22, Vitest, Supabase (Postgres + Auth), Vercel.
 ## 2. Branching (hard rule)
 
 - Branch from an up-to-date `develop`; open the PR against `develop`.
-- Never push to `main` or `develop` directly. `main` only receives promotion PRs from
-  `develop`, reviewed and merged by the repo owner.
+- Never push to `main` or `develop` directly.
+- **For now `develop` is the only working branch.** `main` stays frozen at the initial
+  commit: no PRs into `main`, no promotions from `develop`, until the repo owner says so.
 - AI agents may merge their own PR into `develop` only when every required check is green.
 - Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `ci:`, `refactor:`, `test:`.
 

@@ -2,7 +2,7 @@
 # Adapted from Complaix's ci.yml. DEV is the only deploy target.
 #
 #   verify          lint → typecheck → test → build, one job (one install).
-#                   Runs on every non-draft PR and on push to develop/main.
+#                   Runs on every non-draft PR and on push to develop.
 #                   Uses placeholder env only: no secrets, safe for fork PRs.
 #   security-audit  pnpm audit, non-blocking.
 #   migrate_dev     push to develop only → supabase db push to the DEV project.
@@ -21,18 +21,20 @@ name: CI
 permissions:
   contents: read
 
+# For now `develop` is the only working branch; `main` is frozen (see CLAUDE.md §2).
 on:
   push:
-    branches: [main, develop]
+    branches: [develop]
+    # Docs-only pushes don't redeploy DEV.
     paths-ignore: ["**/*.md", "docs/**"]
   pull_request:
-    branches: [main, develop]
-    # Draft PRs run nothing; marking ready runs CI once.
+    branches: [develop]
+    # Draft PRs run nothing; marking ready runs CI once. No paths-ignore here:
+    # `verify` is a required check, so it must report on every PR.
     types: [opened, synchronize, reopened, ready_for_review]
-    paths-ignore: ["**/*.md", "docs/**"]
   workflow_dispatch:
 
-# A newer push to the same PR cancels the older run. Pushes to develop/main
+# A newer push to the same PR cancels the older run. Pushes to develop
 # are never cancelled: they migrate and deploy.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
