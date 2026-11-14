@@ -30,8 +30,27 @@ export const EuFormData = z.object({
   }),
   delayMinutes: z.number().int().nonnegative(),
   passenger: z.object({ firstName: z.string().min(1), lastName: z.string().min(1) }),
+  address: z
+    .object({
+      street: z.string().min(1).optional(),
+      number: z.string().min(1).optional(),
+      country: z.string().min(1).optional(),
+      postalCode: z.string().min(1).optional(),
+      city: z.string().min(1).optional(),
+    })
+    .optional(),
   bookingEmail: z.email().optional(),
+  phone: z.string().min(1).optional(),
   paymentPreference: z.enum(["money", "voucher"]),
+  paymentDetails: z
+    .object({
+      iban: z.string().min(1).optional(),
+      swift: z.string().min(1).optional(),
+      other: z.string().min(1).optional(),
+      holder: z.string().min(1).optional(),
+    })
+    .optional(),
+  extraInfo: z.string().min(1).optional(),
   gdprAccepted: z.boolean(),
   request: z.object({ date: Day, place: z.string().min(1) }),
   /** Printed as "Retren, en representación de <name>". */
