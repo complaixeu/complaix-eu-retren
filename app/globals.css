@@ -69,6 +69,8 @@
   --stepper-halo: 3px;
   --alert-stripe: 4px;
   --choice-size: 20px;
+  --ticket-preview-height: 20rem;
+  --ticket-badge-size: 3rem;
 
   /* Layout */
   --content-width: 36rem;
