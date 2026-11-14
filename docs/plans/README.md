@@ -73,8 +73,9 @@ One PR, merged before the kickoff, so every domain can test from its first task.
   table, and no table has an unconditional `anon` read policy. These run on every gate, so a table
   without RLS can't slip in.
 
-Until the CI jobs in section 3 exist (they need Nestor, #17), `pnpm test:all`, run locally, is the
-gate. Paste its summary into every PR.
+CI runs the same layers on every PR and in the merge queue (`Migrations (local Supabase)` runs the
+database and integration tests, `E2E (Playwright)` the interface tests). `pnpm test:all`, run
+locally, is still the gate before every push. Paste its summary into every PR.
 
 **If replacing your mock with the real code breaks another domain's tests**, stop (§6). Either the
 mock didn't match the contract or the other domain relied on mock-only behaviour, and the owners

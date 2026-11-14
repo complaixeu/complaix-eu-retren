@@ -19,6 +19,7 @@ user's approval is not enough.
 
 DEV-only, `develop` is the only working branch, `main` is frozen, never touch secrets or
 production. Full rules: `CLAUDE.md` (§0 first). Onboarding: `docs/ONBOARDING.md`.
+Team workflow and the domain plans: `docs/TEAM_WORKFLOW.md` and `docs/plans/`.
 
 ### Workflow (Codex, Cursor, Claude and any other agent)
 

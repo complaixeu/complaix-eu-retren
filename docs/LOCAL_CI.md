@@ -9,6 +9,8 @@ nothing remote touched. Run it before every push; a branch should only reach Git
 | `verify`         | Same commands: install, lint, format check, typecheck, tests, build (placeholder env)                                                      |
 | `security-audit` | `pnpm audit --prod --audit-level=high` (non-blocking)                                                                                      |
 | `migrate_dev`    | `supabase start` builds an empty local DB from **every** migration, then the same `supabase db push` CI runs (local target instead of DEV) |
+| `migrations`     | Migration order check, then `pnpm test:db` (pgTAP) and `pnpm test:integration` against that local Supabase                                 |
+| `e2e`            | `pnpm test:e2e`: Playwright (Chromium) against a production build on `127.0.0.1:3200`, fake providers                                      |
 | `deploy_dev`     | Build with the local Supabase env, `next start` on `http://localhost:3100` instead of Vercel                                               |
 | smoke check      | Same `/api/health` retry loop, plus Supabase REST reachable with the anon key                                                              |
 
@@ -41,6 +43,11 @@ On **macOS**, follow [ONBOARDING_MAC.md](ONBOARDING_MAC.md) instead: `apt-get` a
 
 3. **jq and curl** — `sudo apt-get install -y jq curl` if missing.
 
+4. **Chromium's system libraries** — only needed for `--full`, which runs the Playwright tests.
+   The script downloads Chromium itself (`playwright install chromium`, no sudo). If the browser
+   then fails to start with missing shared libraries, install them once:
+   `sudo pnpm exec playwright install-deps chromium`.
+
 Resources: the local stack (Postgres, Auth, REST, Storage, Kong) needs roughly 1.5–2.5 GB RAM
 while running. It is started on demand and stopped at the end of the run, never left always-on.
 
@@ -58,10 +65,16 @@ your laptop, use an SSH tunnel ([ONBOARDING.md §8](ONBOARDING.md)).
 
 ```bash
 pnpm ci:local        # verify job only — fast, no Docker
-pnpm ci:local:full   # verify + migrate + deploy + smoke, against local Supabase and localhost
+pnpm ci:local:full   # verify + migrate + db/integration/e2e tests + deploy + smoke, all local
 scripts/local-ci.sh --full --keep   # same, but leave local Supabase running afterwards
-APP_PORT=3200 pnpm ci:local:full    # if port 3100 is taken
+APP_PORT=3300 pnpm ci:local:full    # if port 3100 is taken
+E2E_PORT=3300 pnpm ci:local:full    # if port 3200 (the app under Playwright) is taken
 ```
+
+**One run at a time per machine.** Every worktree shares one local Supabase, so `--full` takes
+the machine-wide lock `${TMPDIR:-/tmp}/retren-supabase.lock` (the same one `pnpm test:all` uses),
+waits while another run holds it, and releases it at the end. Details:
+[TEAM_WORKFLOW.md §3](TEAM_WORKFLOW.md).
 
 Expected end of a green run:
 

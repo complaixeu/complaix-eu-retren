@@ -6,7 +6,10 @@
 #                   Uses placeholder env only: no secrets, safe for fork PRs.
 #   security-audit  pnpm audit, non-blocking.
 #   migrations      PRs + merge queue: migration order check, then a throwaway
-#                   local Supabase (127.0.0.1 only) built from every migration.
+#                   local Supabase (127.0.0.1 only) built from every migration,
+#                   then the database (pgTAP) and integration tests against it.
+#   e2e             PRs + merge queue: Playwright against a production build on
+#                   127.0.0.1 and a local Supabase. Fake providers, no secrets.
 #   migrate_dev     push to develop (or manual run on develop) → supabase db push to DEV.
 #   deploy_dev      after migrate_dev → vercel build + deploy --prebuilt
 #                   (Preview target, never --prod) → /api/health smoke check.
@@ -119,6 +122,46 @@ jobs:
         run: bash scripts/supabase-local.sh start
       - name: supabase db push (same command as migrate_dev, local target)
         run: pnpm exec supabase db push --yes
+      - name: Database tests (pgTAP)
+        run: pnpm test:db
+      - name: Integration tests (local Supabase, fake providers)
+        run: pnpm test:integration
+      - name: Stop local Supabase
+        if: always()
+        run: pnpm exec supabase stop --no-backup || true
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install Chromium and its system libraries
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Build a throwaway local Supabase from every migration
+        run: bash scripts/supabase-local.sh start
+      # Builds the app, serves it on 127.0.0.1 and drives it with fake providers only.
+      - name: Interface tests (Playwright)
+        run: pnpm test:e2e
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
       - name: Stop local Supabase
         if: always()
         run: pnpm exec supabase stop --no-backup || true
