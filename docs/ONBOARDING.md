@@ -9,7 +9,7 @@ infrastructure: **Nestor Gomez Artiles** (GitHub `@complaix-eu`).
 | Role                         | Who                   | Can                                                                                                  |
 | ---------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------- |
 | Admin                        | Nestor Gomez Artiles  | Repo settings, branch protection, secrets, environments, Vercel, Supabase, approving protected areas |
-| Developer (GitHub **Write**) | Team `retren` members | Branches, PRs into `develop`, merging into `develop` once checks are green, reading CI logs          |
+| Developer (GitHub **Write**) | Team `retren` members | Branches, PRs into `develop`, reviewing each other's PRs, merging once approved + green, CI logs     |
 | Outside contributor          | Anyone (public repo)  | Fork + PR; their CI runs only after a maintainer approves it, never with secrets                     |
 
 Developers **do not** get, and never need: Vercel access, Supabase DB password or tokens, GitHub
@@ -46,8 +46,13 @@ pnpm ci:local:full                             # green before every push
 git push -u origin feat/short-name
 gh pr create --draft --base develop            # drafts run no CI
 gh pr ready                                    # once, when finished
-gh pr merge --squash --delete-branch           # when the check is green → DEV deploys
+gh pr merge --squash --delete-branch           # when approved + check green → DEV deploys
 ```
+
+Every PR into `develop` needs **one approving review** from another person and a green
+`Lint, typecheck, test, build` check. PRs touching protected areas (section 5) need the approval
+of **Nestor Gomez Artiles** specifically; GitHub requests it automatically. A new push dismisses
+earlier approvals. Agents never approve PRs.
 
 Never push to `develop` or `main` directly (both are protected). `main` is frozen for now.
 
