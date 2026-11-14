@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 // The design tokens in app/globals.css follow the Complaix app look (docs/plans/A-intake.md,
@@ -86,6 +86,17 @@ describe("design tokens: palette", () => {
     expect(light["--font-sans"]).toMatch(/^"dm sans"/);
     expect(light["--font-heading"]).toMatch(/^"montserrat"/);
     expect(css).not.toMatch(/JetBrains|googleapis/i);
+  });
+
+  it("ships every local font file referenced by the stylesheet", () => {
+    const sources = [...css.matchAll(/url\("(\/fonts\/[^\"]+\.woff2)"\)/g)].map(
+      ([, source]) => source,
+    );
+
+    expect(sources.length).toBeGreaterThan(0);
+    for (const source of sources) {
+      expect(existsSync(new URL(`../../../public${source}`, import.meta.url)), source).toBe(true);
+    }
   });
 
   it("keeps controls at 6px, cards at 8px and the tap target at 44px", () => {

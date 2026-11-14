@@ -9,13 +9,14 @@ Uses: `@/features/claims` (`createCase`, mock until C2). Never imports B directl
 
 Decided by Nestor, 2026-11-14; visual reference clarified by the project owner in this session.
 
-- **Visual reference: the local Complaix app** at `/home/developer/projects/complaix` and its
-  `DESIGN_SYSTEM.md`. Recreate its design language in native Next.js and CSS; do not copy its
-  React Router/Tailwind implementation, logos or product-specific layouts. Use its self-hosted
-  Montserrat headings, DM Sans body text, zinc neutrals, near-black primary action, compact
-  radii, and restrained semantic colours. Keep the ReTren mobile claim flow's own structure.
-  Maintain WCAG AA contrast in both light and dark themes; tokens may be adjusted where the
-  reference values do not pass on the intake surfaces.
+- **Visual reference: the local Complaix app** at `/home/developer/projects/complaix`, especially
+  its marketing shell and `DESIGN_SYSTEM.md`. Recreate its full white website frame in native
+  Next.js and CSS: sticky header, ReTren wordmark at the upper left, useful navigation and primary
+  action, and a full footer. Use the same broad centered page width, generous section spacing,
+  self-hosted Montserrat headings, DM Sans body text, zinc neutrals, near-black primary action,
+  compact radii, and restrained semantic colours. Adapt navigation and footer to ReTren; keep the
+  intake steps and forms focused in a narrow centered column. Maintain WCAG AA contrast; the
+  public flow is light themed to match the reference.
 - **This is a public, mobile-first flow, not a dashboard.** No sidebar, no data tables, no
   charts. One task per screen, a narrow centred column (~ 36rem), large tap targets (≥ 44 px), the
   stepper at the top, the primary button at the bottom. Most users arrive on a phone with the

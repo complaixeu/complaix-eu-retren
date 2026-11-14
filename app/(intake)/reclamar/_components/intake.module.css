@@ -1,32 +1,15 @@
 .shell {
   width: 100%;
-  max-width: calc(var(--content-width) + 2 * var(--space-4));
+  max-width: var(--page-width);
   margin-inline: auto;
-  padding: var(--space-4) var(--space-4) var(--space-7);
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  min-height: var(--tap-target);
-  margin-bottom: var(--space-2);
-}
-
-.wordmark {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--tap-target);
-  color: var(--color-text);
-  font-family: var(--font-heading);
-  font-size: var(--text-lg);
-  font-weight: 700;
-  letter-spacing: var(--heading-tracking);
-  text-decoration: none;
+  padding: var(--space-7) var(--page-gutter) var(--section-space);
 }
 
 .main {
   display: flex;
   flex-direction: column;
+  max-width: calc(var(--content-width) + 2 * var(--space-4));
+  margin-inline: auto;
   gap: var(--space-4);
 }
 
@@ -43,12 +26,6 @@
   border-radius: var(--radius-lg);
   background: var(--color-surface);
   box-shadow: var(--shadow-card);
-}
-
-@media (min-width: 40rem) {
-  .shell {
-    padding-top: var(--space-6);
-  }
 }
 
 /* Headings are Montserrat, a little tighter, and modest in size */
