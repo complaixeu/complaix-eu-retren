@@ -228,6 +228,21 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      claims_apply_timer_action: {
+        Args: {
+          p_case_id: string;
+          p_event_data: Json;
+          p_extra_events?: Json;
+          p_from_status: Database["public"]["Enums"]["case_status"];
+          p_message: Json;
+          p_next_action_at: string;
+          p_paused: boolean;
+          p_send_count: number;
+          p_send_increment: number;
+          p_to_status: Database["public"]["Enums"]["case_status"];
+        };
+        Returns: string;
+      };
       claims_create_case: {
         Args: {
           p_earliest_send_at: string;
