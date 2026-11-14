@@ -11,6 +11,8 @@ type Env = Record<string, string | undefined>;
 
 export type OutboundRefusal =
   | "recipient_not_allowed"
+  // Mail to the case's user of a kind outside ARCHITECTURE §7 (C8), or of no known kind.
+  | "user_kind_not_allowed"
   | "operator_inactive"
   | "attachment_not_allowed"
   | "stale"
@@ -40,19 +42,33 @@ const normalise = (address: string) => address.trim().toLowerCase();
 export type Audience = "operator" | "user";
 
 /**
- * Extension point for C8 (user notices): the kinds of mail the user may receive (ARCHITECTURE
- * §7: a document request, the final result, the escalation exception). Until C8 lands every
- * kind is allowed, but only to the case's own user (checkRecipient).
+ * The §7.3 exception: an escalation that needs the user's name or signature and the mandate
+ * doesn't cover it. Not a TemplateKind yet (shared/contracts, domain B): until it is, nothing can
+ * render it, and queueEscalationSignatureRequest (./notices.ts) refuses and tells the team.
  */
+export const ESCALATION_SIGNATURE_KIND = "user_escalation_signature";
+
+/**
+ * The only kinds of mail the user may receive (ARCHITECTURE §7, C8): a document request (§7.1),
+ * the final result (§7.2) and the escalation exception (§7.3). Exact, case-sensitive names.
+ */
+export const USER_NOTICE_KINDS: readonly string[] = Object.freeze([
+  "user_request_document",
+  "user_final_result",
+  ESCALATION_SIGNATURE_KIND,
+]);
+
+/** Whether mail of this kind may go to the user. An unknown or missing kind never may. */
 export function userMailAllowed(template: string | null | undefined): boolean {
-  void template; // TODO(C8): enforce the kinds allowlist here.
-  return true;
+  return typeof template === "string" && USER_NOTICE_KINDS.includes(template);
 }
 
 /**
- * Who a row may go to. The case's own user (only that exact address), or the operator's
- * verified address from its config (email channel only, and only while the operator is active).
- * Any other address is refused: nothing in an operator reply can add a recipient.
+ * Who a row may go to. The case's own user (only that exact address, and only the kinds of
+ * USER_NOTICE_KINDS), or the operator's verified address from its config (email channel only,
+ * and only while the operator is active). A user notice goes to the case's user and nobody else,
+ * not even the operator. Any other address is refused: nothing in an operator reply can add a
+ * recipient.
  */
 export function checkRecipient(input: {
   to: string;
@@ -65,8 +81,9 @@ export function checkRecipient(input: {
   if (to === normalise(input.userEmail)) {
     return userMailAllowed(input.template)
       ? { ok: true, audience: "user" }
-      : { ok: false, reason: "recipient_not_allowed" };
+      : { ok: false, reason: "user_kind_not_allowed" };
   }
+  if (userMailAllowed(input.template)) return { ok: false, reason: "recipient_not_allowed" };
   const { channel } = input.operator;
   if (channel.type !== "email" || to !== normalise(channel.address)) {
     return { ok: false, reason: "recipient_not_allowed" };
