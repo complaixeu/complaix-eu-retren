@@ -107,12 +107,12 @@ pass. If a test is wrong, fix it in the same PR and say why.
   roles and labels (`getByRole`, `getByLabel`), not CSS selectors. Traces and screenshots are kept
   on failure.
 
-**CI (needs Nestor's approval, requested in an issue):**
+**CI enforces the same layers** (all three checks are required on `develop`):
 
-- an `e2e` job: Playwright with browsers cached, local Supabase on 127.0.0.1, fake providers, the
-  report uploaded as an artifact on failure, no secrets;
-- `pnpm test:db` and `pnpm test:integration` added to the `Migrations (local Supabase)` job;
-- the same steps in `scripts/local-ci.sh --full`.
+- `E2E (Playwright)`: browsers cached, local Supabase on 127.0.0.1, fake providers, the report
+  uploaded as an artifact on failure, no secrets;
+- `Migrations (local Supabase)` also runs `pnpm test:db` and `pnpm test:integration`;
+- `scripts/local-ci.sh --full` runs the same steps locally.
 
 ## 4. Email: how we test it
 
@@ -203,7 +203,9 @@ other task that isn't blocked. Never sit idle, and never work around the reason.
 
 ### Kickoff (the developer pastes this once)
 
-Claude Code (A or C):
+Claude Code (A or C). The repo ships the three roles as agent definitions in `.claude/agents/`
+(`retren-orchestrator`, `retren-implementer`, `retren-reviewer`), so the short way is
+`claude --agent retren-orchestrator` and then "domain A" or "domain C". Without them, paste:
 
 > You are the orchestrator for domain **[A Intake | C Claims engine]** of ReTren. Read CLAUDE.md,
 > docs/ARCHITECTURE.md, docs/TEAM_WORKFLOW.md, docs/plans/README.md and
