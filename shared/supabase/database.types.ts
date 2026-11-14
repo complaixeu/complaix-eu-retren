@@ -169,6 +169,7 @@ export type Database = {
       claims_mail_poll_state: {
         Row: {
           failed_attempts: number | null;
+          failed_since: string | null;
           failed_uid: number | null;
           last_uid: number;
           mailbox: string;
@@ -178,6 +179,7 @@ export type Database = {
         ComputedFields: never;
         Insert: {
           failed_attempts?: number | null;
+          failed_since?: string | null;
           failed_uid?: number | null;
           last_uid: number;
           mailbox: string;
@@ -186,6 +188,7 @@ export type Database = {
         };
         Update: {
           failed_attempts?: number | null;
+          failed_since?: string | null;
           failed_uid?: number | null;
           last_uid?: number;
           mailbox?: string;
