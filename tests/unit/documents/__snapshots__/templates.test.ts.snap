@@ -1,0 +1,388 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderTemplate > escalation_d45 > renders the iryo template snapshot with its case reference > escalation_d45 / iryo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Comunicación de escalada del expediente",
+  "text": "A la atención de Iryo:
+La reclamación y las comunicaciones anteriores se enviaron el 2026-10-12, el 2026-10-24, el 2026-11-11, el 2026-11-21.
+Al no haber respuesta, comunicamos que el expediente se elevará a la DGTT o a la Junta Arbitral de Transporte. El Reglamento (UE) 2021/782 establece el plazo de respuesta aplicable.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > escalation_d45 > renders the ouigo template snapshot with its case reference > escalation_d45 / ouigo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Comunicación de escalada del expediente",
+  "text": "A la atención de OUIGO:
+La reclamación y las comunicaciones anteriores se enviaron el 2026-10-12, el 2026-10-24, el 2026-11-11, el 2026-11-21.
+Al no haber respuesta, comunicamos que el expediente se elevará a la DGTT o a la Junta Arbitral de Transporte. El Reglamento (UE) 2021/782 establece el plazo de respuesta aplicable.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > escalation_d45 > renders the renfe template snapshot with its case reference > escalation_d45 / renfe 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Comunicación de escalada del expediente",
+  "text": "A la atención de Renfe:
+La reclamación y las comunicaciones anteriores se enviaron el 2026-10-12, el 2026-10-24, el 2026-11-11, el 2026-11-21.
+Al no haber respuesta, comunicamos que el expediente se elevará a la DGTT o a la Junta Arbitral de Transporte. El Reglamento (UE) 2021/782 establece el plazo de respuesta aplicable.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > initial_claim > renders the iryo template snapshot with its case reference > initial_claim / iryo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Reclamación por retraso",
+  "text": "A la atención de Iryo: Retren presenta una reclamación por retraso en representación de Lucía Ejemplo.
+Datos del viaje: 2026-10-12; Madrid; Valencia.
+Solicitamos la indemnización que corresponda conforme al Reglamento (UE) 2021/782. billete o localizador: BILLETE-456. documento: DNI SYNTHETIC-0001. preferencia de pago: dinero.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > initial_claim > renders the ouigo template snapshot with its case reference > initial_claim / ouigo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Reclamación por retraso",
+  "text": "A la atención de OUIGO: Retren presenta una reclamación por retraso en representación de Lucía Ejemplo.
+Datos del viaje: 2026-10-12; Madrid; Valencia.
+Solicitamos la indemnización que corresponda conforme al Reglamento (UE) 2021/782. billete o localizador: BILLETE-456. documento: DNI SYNTHETIC-0001. preferencia de pago: dinero.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > initial_claim > renders the renfe template snapshot with its case reference > initial_claim / renfe 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Reclamación por retraso",
+  "text": "A la atención de Renfe: Retren presenta una reclamación por retraso en representación de Lucía Ejemplo.
+Datos del viaje: 2026-10-12; Madrid; Valencia.
+Solicitamos la indemnización que corresponda conforme al Reglamento (UE) 2021/782. billete o localizador: BILLETE-456. documento: DNI SYNTHETIC-0001. preferencia de pago: dinero.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > insistence_after_denial > renders the iryo template snapshot with its case reference > insistence_after_denial / iryo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Solicitud de reconsideración de la reclamación",
+  "text": "A la atención de Iryo: Solicitamos reconsiderar la denegación del expediente.
+Reiteramos la reclamación (viaje: 2026-10-12; Madrid; Valencia; documento: DNI SYNTHETIC-0001). El Reglamento (UE) 2021/782 reconoce el derecho a indemnización según la duración del retraso.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > insistence_after_denial > renders the ouigo template snapshot with its case reference > insistence_after_denial / ouigo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Solicitud de reconsideración de la reclamación",
+  "text": "A la atención de OUIGO: Solicitamos reconsiderar la denegación del expediente.
+Reiteramos la reclamación (viaje: 2026-10-12; Madrid; Valencia; documento: DNI SYNTHETIC-0001). El Reglamento (UE) 2021/782 reconoce el derecho a indemnización según la duración del retraso.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > insistence_after_denial > renders the renfe template snapshot with its case reference > insistence_after_denial / renfe 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Solicitud de reconsideración de la reclamación",
+  "text": "A la atención de Renfe: Solicitamos reconsiderar la denegación del expediente.
+Reiteramos la reclamación (viaje: 2026-10-12; Madrid; Valencia; documento: DNI SYNTHETIC-0001). El Reglamento (UE) 2021/782 reconoce el derecho a indemnización según la duración del retraso.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > last_notice_d40 > renders the iryo template snapshot with its case reference > last_notice_d40 / iryo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Último aviso sobre la reclamación",
+  "text": "A la atención de Iryo:
+La reclamación y las comunicaciones anteriores se enviaron el 2026-10-12, el 2026-10-24, el 2026-11-11.
+Si no recibimos respuesta, el expediente se elevará a la autoridad competente. El Reglamento (UE) 2021/782 establece el plazo de respuesta aplicable.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > last_notice_d40 > renders the ouigo template snapshot with its case reference > last_notice_d40 / ouigo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Último aviso sobre la reclamación",
+  "text": "A la atención de OUIGO:
+La reclamación y las comunicaciones anteriores se enviaron el 2026-10-12, el 2026-10-24, el 2026-11-11.
+Si no recibimos respuesta, el expediente se elevará a la autoridad competente. El Reglamento (UE) 2021/782 establece el plazo de respuesta aplicable.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > last_notice_d40 > renders the renfe template snapshot with its case reference > last_notice_d40 / renfe 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Último aviso sobre la reclamación",
+  "text": "A la atención de Renfe:
+La reclamación y las comunicaciones anteriores se enviaron el 2026-10-12, el 2026-10-24, el 2026-11-11.
+Si no recibimos respuesta, el expediente se elevará a la autoridad competente. El Reglamento (UE) 2021/782 establece el plazo de respuesta aplicable.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reminder_d12 > renders the iryo template snapshot with its case reference > reminder_d12 / iryo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Seguimiento de la reclamación",
+  "text": "A la atención de Iryo:
+La reclamación y las comunicaciones anteriores se enviaron el 2026-10-12.
+Agradecemos que nos confirme la recepción y el estado de tramitación. El Reglamento (UE) 2021/782 establece el plazo de respuesta aplicable.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reminder_d12 > renders the ouigo template snapshot with its case reference > reminder_d12 / ouigo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Seguimiento de la reclamación",
+  "text": "A la atención de OUIGO:
+La reclamación y las comunicaciones anteriores se enviaron el 2026-10-12.
+Agradecemos que nos confirme la recepción y el estado de tramitación. El Reglamento (UE) 2021/782 establece el plazo de respuesta aplicable.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reminder_d12 > renders the renfe template snapshot with its case reference > reminder_d12 / renfe 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Seguimiento de la reclamación",
+  "text": "A la atención de Renfe:
+La reclamación y las comunicaciones anteriores se enviaron el 2026-10-12.
+Agradecemos que nos confirme la recepción y el estado de tramitación. El Reglamento (UE) 2021/782 establece el plazo de respuesta aplicable.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reminder_d30 > renders the iryo template snapshot with its case reference > reminder_d30 / iryo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Solicitud de respuesta a la reclamación",
+  "text": "A la atención de Iryo:
+La reclamación y las comunicaciones anteriores se enviaron el 2026-10-12, el 2026-10-24.
+Ha transcurrido un mes desde la reclamación; agradecemos una respuesta motivada. El Reglamento (UE) 2021/782 establece el plazo de respuesta aplicable.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reminder_d30 > renders the ouigo template snapshot with its case reference > reminder_d30 / ouigo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Solicitud de respuesta a la reclamación",
+  "text": "A la atención de OUIGO:
+La reclamación y las comunicaciones anteriores se enviaron el 2026-10-12, el 2026-10-24.
+Ha transcurrido un mes desde la reclamación; agradecemos una respuesta motivada. El Reglamento (UE) 2021/782 establece el plazo de respuesta aplicable.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reminder_d30 > renders the renfe template snapshot with its case reference > reminder_d30 / renfe 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Solicitud de respuesta a la reclamación",
+  "text": "A la atención de Renfe:
+La reclamación y las comunicaciones anteriores se enviaron el 2026-10-12, el 2026-10-24.
+Ha transcurrido un mes desde la reclamación; agradecemos una respuesta motivada. El Reglamento (UE) 2021/782 establece el plazo de respuesta aplicable.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reply_acknowledgement > renders the iryo template snapshot with its case reference > reply_acknowledgement / iryo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Seguimiento de recepción",
+  "text": "A la atención de Iryo: Gracias por confirmar la recepción del expediente [RTN-B6TEST01].
+Documento del expediente: DNI SYNTHETIC-0001.
+Quedamos pendientes de la resolución y del plazo previsto para su tramitación.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reply_acknowledgement > renders the ouigo template snapshot with its case reference > reply_acknowledgement / ouigo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Seguimiento de recepción",
+  "text": "A la atención de OUIGO: Gracias por confirmar la recepción del expediente [RTN-B6TEST01].
+Documento del expediente: DNI SYNTHETIC-0001.
+Quedamos pendientes de la resolución y del plazo previsto para su tramitación.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reply_acknowledgement > renders the renfe template snapshot with its case reference > reply_acknowledgement / renfe 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Seguimiento de recepción",
+  "text": "A la atención de Renfe: Gracias por confirmar la recepción del expediente [RTN-B6TEST01].
+Documento del expediente: DNI SYNTHETIC-0001.
+Quedamos pendientes de la resolución y del plazo previsto para su tramitación.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reply_approved > renders the iryo template snapshot with its case reference > reply_approved / iryo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Confirmación de resolución favorable",
+  "text": "A la atención de Iryo: Gracias por aprobar la reclamación [RTN-B6TEST01].
+Documento del expediente: DNI SYNTHETIC-0001.
+Agradecemos que confirme el importe y el plazo previsto para el abono o la entrega del vale.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reply_approved > renders the ouigo template snapshot with its case reference > reply_approved / ouigo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Confirmación de resolución favorable",
+  "text": "A la atención de OUIGO: Gracias por aprobar la reclamación [RTN-B6TEST01].
+Documento del expediente: DNI SYNTHETIC-0001.
+Agradecemos que confirme el importe y el plazo previsto para el abono o la entrega del vale.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reply_approved > renders the renfe template snapshot with its case reference > reply_approved / renfe 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Confirmación de resolución favorable",
+  "text": "A la atención de Renfe: Gracias por aprobar la reclamación [RTN-B6TEST01].
+Documento del expediente: DNI SYNTHETIC-0001.
+Agradecemos que confirme el importe y el plazo previsto para el abono o la entrega del vale.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reply_asks_for_data > renders the iryo template snapshot with its case reference > reply_asks_for_data / iryo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Documentación solicitada",
+  "text": "A la atención de Iryo: Adjuntamos la documentación solicitada para el expediente [RTN-B6TEST01].
+persona representada: Lucía Ejemplo; documento: DNI SYNTHETIC-0001.
+Agradecemos que confirme su recepción y la continuación de la tramitación.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reply_asks_for_data > renders the ouigo template snapshot with its case reference > reply_asks_for_data / ouigo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Documentación solicitada",
+  "text": "A la atención de OUIGO: Adjuntamos la documentación solicitada para el expediente [RTN-B6TEST01].
+persona representada: Lucía Ejemplo; documento: DNI SYNTHETIC-0001.
+Agradecemos que confirme su recepción y la continuación de la tramitación.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reply_asks_for_data > renders the renfe template snapshot with its case reference > reply_asks_for_data / renfe 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Documentación solicitada",
+  "text": "A la atención de Renfe: Adjuntamos la documentación solicitada para el expediente [RTN-B6TEST01].
+persona representada: Lucía Ejemplo; documento: DNI SYNTHETIC-0001.
+Agradecemos que confirme su recepción y la continuación de la tramitación.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reply_denied > renders the iryo template snapshot with its case reference > reply_denied / iryo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Solicitud de motivación de la denegación",
+  "text": "A la atención de Iryo: Hemos recibido la denegación de la reclamación [RTN-B6TEST01].
+Documento del expediente: DNI SYNTHETIC-0001.
+Solicitamos que indique los motivos concretos y la base aplicada a la decisión.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reply_denied > renders the ouigo template snapshot with its case reference > reply_denied / ouigo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Solicitud de motivación de la denegación",
+  "text": "A la atención de OUIGO: Hemos recibido la denegación de la reclamación [RTN-B6TEST01].
+Documento del expediente: DNI SYNTHETIC-0001.
+Solicitamos que indique los motivos concretos y la base aplicada a la decisión.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reply_denied > renders the renfe template snapshot with its case reference > reply_denied / renfe 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Solicitud de motivación de la denegación",
+  "text": "A la atención de Renfe: Hemos recibido la denegación de la reclamación [RTN-B6TEST01].
+Documento del expediente: DNI SYNTHETIC-0001.
+Solicitamos que indique los motivos concretos y la base aplicada a la decisión.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reply_refers_to_form > renders the iryo template snapshot with its case reference > reply_refers_to_form / iryo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Seguimiento de reclamación presentada por correo",
+  "text": "A la atención de Iryo: La reclamación [RTN-B6TEST01] se presentó por correo con la documentación requerida.
+Documento del expediente: DNI SYNTHETIC-0001.
+Agradecemos que confirme si es posible continuar su tramitación por este canal.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reply_refers_to_form > renders the ouigo template snapshot with its case reference > reply_refers_to_form / ouigo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Seguimiento de reclamación presentada por correo",
+  "text": "A la atención de OUIGO: La reclamación [RTN-B6TEST01] se presentó por correo con la documentación requerida.
+Documento del expediente: DNI SYNTHETIC-0001.
+Agradecemos que confirme si es posible continuar su tramitación por este canal.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > reply_refers_to_form > renders the renfe template snapshot with its case reference > reply_refers_to_form / renfe 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Seguimiento de reclamación presentada por correo",
+  "text": "A la atención de Renfe: La reclamación [RTN-B6TEST01] se presentó por correo con la documentación requerida.
+Documento del expediente: DNI SYNTHETIC-0001.
+Agradecemos que confirme si es posible continuar su tramitación por este canal.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > user_final_result > renders the iryo template snapshot with its case reference > user_final_result / iryo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Actualización final de tu reclamación",
+  "text": "La compañía ha aprobado la reclamación [RTN-B6TEST01].
+Confirma respondiendo a este correo si recibiste el dinero o el vale.
+Compañía: Iryo.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > user_final_result > renders the ouigo template snapshot with its case reference > user_final_result / ouigo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Actualización final de tu reclamación",
+  "text": "La compañía ha aprobado la reclamación [RTN-B6TEST01].
+Confirma respondiendo a este correo si recibiste el dinero o el vale.
+Compañía: OUIGO.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > user_final_result > renders the renfe template snapshot with its case reference > user_final_result / renfe 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Actualización final de tu reclamación",
+  "text": "La compañía ha aprobado la reclamación [RTN-B6TEST01].
+Confirma respondiendo a este correo si recibiste el dinero o el vale.
+Compañía: Renfe.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > user_request_document > renders the iryo template snapshot with its case reference > user_request_document / iryo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Documentación adicional para tu reclamación",
+  "text": "La compañía ha solicitado documentación adicional para continuar el expediente [RTN-B6TEST01].
+Responde a este correo adjuntando el documento que te han pedido.
+La solicitud corresponde a Iryo.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > user_request_document > renders the ouigo template snapshot with its case reference > user_request_document / ouigo 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Documentación adicional para tu reclamación",
+  "text": "La compañía ha solicitado documentación adicional para continuar el expediente [RTN-B6TEST01].
+Responde a este correo adjuntando el documento que te han pedido.
+La solicitud corresponde a OUIGO.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
+
+exports[`renderTemplate > user_request_document > renders the renfe template snapshot with its case reference > user_request_document / renfe 1`] = `
+{
+  "subject": "[RTN-B6TEST01] Documentación adicional para tu reclamación",
+  "text": "La compañía ha solicitado documentación adicional para continuar el expediente [RTN-B6TEST01].
+Responde a este correo adjuntando el documento que te han pedido.
+La solicitud corresponde a Renfe.
+Retren, en representación de Lucía Ejemplo",
+}
+`;
