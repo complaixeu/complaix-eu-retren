@@ -27,7 +27,8 @@
     "test:e2e": "playwright test",
     "test:all": "bash scripts/test-all.sh",
     "preflight": "bash scripts/preflight.sh",
-    "empezar": "bash scripts/agents/empezar.sh"
+    "empezar": "bash scripts/agents/empezar.sh",
+    "eval:classifier": "vitest run --config scripts/claims/vitest.eval.config.mts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",

@@ -1,0 +1,18 @@
+From: Iryo <atencion.cliente@iryo-soporte.example>
+To: Retren Reclamaciones <reclamaciones@retren.example>
+Subject: Re: Reclamacion por retraso [RTN-T001]
+Date: Mon, 02 Nov 2026 10:25:00 +0100
+Message-ID: <fixture-spoofed-ref-02@mail.example>
+In-Reply-To: <forged-0002@mail.example>
+References: <forged-0002@mail.example>
+X-Retren-Golden-Accept: denied, other
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Hola,
+
+Su solicitud ha sido denegada por no cumplir los requisitos.
+
+Un saludo,
+Atención al Cliente (texto de prueba ficticio)
