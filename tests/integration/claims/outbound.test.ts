@@ -9,8 +9,8 @@ import {
   sendInitialClaim,
 } from "@/features/claims/initial-claim";
 import { MAX_SENDS_PER_CASE } from "@/features/claims/timers";
-import { sendPending, sendQueued } from "@/features/claims/send-queued";
-import { createFakeTransport } from "@/features/claims/transport";
+import { CLAIM_TTL_MS, sendPending, sendQueued } from "@/features/claims/send-queued";
+import { createFakeTransport, createGmailTransport } from "@/features/claims/transport";
 import { getOperatorConfig } from "@/features/rules";
 import { fixedClock } from "@/shared/clock";
 import type { OperatorId } from "@/shared/contracts";
@@ -143,6 +143,10 @@ describe("sendInitialClaim (local Supabase)", () => {
     expect(mail.subject).toBe(m.subject);
     expect(mail.inReplyTo).toBeUndefined();
     expect(mail.attachments).toHaveLength(3);
+    // The sender read each file from private storage: the transport gets bytes, not paths.
+    const ticket = mail.attachments.find((a) => a.kind === "ticket")!;
+    expect(Buffer.from(ticket.content).equals(Buffer.from(TICKET_PLACEHOLDER_PNG))).toBe(true);
+    for (const a of mail.attachments) expect(a.content.byteLength).toBeGreaterThan(0);
 
     // Events: created (C2), claim_sent (waiting_period → sent), message_sent. No personal data.
     expect(events.map((e) => [e.kind, e.from_status, e.to_status])).toEqual([
@@ -190,7 +194,13 @@ describe("sendInitialClaim (local Supabase)", () => {
       expect(transport.outbox).toEqual([]);
       const queue = events.filter((e) => e.kind === TEAM_QUEUE_EVENT);
       expect(queue).toHaveLength(1);
-      expect(queue[0].data).toEqual({ reason: "operator_inactive", action: "initial_claim" });
+      expect(queue[0].data).toEqual({
+        source: "outbound",
+        reason: "operator_inactive",
+        action: "initial_claim",
+      });
+      // Not retried every hour: the next look is a day later.
+      expect(Date.parse(row.next_action_at!)).toBe(READY.getTime() + DAY);
     });
   }
 
@@ -257,7 +267,7 @@ describe("sendInitialClaim (local Supabase)", () => {
     expect(row.status).toBe("waiting_period");
     expect(messages).toEqual([]);
     expect(events.filter((e) => e.kind === TEAM_QUEUE_EVENT).map((e) => e.data)).toEqual([
-      { reason: "ticket_missing", action: "initial_claim" },
+      { source: "outbound", reason: "ticket_missing", action: "initial_claim" },
     ]);
   });
 
@@ -270,6 +280,7 @@ describe("sendInitialClaim (local Supabase)", () => {
         clock: fixedClock(READY),
         transport,
         providerName: "smtp",
+        env: { MAIL_REDIRECT_ALL_TO: "equipo@retren.example" },
       }),
     ).toEqual({ ok: false, reason: "mock_text" });
     const { row, messages } = await stored(caseId);
@@ -281,7 +292,9 @@ describe("sendInitialClaim (local Supabase)", () => {
 
 describe("sendQueued (local Supabase)", () => {
   /** A sent case (initial claim out) plus one more outbound row queued for it, like C7's tick. */
-  async function sentCaseWithQueued(row: { to?: string; subject?: string; body?: string } = {}) {
+  async function sentCaseWithQueued(
+    row: { to?: string; subject?: string; body?: string; template?: string | null } = {},
+  ) {
     const ready = await readyCase();
     const first = await sendInitialClaim(ready.caseId, {
       db,
@@ -298,6 +311,7 @@ describe("sendQueued (local Supabase)", () => {
         to_address: row.to ?? OPERATOR,
         subject: row.subject ?? `[${ready.publicRef}] Recordatorio`,
         body_text: row.body ?? "Recordatorio de la reclamación.",
+        template: row.template === undefined ? "reminder_d12" : row.template,
         status: "queued",
       })
       .select("id")
@@ -433,7 +447,8 @@ describe("sendQueued (local Supabase)", () => {
   it("mock template text is refused through a non-fake provider", async () => {
     const { queuedId } = await sentCaseWithQueued({ body: "mock reminder_d12\n\nRetren" });
     const transport = createFakeTransport();
-    expect(await sendQueued(queuedId, { db, transport, providerName: "smtp" })).toEqual({
+    const env = { MAIL_REDIRECT_ALL_TO: "equipo@retren.example" };
+    expect(await sendQueued(queuedId, { db, transport, providerName: "smtp", env })).toEqual({
       status: "failed",
       reason: "mock_text",
     });
@@ -471,7 +486,7 @@ describe("sendQueued (local Supabase)", () => {
 
   /** A forwarded user document (C6): a queued operator row with a user_document attached. */
   async function forwarded() {
-    const q = await sentCaseWithQueued();
+    const q = await sentCaseWithQueued({ template: "reply_asks_for_data" });
     const key = `${q.caseId}/${randomUUID()}.pdf`;
     const up = await db.storage
       .from(USER_DOCUMENTS_BUCKET)
@@ -555,11 +570,298 @@ describe("sendQueued (local Supabase)", () => {
     expect(calls).toHaveLength(1);
   });
 
+  /** A query that always answers with an error (a DB read or write that fails). */
+  function failingQuery(): unknown {
+    const q: unknown = new Proxy(function () {}, {
+      get(_t, prop) {
+        if (prop === "then") {
+          return (resolve: (v: unknown) => void) =>
+            resolve({ data: null, error: { message: "boom (test)" } });
+        }
+        return () => q;
+      },
+    });
+    return q;
+  }
+  /** The service client, except that `from(table)` fails whenever `fails(table)` says so. */
+  const dbWith = (fails: (table: string) => boolean) =>
+    new Proxy(db, {
+      get(target, prop, receiver) {
+        if (prop === "from") {
+          return (table: string) => (fails(table) ? failingQuery() : target.from(table as never));
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as ServiceClient;
+
+  const teamQueue = async (caseId: string) =>
+    (await stored(caseId)).events.filter((e) => e.kind === TEAM_QUEUE_EVENT).map((e) => e.data);
+
+  it("a failure after the claim, before the transport: failed internal_error, team queue", async () => {
+    const { caseId, queuedId } = await sentCaseWithQueued();
+    const transport = createFakeTransport();
+    const out = await sendQueued(queuedId, { db: dbWith((t) => t === "cases"), transport });
+    expect(out).toEqual({ status: "failed", reason: "internal_error" });
+    expect(transport.outbox).toEqual([]);
+    expect(await message(queuedId)).toMatchObject({
+      status: "failed",
+      failure_reason: "internal_error",
+    });
+    expect(await teamQueue(caseId)).toContainEqual(
+      expect.objectContaining({
+        source: "outbound",
+        reason: "internal_error",
+        message_id: queuedId,
+      }),
+    );
+  });
+
+  it("the transport accepted the mail but the write failed: delivery_unknown, never resent", async () => {
+    const { caseId, queuedId } = await sentCaseWithQueued();
+    let accepted = false;
+    let broke = false;
+    const fake = createFakeTransport();
+    const transport = {
+      async send(m: Parameters<typeof fake.send>[0]) {
+        accepted = true;
+        return fake.send(m);
+      },
+    };
+    // The first write after the transport accepted the mail (marking the row sent) fails once.
+    const flaky = dbWith((t) => {
+      if (t === "messages" && accepted && !broke) return (broke = true);
+      return false;
+    });
+    expect(await sendQueued(queuedId, { db: flaky, transport })).toEqual({
+      status: "failed",
+      reason: "delivery_unknown",
+    });
+    expect(fake.outbox).toHaveLength(1);
+    expect(await message(queuedId)).toMatchObject({
+      status: "failed",
+      failure_reason: "delivery_unknown",
+    });
+    expect(await teamQueue(caseId)).toContainEqual(
+      expect.objectContaining({ reason: "delivery_unknown", message_id: queuedId }),
+    );
+    expect(await sendPending({ db, transport }, { caseIds: [caseId] })).toEqual([]);
+    expect(fake.outbox).toHaveLength(1);
+  });
+
+  it("a claim that expired while queued becomes delivery_unknown, swept by sendPending", async () => {
+    const { caseId, queuedId } = await sentCaseWithQueued();
+    const old = new Date(Date.now() - CLAIM_TTL_MS - 60_000).toISOString();
+    expect(
+      (await db.from("messages").update({ send_claimed_at: old }).eq("id", queuedId)).error,
+    ).toBeNull();
+    const transport = createFakeTransport();
+    const out = await sendPending({ db, transport }, { caseIds: [caseId] });
+    expect(out).toContainEqual({
+      messageId: queuedId,
+      result: { status: "failed", reason: "delivery_unknown" },
+    });
+    expect(transport.outbox).toEqual([]);
+    expect(await message(queuedId)).toMatchObject({
+      status: "failed",
+      failure_reason: "delivery_unknown",
+    });
+    expect(await teamQueue(caseId)).toContainEqual(
+      expect.objectContaining({ reason: "delivery_unknown", message_id: queuedId }),
+    );
+  });
+
+  it("two concurrent sends of one row: exactly one goes out", async () => {
+    const { queuedId } = await sentCaseWithQueued();
+    const transport = createFakeTransport();
+    const results = await Promise.all([
+      sendQueued(queuedId, { db, transport }),
+      sendQueued(queuedId, { db, transport }),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual(["sent", "skipped"]);
+    expect(transport.outbox).toHaveLength(1);
+  });
+
+  it("a failed initial claim goes to the team queue, and is not retried", async () => {
+    const { caseId } = await readyCase();
+    const broken = {
+      send: async () => {
+        throw new Error("boom");
+      },
+    };
+    const out = await sendInitialClaim(caseId, { db, clock: fixedClock(READY), transport: broken });
+    expect(out.ok && out.delivery).toEqual({ status: "failed", reason: "transport_error" });
+    const { messages } = await stored(caseId);
+    expect(messages[0]).toMatchObject({ template: "initial_claim", status: "failed" });
+    expect(await teamQueue(caseId)).toContainEqual({
+      source: "outbound",
+      reason: "transport_error",
+      message_id: messages[0].id,
+      template: "initial_claim",
+    });
+    const transport = createFakeTransport();
+    expect(await sendPending({ db, transport }, { caseIds: [caseId] })).toEqual([]);
+    expect(transport.outbox).toEqual([]);
+  });
+
+  it("a spoofed [RTN-ref] mail changes neither the headers nor the staleness", async () => {
+    const { caseId, publicRef, initialId, queuedId } = await sentCaseWithQueued();
+    const initial = await message(initialId);
+    const spoof = await db.from("messages").insert({
+      case_id: caseId,
+      direction: "inbound",
+      from_address: "attacker@evil.example",
+      to_address: "reclamaciones@retren.example",
+      subject: `Re: [${publicRef}] reclamación`,
+      status: "received",
+      message_id: `<${randomUUID()}@evil.example>`,
+    });
+    expect(spoof.error).toBeNull();
+    const transport = createFakeTransport();
+    expect((await sendQueued(queuedId, { db, transport })).status).toBe("sent");
+    expect(transport.outbox[0]).toMatchObject({
+      inReplyTo: initial.message_id,
+      references: [initial.message_id],
+    });
+  });
+
+  it("keeps an In-Reply-To the row already has", async () => {
+    const { queuedId } = await sentCaseWithQueued();
+    await db.from("messages").update({ in_reply_to: "<given@iryo.eu>" }).eq("id", queuedId);
+    const transport = createFakeTransport();
+    expect((await sendQueued(queuedId, { db, transport })).status).toBe("sent");
+    expect(transport.outbox[0].inReplyTo).toBe("<given@iryo.eu>");
+    expect((await message(queuedId)).in_reply_to).toBe("<given@iryo.eu>");
+  });
+
+  it("only reminders go stale: an acknowledgement never stops a C6 insistence", async () => {
+    const { caseId, queuedId } = await sentCaseWithQueued({ template: null });
+    // C6 links its operator mail to an event that names the template.
+    const ev = await db.from("case_events").insert({
+      case_id: caseId,
+      kind: "operator_mail_queued",
+      data: { template: "insistence_after_denial", message_id: queuedId },
+    });
+    expect(ev.error).toBeNull();
+    const ack = await db.from("messages").insert({
+      case_id: caseId,
+      direction: "inbound",
+      from_address: OPERATOR,
+      to_address: "reclamaciones@retren.example",
+      subject: "Acuse",
+      status: "received",
+      category: "acknowledgement",
+      message_id: `<${randomUUID()}@iryo.eu>`,
+    });
+    expect(ack.error).toBeNull();
+    expect((await sendQueued(queuedId, { db, transport: createFakeTransport() })).status).toBe(
+      "sent",
+    );
+    // The kind is recorded on the row (C8's allowlist reads it).
+    expect((await message(queuedId)).template).toBe("insistence_after_denial");
+  });
+
+  it("a C7 reminder (no template on the row) is recognised from its timer event", async () => {
+    const ready = await readyCase();
+    const first = await sendInitialClaim(ready.caseId, {
+      db,
+      clock: fixedClock(READY),
+      transport: createFakeTransport(),
+    });
+    if (!first.ok) throw new Error(first.reason);
+    const queued = await db.rpc("claims_apply_timer_action", {
+      p_case_id: ready.caseId,
+      p_from_status: "sent",
+      p_send_count: 1,
+      p_paused: false,
+      p_to_status: "sent",
+      p_send_increment: 1,
+      p_next_action_at: new Date(READY.getTime() + 30 * DAY).toISOString(),
+      p_event_data: { action: "reminder_d12", day: 12, at: READY.toISOString() },
+      p_message: {
+        recipient: "operator",
+        template: "reminder_d12",
+        from: "reclamaciones@retren.invalid",
+        to: OPERATOR,
+        subject: `[${ready.publicRef}] Recordatorio`,
+        body_text: "Recordatorio.",
+      },
+      p_extra_events: [],
+    });
+    expect(queued.error).toBeNull();
+    const id = queued.data as string;
+    await db.from("messages").insert({
+      case_id: ready.caseId,
+      direction: "inbound",
+      from_address: OPERATOR,
+      to_address: "reclamaciones@retren.example",
+      subject: "Respuesta",
+      status: "received",
+      message_id: `<${randomUUID()}@iryo.eu>`,
+    });
+    expect(await sendQueued(id, { db, transport: createFakeTransport() })).toEqual({
+      status: "failed",
+      reason: "stale",
+    });
+    expect((await message(id)).template).toBe("reminder_d12");
+  });
+
+  it("a real provider without MAIL_REDIRECT_ALL_TO refuses before touching the row", async () => {
+    const { queuedId } = await sentCaseWithQueued();
+    const transport = createFakeTransport();
+    await expect(
+      sendQueued(queuedId, { db, transport, providerName: "gmail", env: {} }),
+    ).rejects.toThrow(/MAIL_REDIRECT_ALL_TO/);
+    await expect(
+      sendQueued(queuedId, {
+        db,
+        transport,
+        providerName: "gmail",
+        env: { MAIL_REDIRECT_ALL_TO: "no-es-una-direccion" },
+      }),
+    ).rejects.toThrow(/MAIL_REDIRECT_ALL_TO/);
+    expect(await message(queuedId)).toMatchObject({ status: "queued", send_claimed_at: null });
+    expect(transport.outbox).toEqual([]);
+  });
+
+  it("gmail: the sender reads the attachment bytes from storage; From is SMTP_USER", async () => {
+    const f = await forwarded();
+    const env = {
+      MAIL_PROVIDER: "gmail",
+      SMTP_HOST: "smtp.gmail.com",
+      SMTP_PORT: "465",
+      SMTP_SECURE: "true",
+      SMTP_USER: "buzon@retren.example",
+      SMTP_PASS: "app-password-test",
+      MAIL_REDIRECT_ALL_TO: "equipo@retren.example",
+    };
+    const raw: string[] = [];
+    const { createTransport } = await import("nodemailer");
+    const stream = createTransport({ streamTransport: true, buffer: true, newline: "unix" });
+    const transport = createGmailTransport(env, {
+      transporter: {
+        async sendMail(options) {
+          const info = await stream.sendMail(options);
+          raw.push((info.message as Buffer).toString("utf8"));
+          return info;
+        },
+      },
+    });
+    expect(
+      (await sendQueued(f.queuedId, { db, transport, providerName: "gmail", env })).status,
+    ).toBe("sent");
+    expect(raw).toHaveLength(1);
+    expect(raw[0]).toMatch(/^From: Retren <buzon@retren\.example>$/m);
+    expect(raw[0]).toMatch(/^To: equipo@retren\.example$/m);
+    expect(raw[0]).toContain(Buffer.from("%PDF-1.7\n% placeholder\n%%EOF\n").toString("base64"));
+    expect(raw[0]).not.toContain(f.key);
+  });
+
   it("sendPending sends every queued row once", async () => {
     const a = await sentCaseWithQueued();
     const b = await sentCaseWithQueued({ to: "intruso@evil.example" });
     const transport = createFakeTransport();
-    const first = await sendPending({ db, transport });
+    const caseIds = [a.caseId, b.caseId];
+    const first = await sendPending({ db, transport }, { caseIds });
     expect(first.find((r) => r.messageId === a.queuedId)?.result.status).toBe("sent");
     expect(first.find((r) => r.messageId === b.queuedId)?.result).toEqual({
       status: "failed",
@@ -568,7 +870,7 @@ describe("sendQueued (local Supabase)", () => {
     expect((await message(a.queuedId)).status).toBe("sent");
     // Nothing is left to send: a second run sends nothing again.
     const sentBefore = transport.outbox.length;
-    expect(await sendPending({ db, transport })).toEqual([]);
+    expect(await sendPending({ db, transport }, { caseIds })).toEqual([]);
     expect(transport.outbox).toHaveLength(sentBefore);
   });
 });

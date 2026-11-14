@@ -186,9 +186,26 @@ describe("MAIL_REDIRECT_ALL_TO", () => {
     ]);
   });
 
-  it("is a no-op when unset or blank", () => {
+  it("unset or blank is a no-op only for the fake provider", () => {
     expect(redirectRecipients([OPERATOR], {})).toEqual([OPERATOR]);
     expect(redirectRecipients([OPERATOR], { MAIL_REDIRECT_ALL_TO: "  " })).toEqual([OPERATOR]);
+    expect(redirectRecipients([OPERATOR], {}, "fake")).toEqual([OPERATOR]);
+  });
+
+  it("fails safe: a real provider outside production needs the redirect", () => {
+    for (const env of [{}, { MAIL_REDIRECT_ALL_TO: "  " }, { MAIL_PROVIDER: "gmail" }]) {
+      expect(() => redirectRecipients([OPERATOR], env, "gmail")).toThrow(/MAIL_REDIRECT_ALL_TO/);
+    }
+    // MAIL_PROVIDER from env counts when no provider name is given.
+    expect(() => redirectRecipients([OPERATOR], { MAIL_PROVIDER: "gmail" })).toThrow(
+      /MAIL_REDIRECT_ALL_TO/,
+    );
+    expect(redirectRecipients([OPERATOR], { RETREN_ENV: "production" }, "gmail")).toEqual([
+      OPERATOR,
+    ]);
+    expect(
+      redirectRecipients([OPERATOR], { MAIL_REDIRECT_ALL_TO: "equipo@retren.example" }, "gmail"),
+    ).toEqual(["equipo@retren.example"]);
   });
 
   it("an invalid redirect address throws instead of sending to the real recipient", () => {
@@ -333,14 +350,17 @@ describe("MailTransport", () => {
 
   it("the fake only records the mail and returns a fake provider id", async () => {
     const t = createFakeTransport();
-    const mail = MailMessage.parse({
-      from: "reclamaciones@retren.example",
-      to: [OPERATOR],
-      subject: "[RTN-0A1B2C3D] x",
-      text: "x",
-      messageId: "<m@retren.example>",
+    const mail = {
+      ...MailMessage.parse({
+        from: "reclamaciones@retren.example",
+        to: [OPERATOR],
+        subject: "[RTN-0A1B2C3D] x",
+        text: "x",
+        messageId: "<m@retren.example>",
+        attachments: [],
+      }),
       attachments: [],
-    });
+    };
     const a = await t.send(mail);
     const b = await t.send(mail);
     expect(a.providerId).toMatch(/^fake-/);

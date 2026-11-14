@@ -1,6 +1,6 @@
 -- Outbound (migration *_claims_outbound.sql, docs/plans/C-claims.md C3).
 begin;
-select plan(32);
+select plan(37);
 
 -- New messages columns, all nullable so C2's and C7's rows stay valid.
 select has_column('public', 'messages', c, 'messages.' || c)
@@ -22,6 +22,28 @@ set local role authenticated;
 select is((select count(*) from storage.objects where bucket_id = 'claim-documents'), 0::bigint,
   'authenticated cannot see generated documents');
 reset role;
+set local role anon;
+select throws_ok($$insert into storage.objects (bucket_id, name) values ('claim-documents', 'x/anon.pdf')$$,
+  '42501', null, 'anon cannot write generated documents');
+reset role;
+set local role authenticated;
+select throws_ok($$insert into storage.objects (bucket_id, name) values ('claim-documents', 'x/auth.pdf')$$,
+  '42501', null, 'authenticated cannot write generated documents');
+reset role;
+
+-- The outbound team-queue entries are once per case, reason, message and action (race-safe).
+select has_index('public', 'case_events', 'case_events_outbound_team_queue_once',
+  'the outbound team-queue index exists');
+insert into public.cases (id, public_ref, operator, status, submission, user_email)
+values ('00000000-0000-0000-0000-0000000003c9', 'RTN-00C30009', 'renfe', 'waiting_period', '{}',
+  'user@example.test');
+insert into public.case_events (case_id, kind, data) values ('00000000-0000-0000-0000-0000000003c9',
+  'team_queue', '{"source":"outbound","reason":"operator_inactive","action":"initial_claim"}');
+select throws_ok($$insert into public.case_events (case_id, kind, data) values ('00000000-0000-0000-0000-0000000003c9',
+  'team_queue', '{"source":"outbound","reason":"operator_inactive","action":"initial_claim"}')$$,
+  '23505', null, 'the same outbound team-queue entry cannot be written twice');
+select lives_ok($$insert into public.case_events (case_id, kind, data) values ('00000000-0000-0000-0000-0000000003c9',
+  'team_queue', '{"reason":"other"}')$$, 'other team-queue entries (C6) are not constrained');
 
 -- Server only: the API roles can't call the function; the service role can.
 create function pg_temp.sig() returns text language sql as $$

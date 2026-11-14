@@ -25,15 +25,20 @@ import {
   subjectWithRef,
   type InitialClaimRefusal,
 } from "./outbound";
-import { sendingDomain, sendQueued, type OutboundDeps, type SendQueuedResult } from "./send-queued";
+import {
+  assertSendConfig,
+  queueForTeam,
+  sendingDomain,
+  sendQueued,
+  TEAM_QUEUE_EVENT,
+  type OutboundDeps,
+  type SendQueuedResult,
+} from "./send-queued";
+import { RECHECK_MS } from "./timers";
 import { provider } from "@/shared/providers";
+import { DOCUMENTS_BUCKET, TICKET_BUCKET } from "./buckets";
 
-/** Domain A's private bucket for the original tickets (A1); `ticketPath` is a key inside it. */
-export const TICKET_BUCKET = "tickets";
-/** Private bucket for the documents Retren generates for a case (this task's migration). */
-export const DOCUMENTS_BUCKET = "claim-documents";
-/** A case_events kind the team view (C9) lists: something a person must look at. */
-export const TEAM_QUEUE_EVENT = "team_queue";
+export { DOCUMENTS_BUCKET, TICKET_BUCKET, TEAM_QUEUE_EVENT };
 /** The first timer stage (C7, d12): when the tick next looks at a sent case. */
 export const FIRST_FOLLOW_UP_DAYS = 12;
 
@@ -52,6 +57,10 @@ const TEAM_QUEUE_REASONS: readonly InitialClaimRefusal[] = [
 
 /** Sender of mail to the operators. Placeholder domain until the real one exists (Nestor). */
 export function claimsFrom(env: Record<string, string | undefined> = process.env): string {
+  // With gmail the sender is the Retren mailbox itself (Gmail rewrites any other From).
+  if (provider("MAIL_PROVIDER", env) === "gmail" && env.SMTP_USER?.trim()) {
+    return env.SMTP_USER.trim();
+  }
   return `reclamaciones@${sendingDomain(env)}`;
 }
 
@@ -156,6 +165,8 @@ export async function sendInitialClaim(
   const env = deps.env ?? process.env;
   const now = (deps.clock ?? systemClock).now();
   const providerName = deps.providerName ?? provider("MAIL_PROVIDER", env);
+  // A configuration that must never send (no redirect for a real provider) refuses before any write.
+  assertSendConfig(providerName, env);
 
   const found = await db
     .from("cases")
@@ -174,8 +185,9 @@ export async function sendInitialClaim(
     operator,
     now,
   );
-  if (refused) return refuse(db, caseId, refused);
-  if (operator.channel.type !== "email") return refuse(db, caseId, "operator_has_no_email_channel");
+  if (refused) return refuse(db, caseId, now, refused);
+  if (operator.channel.type !== "email")
+    return refuse(db, caseId, now, "operator_has_no_email_channel");
 
   const submission = IntakeSubmission.parse(c.submission);
   const eligibility = EligibilityResult.parse(c.eligibility);
@@ -199,7 +211,7 @@ export async function sendInitialClaim(
 
   // The stored ticket (domain A's private bucket).
   const stored = await db.storage.from(TICKET_BUCKET).download(submission.ticketPath);
-  if (stored.error || !stored.data) return refuse(db, caseId, "ticket_missing");
+  if (stored.error || !stored.data) return refuse(db, caseId, now, "ticket_missing");
   const ticketBytes = stored.data.size;
 
   // The generated documents, in our private bucket. Overwritten on a retry, never public.
@@ -261,27 +273,19 @@ export async function sendInitialClaim(
 async function refuse(
   db: ServiceClient,
   caseId: string,
+  now: Date,
   reason: InitialClaimRefusal,
 ): Promise<SendInitialClaimResult> {
   if (TEAM_QUEUE_REASONS.includes(reason)) {
-    // Once per case and reason: the tick may try a case every hour.
-    const seen = await db
-      .from("case_events")
-      .select("id")
-      .eq("case_id", caseId)
-      .eq("kind", TEAM_QUEUE_EVENT)
-      .eq("data->>reason", reason)
-      .eq("data->>action", "initial_claim")
-      .limit(1);
-    if (seen.error) throw seen.error;
-    if (!seen.data.length) {
-      const { error } = await db.from("case_events").insert({
-        case_id: caseId,
-        kind: TEAM_QUEUE_EVENT,
-        data: { reason, action: "initial_claim" },
-      });
-      if (error) throw error;
-    }
+    // Once per case and reason (unique index, so two ticks at once can't write it twice).
+    await queueForTeam(db, caseId, { reason, action: "initial_claim" });
+    // A person has to act: look again in a day, not every hour.
+    const later = await db
+      .from("cases")
+      .update({ next_action_at: new Date(now.getTime() + RECHECK_MS).toISOString() })
+      .eq("id", caseId)
+      .eq("status", "waiting_period");
+    if (later.error) throw later.error;
   }
   return { ok: false, reason };
 }

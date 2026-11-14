@@ -4,6 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { CaseStatus, MailMessage, OperatorPublicConfig } from "@/shared/contracts";
+import { provider } from "@/shared/providers";
 import { MAX_SENDS_PER_CASE } from "./timers";
 
 type Env = Record<string, string | undefined>;
@@ -14,7 +15,20 @@ export type OutboundRefusal =
   | "attachment_not_allowed"
   | "stale"
   | "mock_text"
-  | "transport_error";
+  | "attachment_missing"
+  | "transport_error"
+  // Something failed after the row was claimed, before the transport got the mail.
+  | "internal_error"
+  // The transport may have accepted the mail but the outcome wasn't recorded (a write failed, or
+  // a claim expired). Never resent automatically: the team decides (C9).
+  | "delivery_unknown";
+
+/** The mails the status re-check applies to (#26): the timer reminders, nothing else. */
+export const REMINDER_TEMPLATES: readonly string[] = Object.freeze([
+  "reminder_d12",
+  "reminder_d30",
+  "last_notice_d40",
+]);
 
 export type Check = { ok: true } | { ok: false; reason: OutboundRefusal };
 
@@ -97,9 +111,22 @@ export function isProduction(env: Env = process.env): boolean {
 }
 
 /** Outside production every recipient is replaced by MAIL_REDIRECT_ALL_TO when it is set. */
-export function redirectRecipients(to: readonly string[], env: Env = process.env): string[] {
+export function redirectRecipients(
+  to: readonly string[],
+  env: Env = process.env,
+  providerName: string = provider("MAIL_PROVIDER", env),
+): string[] {
+  if (isProduction(env)) return [...to];
   const redirect = env.MAIL_REDIRECT_ALL_TO?.trim();
-  if (isProduction(env) || !redirect) return [...to];
+  if (!redirect) {
+    // Fail safe: outside production a real provider never sends without the redirect.
+    if (providerName !== "fake") {
+      throw new Error(
+        `MAIL_PROVIDER=${providerName} outside production needs MAIL_REDIRECT_ALL_TO`,
+      );
+    }
+    return [...to];
+  }
   if (!z.email().safeParse(redirect).success) {
     // Never fall back to the real recipient because of a typo in the redirect.
     throw new Error("MAIL_REDIRECT_ALL_TO is not a valid email address");
@@ -243,16 +270,22 @@ export function buildMailMessage(
     messageId: string;
     thread: readonly ThreadMessage[];
     attachments: readonly AttachmentRow[];
+    /** An In-Reply-To the row already has (kept as is; the thread only fills a missing one). */
+    inReplyTo?: string | null;
+    providerName?: string;
   },
   env: Env = process.env,
 ): MailMessage {
+  const thread = threadHeaders(input.thread);
+  const inReplyTo = input.inReplyTo || thread.inReplyTo;
   return {
     from: input.from,
-    to: redirectRecipients([input.to], env),
+    to: redirectRecipients([input.to], env, input.providerName),
     subject: subjectWithRef(input.subject, input.publicRef),
     text: input.text,
     messageId: input.messageId,
-    ...threadHeaders(input.thread),
+    ...(inReplyTo && { inReplyTo }),
+    ...(thread.references && { references: thread.references }),
     attachments: input.attachments.map((a) => ({
       kind: a.kind,
       filename: a.filename,

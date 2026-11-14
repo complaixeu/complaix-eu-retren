@@ -23,6 +23,18 @@ alter table public.messages
 
 comment on column public.messages.failure_reason is 'Set with status failed by the sender (C3).';
 
+-- The team-queue entries the outbound side writes (data.source = 'outbound'): at most one per
+-- case, reason, message and action, so two ticks at once can't queue the same problem twice.
+-- C6's team-queue entries have no source and are not constrained here.
+create unique index case_events_outbound_team_queue_once
+  on public.case_events (
+    case_id,
+    (data ->> 'reason'),
+    (coalesce(data ->> 'message_id', '')),
+    (coalesce(data ->> 'action', ''))
+  )
+  where kind = 'team_queue' and data ->> 'source' = 'outbound';
+
 -- Generated documents of a case: private, no policies, so only the service role reads them.
 insert into storage.buckets (id, name, public)
 values ('claim-documents', 'claim-documents', false)
