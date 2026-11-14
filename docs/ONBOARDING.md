@@ -9,7 +9,7 @@ infrastructure: **Nestor Gomez Artiles** (GitHub `@complaix-eu`).
 | Role                         | Who                   | Can                                                                                                  |
 | ---------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------- |
 | Admin                        | Nestor Gomez Artiles  | Repo settings, branch protection, secrets, environments, Vercel, Supabase, approving protected areas |
-| Developer (GitHub **Write**) | Team `retren` members | Branches, PRs into `develop`, merging into `develop` once checks are green, reading CI logs          |
+| Developer (GitHub **Write**) | Outside collaborators | Branches, PRs into `develop`, merging into `develop` once checks are green, reading CI logs          |
 | Outside contributor          | Anyone (public repo)  | Fork + PR; their CI runs only after a maintainer approves it, never with secrets                     |
 
 Developers **do not** get, and never need: Vercel access, Supabase DB password or tokens, GitHub
@@ -17,7 +17,9 @@ secrets, admin rights. CI migrates and deploys DEV for everyone when a PR is mer
 
 ## 2. Getting access
 
-1. Ask Nestor to add your GitHub username to the `complaixeu` org team **`retren`** (Write on this repo).
+1. Ask Nestor to add your GitHub username as an **outside collaborator** with **Write** on this repo
+   (repo Settings → Collaborators and teams → Add people). Not as an org member or team: on the
+   org's paid GitHub Team plan that would cost a seat, while outside collaborators on a public repo are free.
 2. Optional, read-only DB dashboard: ask Nestor for an invite to the Supabase org **Retren** as
    Developer/Read-only.
 3. The DEV site is behind Vercel Authentication; work against localhost (section 4).
@@ -54,8 +56,9 @@ Never push to `develop` or `main` directly (both are protected). `main` is froze
 ## 5. Protected areas: Nestor's approval required
 
 Nobody, human or agent, changes CI/CD or infrastructure without **prior approval from Nestor Gomez
-Artiles**. GitHub enforces this: a PR touching any path in [`.github/CODEOWNERS`](../.github/CODEOWNERS)
-cannot merge without his review.
+Artiles**, given **before** the change is made. Reviews are not required to merge, so this is a
+rule everyone follows rather than a GitHub block: a PR touching any path in
+[`.github/CODEOWNERS`](../.github/CODEOWNERS) automatically requests his review so he sees it.
 
 Protected:
 
@@ -75,8 +78,8 @@ the daily workflow.
 1. **Its rules come from the repo.** Claude Code reads `CLAUDE.md`; Codex/Cursor and others read
    `AGENTS.md`. Both say: no CI/CD or infrastructure changes without Nestor's approval. Don't
    override or remove them in your local agent config.
-2. **Claude Code is also hard-limited** by `.claude/settings.json` (committed): it must ask before
-   editing protected files and is blocked from secrets, Vercel/Supabase remote commands, admin
+2. **Claude Code is also hard-limited** by `.claude/settings.json` (committed): it is blocked
+   from secrets, Vercel/Supabase remote commands, admin
    merges and pushes to `main`/`develop`. Do not add `allow` rules that undo this in
    `.claude/settings.local.json`.
 3. **Give it your own, narrow GitHub login**, never a shared token. A fine-grained PAT with
@@ -96,7 +99,7 @@ the daily workflow.
 ### Codex users
 
 Codex has no committed permission file like `.claude/settings.json`, so its limits come from
-`AGENTS.md` plus GitHub's enforcement (CODEOWNERS, branch protection, your narrow token). Set it
+`AGENTS.md`, branch protection and your narrow token. Set it
 up like this:
 
 - **Codex CLI / IDE:** it reads `AGENTS.md` automatically from the repo root. Keep it in a
@@ -114,7 +117,7 @@ up like this:
   Connector app on the `complaixeu` org. Only Nestor can approve that. If approved, it is
   limited to this repository. Give its environment **no secrets**: the setup script is just
   `pnpm install`, and it can run `pnpm ci:local` (no Docker there, so no `--full`). Its PRs go
-  into `develop` and need a human review like any other; it never merges.
+  into `develop` like any other; it never merges them itself.
 
 - Codex follows the same rule: if a task needs a protected change (§5), it must stop and say so.
 
@@ -140,7 +143,7 @@ git checkout feat/short-name
 git merge origin/develop          # resolve the files Git lists, then:
 git add <files> && git commit     # completes the merge
 pnpm ci:local:full                # must be green again
-git push                          # updating the branch dismisses old approvals → ask for re-review
+git push                          # CI runs again; merge once it's green
 ```
 
 The PR is squash-merged, so the merge commit doesn't show up in `develop`'s history.
@@ -151,7 +154,7 @@ The PR is squash-merged, so the merge commit doesn't show up in `develop`'s hist
 | `pnpm-lock.yaml`                        | Don't hand-edit it. Take `develop`'s version (`git checkout --theirs pnpm-lock.yaml`), run `pnpm install`, commit the regenerated lockfile. |
 | `package.json`                          | Keep both sides' dependency changes, then regenerate the lockfile as above.                                                                 |
 | **Migrations** (`supabase/migrations/`) | Two PRs can add migrations without a Git conflict and still clash. Rules below.                                                             |
-| Protected files (§5)                    | Stop. Resolve together with Nestor; his review is required anyway.                                                                          |
+| Protected files (§5)                    | Stop. Resolve together with Nestor before merging.                                                                                          |
 
 **Migrations, the one that needs care.** DEV applies migrations in timestamp order and refuses a
 migration older than the last one it already applied (`supabase db push`: "Found local migration
