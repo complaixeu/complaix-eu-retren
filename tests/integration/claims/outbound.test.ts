@@ -16,6 +16,7 @@ import { fixedClock } from "@/shared/clock";
 import type { OperatorId } from "@/shared/contracts";
 import { createServiceClient, type ServiceClient } from "@/shared/supabase/server";
 import { PII, submissionFixture } from "../../fixtures/claims/submission";
+import { waitForDb } from "../../fixtures/claims/db-ready";
 import { TICKET_PLACEHOLDER_PNG } from "../../fixtures/claims/ticket";
 
 // Outbound (plan C3) against the local Supabase: sendInitialClaim moves a ready case to `sent`
@@ -31,6 +32,7 @@ let db: ServiceClient;
 
 beforeAll(async () => {
   db = createServiceClient();
+  await waitForDb(db);
   // The tickets bucket is domain A's (A1). Until its migration lands, the test makes a private
   // one so the stored ticket can be read like the real one.
   const { data } = await db.storage.getBucket(TICKET_BUCKET);

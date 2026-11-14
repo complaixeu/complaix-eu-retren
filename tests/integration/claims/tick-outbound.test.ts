@@ -6,6 +6,7 @@ import { TICKET_BUCKET } from "@/features/claims/initial-claim";
 import { fixedClock } from "@/shared/clock";
 import { createServiceClient } from "@/shared/supabase/server";
 import { submissionFixture } from "../../fixtures/claims/submission";
+import { waitForDb } from "../../fixtures/claims/db-ready";
 import { TICKET_PLACEHOLDER_PNG } from "../../fixtures/claims/ticket";
 
 // The tick sends what is due (C3 wiring for C10's "eligible → tick → claim sent"): after the
@@ -36,6 +37,7 @@ const saved = { TICK_SECRET: process.env.TICK_SECRET, DEMO_MODE: process.env.DEM
 beforeAll(async () => {
   process.env.TICK_SECRET = SECRET;
   process.env.DEMO_MODE = "1";
+  await waitForDb(db);
   const { data } = await db.storage.getBucket(TICKET_BUCKET);
   if (!data) {
     const { error } = await db.storage.createBucket(TICKET_BUCKET, { public: false });
