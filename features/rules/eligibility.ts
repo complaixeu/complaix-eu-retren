@@ -4,7 +4,7 @@ import {
   type EligibilityInput as EligibilityInputValue,
   type EligibilityResult as EligibilityResultValue,
 } from "@/shared/contracts";
-import { getOperatorConfig, type OperatorConfig } from "@/features/rules/operator-config";
+import { getOperatorConfig, type OperatorConfig } from "./operator-config";
 
 type MadridDateTime = {
   year: number;
