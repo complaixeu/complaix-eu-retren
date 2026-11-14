@@ -49,7 +49,7 @@ pnpm ci:local:full                             # green before every push
 git push -u origin feat/short-name
 gh pr create --draft --base develop            # drafts run no CI
 gh pr ready                                    # once, when finished
-gh pr merge --squash --delete-branch           # when the check is green → DEV deploys
+gh pr merge                                    # when green: joins the merge queue → merged → DEV deploys
 ```
 
 Never push to `develop` or `main` directly (both are protected). `main` is frozen for now.

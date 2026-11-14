@@ -24,8 +24,9 @@ production. Full rules: `CLAUDE.md` (§0 first). Onboarding: `docs/ONBOARDING.md
 
 - Branch from an up-to-date `develop` (`feat/`, `fix/`, `chore/`, `docs/`, `test/`); PRs target
   `develop` only. Never push to `develop` or `main`, never force-push, never merge with admin
-  rights, never approve PRs. No review is required to merge into `develop`; a PR may merge
-  once CI is green, unless it touches a protected area (then only with Nestor's approval).
+  rights, never approve PRs. No review is required: once CI is green, `gh pr merge` puts the PR
+  in `develop`'s merge queue, which re-checks it on the latest `develop` and squash-merges it.
+  Protected areas only with Nestor's approval.
 - Before every push: `pnpm ci:local:full` (whole CI/CD against a local Supabase in Docker and
   localhost). Without Docker, e.g. Codex cloud: `pnpm ci:local` and say that `--full` was not run.
 - Open PRs as drafts: `gh pr create --draft --base develop`; `gh pr ready` once when finished.
