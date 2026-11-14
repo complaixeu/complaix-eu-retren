@@ -9,12 +9,15 @@ import {
   closeAt,
   dueActions,
   remindersRunIn,
+  stageWindow,
   type TimerActionKind,
   type TimerCase,
 } from "@/features/claims/timers";
 
 // The §6 schedule (ARCHITECTURE §6, plan C7, README §4 item 6), with a fixed clock.
-const SENT_AT = "2026-01-10T09:00:00.000Z";
+// Sent in February, so day 30 is already one calendar month later and the d30 reminder is due on
+// day 30 itself (the 31-day-month rule has its own tests below).
+const SENT_AT = "2026-02-10T09:00:00.000Z";
 const DAY = 86_400_000;
 const day = (n: number, extraMs = 0) =>
   fixedClock(new Date(Date.parse(SENT_AT) + n * DAY + extraMs));
@@ -51,6 +54,14 @@ describe("dueActions: day boundaries for a case nobody answered", () => {
       to: "sent",
       countsTowardCap: true,
     });
+  });
+
+  it("with an action, nextActionAt is the look after it, whether the tick sends it or skips it", () => {
+    // The tick uses the same value when it cannot send (inactive operator), so the case moves on.
+    expect(dueActions(sentCase(), day(12).now()).nextActionAt).toEqual(day(30).now());
+    expect(dueActions(sentCase({ fired: ["reminder_d12"] }), day(30).now()).nextActionAt).toEqual(
+      day(40).now(),
+    );
   });
 
   it("day 15: the friendly reminder is still due if it has not gone out", () => {
@@ -149,11 +160,38 @@ describe("dueActions: day boundaries for a case nobody answered", () => {
     expect(r.nextActionAt).toBeNull();
   });
 
-  it("3 months is calendar months, clamped to the end of a shorter month", () => {
-    expect(closeAt(SENT_AT).toISOString()).toBe("2026-04-10T09:00:00.000Z");
+  it("3 months is calendar months in Europe/Madrid, clamped to the end of a shorter month", () => {
+    // 10:00 CET on 10 Feb → 10:00 CEST on 10 May (08:00Z).
+    expect(closeAt(SENT_AT).toISOString()).toBe("2026-05-10T08:00:00.000Z");
     expect(addMonths(new Date("2026-11-30T10:00:00.000Z"), 3).toISOString()).toBe(
       "2027-02-28T10:00:00.000Z",
     );
+  });
+
+  it("the 3-month close counts Madrid months: sent 2026-04-30T22:30Z (1 May in Madrid) closes 2026-07-31T22:30Z", () => {
+    expect(closeAt("2026-04-30T22:30:00.000Z").toISOString()).toBe("2026-07-31T22:30:00.000Z");
+    const c = sentCase({ sentAt: "2026-04-30T22:30:00.000Z", status: "reply_received" });
+    expect(dueActions(c, new Date("2026-07-31T22:29:59.999Z")).actions).toEqual([]);
+    expect(dueActions(c, new Date("2026-07-31T22:30:00.000Z")).actions.map((a) => a.kind)).toEqual([
+      "close_3m",
+    ]);
+  });
+
+  it("the d30 legal reminder waits for one calendar month: sent 2026-03-10T09:00Z → not before 2026-04-10", () => {
+    const sentAt = "2026-03-10T09:00:00.000Z"; // 10:00 CET
+    const c = sentCase({ sentAt, fired: ["reminder_d12"], sendCount: 2 });
+    const day30 = new Date(Date.parse(sentAt) + 30 * DAY); // 2026-04-09T09:00Z
+    const r = dueActions(c, day30);
+    expect(r.actions).toEqual([]);
+    // One month later in Madrid: 10:00 CEST on 10 April.
+    expect(r.nextActionAt?.toISOString()).toBe("2026-04-10T08:00:00.000Z");
+    expect(stageWindow("reminder_d30", sentAt).start.toISOString()).toBe(
+      "2026-04-10T08:00:00.000Z",
+    );
+    expect(dueActions(c, new Date("2026-04-10T07:59:59.999Z")).actions).toEqual([]);
+    expect(dueActions(c, new Date("2026-04-10T08:00:00.000Z")).actions.map((a) => a.kind)).toEqual([
+      "reminder_d30",
+    ]);
   });
 
   it("each reminder fires at most once", () => {
@@ -190,7 +228,38 @@ describe("dueActions: pause and resume", () => {
   it("waiting on the user (waiting_user) pauses the schedule", () => {
     const r = dueActions(sentCase({ status: "waiting_user" }), day(12).now());
     expect(r.actions).toEqual([]);
-    expect(r.nextActionAt?.toISOString()).toBe(closeAt(SENT_AT).toISOString());
+  });
+
+  // A paused, stopped or capped case is looked at again on schedule, so a resume is never lost:
+  // the next unfired stage's start, or a daily look while its window is open.
+  it("while paused inside an open window the case is looked at again the next day", () => {
+    expect(dueActions(sentCase({ status: "waiting_user" }), day(12).now()).nextActionAt).toEqual(
+      day(13).now(),
+    );
+    expect(dueActions(sentCase({ paused: true }), day(15).now()).nextActionAt).toEqual(
+      day(16).now(),
+    );
+  });
+
+  it("while paused between windows the next look is the next stage's start, not the close", () => {
+    const r = dueActions(sentCase({ status: "waiting_user" }), day(20).now());
+    expect(r.nextActionAt).toEqual(stageWindow("reminder_d30", SENT_AT).start);
+    const p = dueActions(sentCase({ paused: true, fired: ["reminder_d12"] }), day(31).now());
+    expect(p.nextActionAt).toEqual(day(32).now());
+  });
+
+  it("waiting_user on day 12, back in sent on day 14: d30, d40 and d45 still fire", () => {
+    const waiting = sentCase({ status: "waiting_user" });
+    expect(dueActions(waiting, day(12).now()).actions).toEqual([]);
+    let c = sentCase({ status: "sent" }); // resumed on day 14
+    expect(kinds(c, day(14))).toEqual(["reminder_d12"]);
+    c = { ...c, fired: ["reminder_d12"], sendCount: 2 };
+    expect(dueActions(c, day(14).now()).nextActionAt).toEqual(day(30).now());
+    expect(kinds(c, day(30))).toEqual(["reminder_d30"]);
+    c = { ...c, fired: [...c.fired, "reminder_d30"], sendCount: 3 };
+    expect(kinds(c, day(40))).toEqual(["last_notice_d40"]);
+    c = { ...c, fired: [...c.fired, "last_notice_d40"], sendCount: 4 };
+    expect(kinds(c, day(45))).toEqual(["escalation_d45"]);
   });
 
   it("the paused flag pauses the schedule", () => {
@@ -279,13 +348,40 @@ describe("dueActions: the per-case send cap", () => {
     expect(kinds(capped, day(12))).toEqual([]);
     expect(kinds({ ...capped, fired: ["reminder_d12"] }, day(30))).toEqual([]);
     expect(kinds({ ...capped, status: "denied" }, day(45))).toEqual([]);
-    expect(dueActions(capped, day(12).now()).nextActionAt).toEqual(closeAt(SENT_AT));
+    expect(kinds(capped, day(45))).toEqual([]);
+    // Still looked at again (daily inside the open window), never parked until the close.
+    expect(dueActions(capped, day(12).now()).nextActionAt).toEqual(day(13).now());
   });
 
-  it("one below the cap still sends", () => {
-    expect(kinds(sentCase({ sendCount: MAX_SENDS_PER_CASE - 1 }), day(12))).toEqual([
+  it("the last slot is reserved for the escalation: reminders stop at MAX − 1", () => {
+    expect(kinds(sentCase({ sendCount: MAX_SENDS_PER_CASE - 2 }), day(12))).toEqual([
       "reminder_d12",
     ]);
+    expect(kinds(sentCase({ sendCount: MAX_SENDS_PER_CASE - 1 }), day(12))).toEqual([]);
+    expect(
+      kinds(sentCase({ sendCount: MAX_SENDS_PER_CASE - 1, fired: ["reminder_d12"] }), day(30)),
+    ).toEqual([]);
+    expect(kinds(sentCase({ sendCount: MAX_SENDS_PER_CASE - 1 }), day(45))).toEqual([
+      "escalation_d45",
+    ]);
+  });
+
+  it("5 sends before d40: the d40 notice is skipped, the d45 escalation still goes", () => {
+    // For example the initial claim, d12, d30, one insistence and one forwarded user document:
+    // the d40 notice would take the slot reserved for the escalation.
+    const c = sentCase({ sendCount: 5, fired: ["reminder_d12", "reminder_d30"] });
+    expect(kinds(c, day(40))).toEqual([]);
+    expect(kinds(c, day(45))).toEqual(["escalation_d45"]);
+  });
+
+  it("6 sends before d45: no escalation mail; the case closes at 3 months", () => {
+    const c = sentCase({
+      sendCount: 6,
+      fired: ["reminder_d12", "reminder_d30", "last_notice_d40"],
+    });
+    expect(kinds(c, day(45))).toEqual([]);
+    expect(kinds(c, day(60))).toEqual([]);
+    expect(kinds(c, fixedClock(closeAt(SENT_AT)))).toEqual(["close_3m"]);
   });
 
   it("the cap never blocks the 3-month close", () => {
