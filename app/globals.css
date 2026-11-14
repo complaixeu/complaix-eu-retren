@@ -1,34 +1,117 @@
 /*
- * Design tokens (docs/plans/A-intake.md, "Design direction"). Every colour, space, radius, shadow
- * and type size in app/ and shared/ui/ comes from here; add a token instead of a one-off value.
- * Contrast is AA in both themes: text ≥ 4.5:1 on its surface, input borders ≥ 3:1.
+ * Self-hosted fonts (the Complaix app's faces, public/fonts/). The latin and latin-ext subsets
+ * only; the browser fetches just the ones a page uses. Licences: public/fonts/OFL-*.txt.
+ * The "Fallback" faces are size-adjusted Arial, so text does not jump while the web fonts load.
+ */
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("/fonts/dm-sans-v17-latin-ext.woff2") format("woff2");
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("/fonts/dm-sans-v17-latin.woff2") format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 600 900;
+  font-display: swap;
+  src: url("/fonts/montserrat-v31-latin-ext.woff2") format("woff2");
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 600 900;
+  font-display: swap;
+  src: url("/fonts/montserrat-v31-latin.woff2") format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Montserrat Fallback";
+  src: local("Arial");
+  ascent-override: 85.79%;
+  descent-override: 22.25%;
+  line-gap-override: 0%;
+  size-adjust: 112.83%;
+}
+
+@font-face {
+  font-family: "DM Sans Fallback";
+  src: local("Arial");
+  ascent-override: 94.9%;
+  descent-override: 29.66%;
+  line-gap-override: 0%;
+  size-adjust: 104.53%;
+}
+
+/*
+ * Design tokens (docs/plans/A-intake.md, "Design direction"). The look is the Complaix app's:
+ * zinc neutrals, a near-black primary for actions, one blue accent for focus and the current step.
+ * Every colour, space, radius, shadow and type size in app/ and shared/ui/ comes from here; add a
+ * token instead of a one-off value. Contrast is AA in both themes: text >= 4.5:1 on its surface,
+ * input borders and the focus ring >= 3:1 (tests/unit/design pins this).
  */
 :root {
   color-scheme: light;
 
-  /* Neutral ramp, slightly cool */
-  --color-bg: #f3f5f7;
+  /* Neutrals (zinc) */
+  --color-bg: #fafafa;
   --color-surface: #ffffff;
-  --color-surface-sunken: #eef1f4;
-  --color-border: #d6dbe1;
-  --color-border-strong: #8a94a1;
-  --color-text: #1b2430;
-  --color-text-muted: #556070;
+  --color-surface-sunken: #f4f4f5;
+  --color-border: #e4e4e7;
+  --color-border-strong: #71717a;
+  --color-divider: #f0f0f2;
+  --color-text: #09090b;
+  --color-text-strong: #3f3f46;
+  --color-text-secondary: #52525b;
+  --color-text-muted: #6b6b74;
+  --color-placeholder: #71717a;
 
-  /* The one accent: actions and the current step */
-  --color-primary: #0a6b60;
-  --color-primary-hover: #08574e;
-  --color-on-primary: #ffffff;
-  --color-primary-soft: #e3f2ef;
-  --color-focus: #0a6b60;
+  /* Primary: near-black, for buttons and the main action on a screen */
+  --color-primary: #18181b;
+  --color-primary-hover: #27272a;
+  --color-on-primary: #fafafa;
+
+  /* Accent: links, focus, the current step, checked choices */
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-accent-soft: #eff6ff;
+  --color-accent-line: #bfdbfe;
+  --color-focus: #2563eb;
 
   /* Meaning only */
-  --color-danger: #b42318;
-  --color-danger-soft: #fdecea;
-  --color-success: #1e6b3a;
-  --color-success-soft: #e7f4ec;
-  --color-warning: #8a5300;
-  --color-warning-soft: #fdf3e1;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fef2f2;
+  --color-danger-line: #fecaca;
+  --color-warning: #a16207;
+  --color-warning-soft: #fffbeb;
+  --color-warning-line: #fde68a;
+  --color-success: #15803d;
+  --color-success-soft: #f0fdf4;
+  --color-success-line: #bbf7d0;
 
   /* Spacing, 4 px grid */
   --space-1: 0.25rem;
@@ -40,75 +123,133 @@
   --space-7: 3rem;
   --space-8: 4rem;
 
-  /* Radius: controls, cards */
+  /* Radius: controls 6px, cards 8px */
   --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
   --radius-full: 999px;
 
-  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.05), 0 1px 3px rgb(16 24 40 / 0.07);
+  /* Flat: a hairline at most, the border does the work */
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04);
 
-  /* Type: one system stack, a short scale, weights 400 / 500 / 600 */
+  /* Type: DM Sans for text, Montserrat for headings; weights 400 / 500 / 600 (headings 600 / 700) */
   --font-sans:
-    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    "DM Sans", "DM Sans Fallback", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  --font-heading:
+    "Montserrat", "Montserrat Fallback", system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --heading-tracking: -0.015em;
   --text-sm: 0.875rem;
-  --text-base: 1rem;
-  --text-lg: 1.125rem;
-  --text-xl: 1.375rem;
-  --text-2xl: 1.75rem;
+  --text-base: 0.9375rem;
+  --text-lg: 1.0625rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
   --leading-tight: 1.25;
   --leading-normal: 1.5;
   --weight-regular: 400;
   --weight-medium: 500;
   --weight-semibold: 600;
+  --weight-bold: 700;
 
   /* Component sizes */
   --border-width: 1px;
-  --stepper-dot: 12px;
+  --stepper-dot: 10px;
   --stepper-line: 2px;
   --stepper-halo: 3px;
-  --alert-stripe: 4px;
+  --alert-stripe: 2px;
   --choice-size: 20px;
   --ticket-preview-height: 20rem;
   --ticket-badge-size: 3rem;
 
-  /* Layout */
+  /* Layout. --tap-target is the minimum for anything tappable; --control-height is the height of
+     buttons and inputs (48 px, the Complaix button size). */
   --content-width: 36rem;
-  --tap-target: 48px;
-  --focus-ring: 3px solid var(--color-focus);
+  --tap-target: 44px;
+  --control-height: 48px;
+  --focus-ring: 2px solid var(--color-focus);
 
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --duration-fast: 120ms;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --color-bg: #0f1419;
-    --color-surface: #171d24;
-    --color-surface-sunken: #1e252e;
-    --color-border: #2c353f;
-    --color-border-strong: #6b7684;
-    --color-text: #e6eaef;
-    --color-text-muted: #a3adb9;
+    --color-bg: #09090b;
+    --color-surface: #18181b;
+    --color-surface-sunken: #27272a;
+    --color-border: #27272a;
+    --color-border-strong: #71717a;
+    --color-divider: #1f1f23;
+    --color-text: #fafafa;
+    --color-text-strong: #e4e4e7;
+    --color-text-secondary: #a1a1aa;
+    --color-text-muted: #8b8b94;
+    --color-placeholder: #8b8b94;
 
-    --color-primary: #4fc2b1;
-    --color-primary-hover: #6fd0c2;
-    --color-on-primary: #06201c;
-    --color-primary-soft: #123a35;
-    --color-focus: #4fc2b1;
+    --color-primary: #fafafa;
+    --color-primary-hover: #e4e4e7;
+    --color-on-primary: #09090b;
 
-    --color-danger: #ff8a80;
-    --color-danger-soft: #3a1714;
-    --color-success: #6fcf8a;
-    --color-success-soft: #13301c;
-    --color-warning: #f0b45a;
-    --color-warning-soft: #33260f;
+    --color-accent: #60a5fa;
+    --color-accent-hover: #93c5fd;
+    --color-accent-soft: #172554;
+    --color-accent-line: #1e3a8a;
+    --color-focus: #60a5fa;
+
+    --color-danger: #fca5a5;
+    --color-danger-soft: #2a1214;
+    --color-danger-line: #7f1d1d;
+    --color-warning: #fcd34d;
+    --color-warning-soft: #2a1f08;
+    --color-warning-line: #713f12;
+    --color-success: #86efac;
+    --color-success-soft: #0f2417;
+    --color-success-line: #14532d;
 
     /* Depth comes from surface steps and borders in the dark */
     --shadow-card: none;
   }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-bg: #09090b;
+  --color-surface: #18181b;
+  --color-surface-sunken: #27272a;
+  --color-border: #27272a;
+  --color-border-strong: #71717a;
+  --color-divider: #1f1f23;
+  --color-text: #fafafa;
+  --color-text-strong: #e4e4e7;
+  --color-text-secondary: #a1a1aa;
+  --color-text-muted: #8b8b94;
+  --color-placeholder: #8b8b94;
+
+  --color-primary: #fafafa;
+  --color-primary-hover: #e4e4e7;
+  --color-on-primary: #09090b;
+
+  --color-accent: #60a5fa;
+  --color-accent-hover: #93c5fd;
+  --color-accent-soft: #172554;
+  --color-accent-line: #1e3a8a;
+  --color-focus: #60a5fa;
+
+  --color-danger: #fca5a5;
+  --color-danger-soft: #2a1214;
+  --color-danger-line: #7f1d1d;
+  --color-warning: #fcd34d;
+  --color-warning-soft: #2a1f08;
+  --color-warning-line: #713f12;
+  --color-success: #86efac;
+  --color-success-soft: #0f2417;
+  --color-success-line: #14532d;
+
+  --shadow-card: none;
 }
 
 *,
@@ -128,7 +269,17 @@ body {
   color: var(--color-text);
   font-family: var(--font-sans);
   font-size: var(--text-base);
+  font-weight: var(--weight-regular);
   line-height: var(--leading-normal);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  letter-spacing: var(--heading-tracking);
+  line-height: var(--leading-tight);
 }
 
 h1,
@@ -139,7 +290,7 @@ p {
 }
 
 a {
-  color: var(--color-primary);
+  color: var(--color-accent);
 }
 
 :focus-visible {
@@ -165,6 +316,7 @@ a {
   left: var(--space-2);
   z-index: 10;
   padding: var(--space-3) var(--space-4);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
   color: var(--color-text);

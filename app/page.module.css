@@ -1,11 +1,11 @@
 .page {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
   width: 100%;
   max-width: calc(var(--content-width) + 2 * var(--space-4));
+  min-height: 100dvh;
   margin-inline: auto;
-  padding: var(--space-6) var(--space-4) var(--space-7);
+  padding: var(--space-7) var(--space-4) var(--space-7);
 }
 
 .page:focus {
@@ -14,7 +14,7 @@
 
 @media (min-width: 40rem) {
   .page {
-    padding-top: var(--space-8);
+    justify-content: center;
   }
 }
 
@@ -25,19 +25,21 @@
 }
 
 .brand {
-  font-size: var(--text-lg);
-  font-weight: var(--weight-semibold);
+  color: var(--color-text-secondary);
+  font-family: var(--font-heading);
+  font-size: var(--text-base);
+  font-weight: 700;
+  letter-spacing: var(--heading-tracking);
   line-height: var(--leading-tight);
 }
 
 .headline {
   font-size: var(--text-2xl);
-  font-weight: var(--weight-semibold);
-  line-height: var(--leading-tight);
+  font-weight: 600;
 }
 
 .lead {
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   font-size: var(--text-lg);
 }
 
@@ -48,82 +50,5 @@
 @media (min-width: 40rem) {
   .cta {
     align-self: flex-start;
-    min-width: 12rem;
   }
-}
-
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-  padding: var(--space-5);
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-card);
-}
-
-@media (min-width: 40rem) {
-  .card {
-    padding: var(--space-6);
-  }
-}
-
-.cardTitle {
-  font-size: var(--text-lg);
-  font-weight: var(--weight-medium);
-}
-
-/* The same stations-on-a-line as the stepper, drawn vertically */
-.line {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.stop {
-  position: relative;
-  padding-left: var(--space-6);
-}
-
-/* From this stop's dot to the next one's, through the centre of the dots */
-.stop:not(:last-child)::before {
-  --dot-centre: calc(var(--space-1) + var(--stepper-dot) / 2);
-  content: "";
-  position: absolute;
-  top: var(--dot-centre);
-  bottom: calc(-1 * var(--space-5) - var(--dot-centre));
-  left: calc((var(--stepper-dot) - var(--stepper-line)) / 2);
-  width: var(--stepper-line);
-  background: var(--color-primary);
-}
-
-.dot {
-  position: absolute;
-  top: var(--space-1);
-  left: 0;
-  width: var(--stepper-dot);
-  height: var(--stepper-dot);
-  border: var(--stepper-line) solid var(--color-primary);
-  border-radius: var(--radius-full);
-  background: var(--color-surface);
-  z-index: 1;
-}
-
-.stopTitle {
-  font-weight: var(--weight-medium);
-}
-
-.stopText {
-  color: var(--color-text-muted);
-}
-
-.note {
-  padding-top: var(--space-4);
-  border-top: var(--border-width) solid var(--color-border);
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
 }
