@@ -17,7 +17,8 @@ in section 6.
 | B. Rules & docs  | [B-rules-docs.md](B-rules-docs.md) | Codex                      | the Codex developer             |
 | C. Claims engine | [C-claims.md](C-claims.md)         | Claude Code + Codex review | the developer with Codex review |
 
-Read with: [../ARCHITECTURE.md](../ARCHITECTURE.md) (what we build),
+**Before you start, do [PREFLIGHT.md](PREFLIGHT.md)** (`pnpm preflight <A|B|C> --gate` must say
+READY). Read with: [../ARCHITECTURE.md](../ARCHITECTURE.md) (what we build),
 [../TEAM_WORKFLOW.md](../TEAM_WORKFLOW.md) (domains, folders, worktrees, sync, local-Supabase
 lock), `CLAUDE.md`/`AGENTS.md` (rules that always win).
 
@@ -180,6 +181,10 @@ Loop until every task in the plan is done:
 other two people see progress without asking.
 
 ## 6. When an agent must stop and ask its human
+
+Stopping means: comment on the domain's tracker issue **@mentioning the owner** (handle in
+TEAM_WORKFLOW §1) with the reason, what was tried and what is needed. Then carry on with every
+other task that isn't blocked. Never sit idle, and never work around the reason.
 
 - It needs a change in a protected area, `shared/contracts/` (beyond adding optional fields),
   another domain's folder, or a new paid service.

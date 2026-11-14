@@ -196,4 +196,5 @@ Update the owner names in section 1 when people change domains.
 ## 9. Autonomous execution
 
 Each domain has a task-by-task plan with the tests every step must pass, and the kickoff prompts
-that let each harness spawn its own subagents: [plans/README.md](plans/README.md).
+that let each harness spawn its own subagents: [plans/README.md](plans/README.md). Before leaving
+the agents running, every person does [plans/PREFLIGHT.md](plans/PREFLIGHT.md).

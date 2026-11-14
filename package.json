@@ -25,7 +25,8 @@
     "test:db": "supabase test db --network-id retren_local",
     "test:integration": "vitest run --config vitest.integration.config.mts",
     "test:e2e": "playwright test",
-    "test:all": "bash scripts/test-all.sh"
+    "test:all": "bash scripts/test-all.sh",
+    "preflight": "bash scripts/preflight.sh"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",
