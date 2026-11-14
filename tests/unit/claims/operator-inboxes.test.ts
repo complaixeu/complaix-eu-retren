@@ -74,6 +74,16 @@ describe("MAIL_OPERATOR_INBOXES: malformed values throw", () => {
     expect(() => operatorInboxes(env(`iryo:${SMTP}`))).toThrow(/SMTP_USER/);
   });
 
+  it("an inbox equal to IMAP_USER throws too: the mailbox we read is never a tester inbox", () => {
+    const withImap = { SMTP_USER: SMTP, IMAP_USER: "imap-reader@example.test" };
+    expect(() =>
+      operatorInboxes({ ...withImap, MAIL_OPERATOR_INBOXES: "iryo:IMAP-reader@example.test" }),
+    ).toThrow(/MAIL_OPERATOR_INBOXES/);
+    expect(() =>
+      operatorInboxes({ ...withImap, MAIL_OPERATOR_INBOXES: "iryo:imap-reader@example.test" }),
+    ).toThrow(/IMAP_USER/);
+  });
+
   it("the error message never contains an address", () => {
     const bad = [
       `iryo:${IRYO},renfe:not-an-address`,

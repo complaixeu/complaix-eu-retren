@@ -6,7 +6,7 @@ import { buildMailMessage, redirectRecipients } from "@/features/claims/outbound
 // rule, pure. Every address is a placeholder (example.com); real ones never live in the repo.
 const RENFE_TESTER = "renfe-tester@example.com";
 const IRYO_TESTER = "iryo-tester@example.com";
-const OPERATOR = "atencion.cliente@iryo.eu";
+const OPERATOR = "operator@iryo.example";
 const USER = "viajero.prueba@example.test";
 const TEAM = "equipo@retren.example";
 const SMTP = "retren@retren.example";
@@ -75,7 +75,7 @@ describe("outbound: operator mail goes to the operator's mapped inbox", () => {
   });
 });
 
-describe("inbound: a mapped inbox counts as the operator's verified address, for that operator", () => {
+describe("inbound: a mapped inbox is the operator's only with an aligned DKIM pass for its domain", () => {
   const iryoCase: InboundCase = {
     id: "11111111-1111-4111-8111-111111111111",
     public_ref: "RTN-AB12",
@@ -90,7 +90,8 @@ describe("inbound: a mapped inbox counts as the operator's verified address, for
     status: "sent",
     user_email: USER,
   };
-  const iryoThread: RouteInput = {
+  // The tester's own domain passed DKIM at the receiving server (aligned with its From).
+  const signed: RouteInput = {
     from: IRYO_TESTER,
     refs: ["RTN-AB12"],
     threadCase: iryoCase,
@@ -100,28 +101,51 @@ describe("inbound: a mapped inbox counts as the operator's verified address, for
     refOperatorDomain: "iryo.eu",
     operatorInbox: IRYO_TESTER,
     refOperatorInbox: IRYO_TESTER,
-    dkimPassDomains: [],
+    dkimPassDomains: ["example.com"],
   };
+  const unsigned: RouteInput = { ...signed, dkimPassDomains: [] };
 
-  it("a mapped inbox is accepted for its operator's case, by thread", () => {
-    expect(decideRoute(iryoThread)).toEqual({ kind: "operator", case: iryoCase });
+  it("by thread: the exact From with an aligned DKIM pass is accepted for its operator's case", () => {
+    expect(decideRoute(signed)).toEqual({ kind: "operator", case: iryoCase });
   });
 
-  it("a mapped inbox is accepted by the subject reference alone, without a DKIM pass", () => {
-    expect(decideRoute({ ...iryoThread, threadCase: null })).toEqual({
+  it("by thread: the same From without a DKIM pass is a wrong sender, never accepted", () => {
+    expect(decideRoute({ ...unsigned, threadCase: iryoCase })).toEqual({
+      kind: "queue",
+      case: iryoCase,
+      reason: "wrong_sender",
+    });
+  });
+
+  it("by reference alone: a forged From with no DKIM is spoofed, never accepted (negative)", () => {
+    const forged = { ...unsigned, threadCase: null };
+    expect(decideRoute(forged)).toEqual({
+      kind: "queue",
+      case: iryoCase,
+      reason: "spoofed_reference",
+    });
+  });
+
+  it("by reference alone: the exact From with an aligned DKIM pass is accepted (positive)", () => {
+    expect(decideRoute({ ...signed, threadCase: null })).toEqual({
       kind: "operator",
       case: iryoCase,
     });
   });
 
+  it("a DKIM pass for another domain does not vouch for the tester inbox", () => {
+    const otherDomain = { ...signed, threadCase: null, dkimPassDomains: ["iryo.eu"] };
+    expect(decideRoute(otherDomain).kind).toBe("queue");
+  });
+
   it("the Renfe tester inbox is never accepted as Iryo's", () => {
-    const byThread = { ...iryoThread, from: RENFE_TESTER };
+    const byThread = { ...signed, from: RENFE_TESTER, dkimPassDomains: ["example.com"] };
     expect(decideRoute(byThread)).toEqual({
       kind: "queue",
       case: iryoCase,
       reason: "wrong_sender",
     });
-    const byRef = { ...iryoThread, threadCase: null, from: RENFE_TESTER };
+    const byRef = { ...signed, threadCase: null, from: RENFE_TESTER };
     expect(decideRoute(byRef)).toEqual({
       kind: "queue",
       case: iryoCase,
@@ -131,7 +155,7 @@ describe("inbound: a mapped inbox counts as the operator's verified address, for
 
   it("the Iryo tester inbox is accepted for a Renfe case only when Renfe maps it", () => {
     const renfeMapped: RouteInput = {
-      ...iryoThread,
+      ...signed,
       from: RENFE_TESTER,
       threadCase: renfeCase,
       refCases: [renfeCase],
@@ -151,13 +175,13 @@ describe("inbound: a mapped inbox counts as the operator's verified address, for
   });
 
   it("an address that is not mapped still fails the sender check", () => {
-    const stranger = { ...iryoThread, from: "someone@example.org" };
+    const stranger = { ...signed, from: "someone@example.org", dkimPassDomains: ["example.org"] };
     expect(decideRoute(stranger)).toEqual({
       kind: "queue",
       case: iryoCase,
       reason: "wrong_sender",
     });
-    const strangerByRef = { ...iryoThread, threadCase: null, from: "someone@example.org" };
+    const strangerByRef = { ...stranger, threadCase: null };
     expect(decideRoute(strangerByRef)).toEqual({
       kind: "queue",
       case: iryoCase,
@@ -166,7 +190,7 @@ describe("inbound: a mapped inbox counts as the operator's verified address, for
   });
 
   it("a mapped inbox does not unlock a subject that names two cases", () => {
-    const twoRefs = { ...iryoThread, threadCase: null, refs: ["RTN-AB12", "RTN-CD34"] };
+    const twoRefs = { ...signed, threadCase: null, refs: ["RTN-AB12", "RTN-CD34"] };
     expect(decideRoute(twoRefs).kind).toBe("queue");
   });
 });

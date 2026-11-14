@@ -96,10 +96,18 @@ function replyFrom(
   from: string,
   c: Seeded,
   fixture = "approved-01.eml",
+  opts: { dkim?: boolean } = {},
 ): { raw: Buffer; messageId: string } {
   const messageId = `<fixture-${randomUUID()}@mail.example>`;
+  // The receiving server's own result: the sender's domain passed DKIM, aligned with its From.
+  // A forged From carries no such header (`dkim: false`).
+  const domain = from.split("@")[1];
+  const auth =
+    opts.dkim === false
+      ? ""
+      : `\nAuthentication-Results: mx.google.com; dkim=pass header.d=${domain}`;
   const text = readFileSync(join(MAIL_FIXTURES_DIR, "iryo", fixture), "utf8")
-    .replace(/^Message-ID: .*$/m, `Message-ID: ${messageId}`)
+    .replace(/^Message-ID: .*$/m, `Message-ID: ${messageId}${auth}`)
     .replace(/^From: .*$/m, `From: ${from}`)
     .replace(/\[RTN-[A-Z0-9]+\]/g, `[${c.ref}]`)
     .replace(/<claim-rtn-[a-z0-9]+@retren\.example>/g, c.claimMessageId);
@@ -166,6 +174,21 @@ describe("per-operator test inboxes on the inbound path (local Supabase)", () =>
       category: "approved",
     });
     expect((await caseState(c.id)).status).toBe("resolved");
+  });
+
+  it("a forged From with the tester's address and no DKIM pass is never accepted (team queue)", async () => {
+    const c = await seedCase("iryo");
+    const m = replyFrom(IRYO_TESTER, c, "approved-01.eml", { dkim: false });
+    const classify = vi.spyOn(deps.classifier!, "forCase");
+    expect(await ingestMessage(m.raw, deps)).toMatchObject({
+      outcome: "team_queue",
+      caseId: c.id,
+      reason: "wrong_sender",
+    });
+    expect(classify).not.toHaveBeenCalled();
+    const s = await caseState(c.id);
+    expect(s.status).toBe("sent");
+    expect(s.outbox).toEqual([]);
   });
 
   it("an unmapped sender is still rejected, even on a case whose operator has a test inbox", async () => {

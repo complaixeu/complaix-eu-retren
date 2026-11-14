@@ -241,7 +241,8 @@ export interface RouteInput {
   refOperatorDomain: string | null;
   /**
    * The operator's test inbox (MAIL_OPERATOR_INBOXES, outside production) for the thread case, and
-   * for refCases[0]: a mail from it counts as the operator's verified address, for that operator.
+   * for refCases[0]: a mail from it counts as the operator's only with an aligned DKIM pass for
+   * the inbox's own domain (inboxVouched). Never on the From header alone.
    */
   operatorInbox?: string | null;
   refOperatorInbox?: string | null;
@@ -294,9 +295,19 @@ function aligned(signing: string, domain: string): boolean {
   return signing === domain || signing.endsWith(`.${domain}`);
 }
 
-/** Whether `from` is exactly the operator's test inbox (MAIL_OPERATOR_INBOXES) for that operator. */
-function isOperatorInbox(from: string, inbox: string | null | undefined): boolean {
-  return !!inbox && lower(from) === lower(inbox);
+/**
+ * Whether `from` is the operator's test inbox (MAIL_OPERATOR_INBOXES, for that operator only) AND
+ * the receiving server vouched for the inbox's own domain: an aligned DKIM pass. The From header
+ * alone proves nothing (anyone can write it), so a forged From without that pass is not the inbox.
+ */
+function inboxVouched(
+  from: string,
+  inbox: string | null | undefined,
+  dkimPassDomains: readonly string[],
+): boolean {
+  if (!inbox || lower(from) !== lower(inbox)) return false;
+  const inboxDomain = lower(inbox.split("@")[1] ?? "");
+  return dkimPassDomains.some((d) => aligned(lower(d), inboxDomain));
 }
 
 /**
@@ -322,7 +333,7 @@ export function decideRoute(r: RouteInput): Route {
     const trusted =
       r.refs.length === 1 &&
       r.refCases.length === 1 &&
-      (viaDkim || isOperatorInbox(r.from, r.refOperatorInbox));
+      (viaDkim || inboxVouched(r.from, r.refOperatorInbox, r.dkimPassDomains));
     if (!trusted) return { kind: "queue", case: c, reason: "spoofed_reference" };
     return { kind: "operator", case: c };
   }
@@ -336,7 +347,7 @@ export function decideRoute(r: RouteInput): Route {
   }
   const domain = lower(r.from).split("@")[1];
   const fromDomain = !!r.operatorDomain && domain === lower(r.operatorDomain);
-  if (!fromDomain && !isOperatorInbox(r.from, r.operatorInbox)) {
+  if (!fromDomain && !inboxVouched(r.from, r.operatorInbox, r.dkimPassDomains)) {
     return { kind: "queue", case: c, reason: "wrong_sender" };
   }
   return { kind: "operator", case: c };

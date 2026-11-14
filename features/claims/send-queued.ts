@@ -207,10 +207,12 @@ async function deliver(
   const norm = (a: string) => a.trim().toLowerCase();
   const user = norm(c.user_email);
   const operatorAddress = operator.channel.type === "email" ? norm(operator.channel.address) : null;
+  // The operator's test inbox (DEV) counts as the operator here too: its replies are in the thread.
+  const testInbox = operatorInboxes(env).get(OperatorId.parse(c.operator));
   const fromOperator = (x: { direction: string; from_address: string }) =>
     x.direction === "inbound" &&
-    operatorAddress !== null &&
-    norm(x.from_address) === operatorAddress;
+    ((operatorAddress !== null && norm(x.from_address) === operatorAddress) ||
+      (testInbox !== undefined && norm(x.from_address) === testInbox));
   const sentTo = (
     x: { direction: string; status: string; to_address: string },
     to: string | null,
