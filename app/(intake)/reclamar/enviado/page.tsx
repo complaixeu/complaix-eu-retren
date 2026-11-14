@@ -10,8 +10,8 @@ export default function EnviadoPage() {
     <>
       <StepPage step="enviado">
         <p className={styles.lead}>
-          Solo te escribiremos si la compañía pide algo que únicamente tienes tú, o cuando haya un
-          resultado.
+          Aquí verás si tu viaje tiene derecho a indemnización y cuándo se enviará la reclamación a
+          la compañía.
         </p>
         <PendingNotice />
       </StepPage>

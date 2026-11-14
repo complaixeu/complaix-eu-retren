@@ -13,7 +13,11 @@ export interface FieldProps {
   label: ReactNode;
   /** Shown under the control. */
   help?: ReactNode;
-  /** Shown in red right under the control; also marks it `aria-invalid`. */
+  /**
+   * Shown in red right under the control; also marks it `aria-invalid`. Not a live region: on a
+   * failed submit, show an `Alert tone="error"` summary and call `focusFirstInvalid(form)`, so the
+   * user hears one message and lands on the field to fix.
+   */
   error?: ReactNode;
   /** Adds "(opcional)" to the label. Fields are required by default. */
   optional?: boolean;
@@ -40,6 +44,23 @@ export function Field({ label, help, error, optional, id, children }: FieldProps
         "aria-describedby": aria.describedBy,
         "aria-invalid": aria.invalid,
       })}
+      <FieldMessages aria={aria} help={help} error={error} />
+    </div>
+  );
+}
+
+/** The error (first) and help text under a control or group. */
+export function FieldMessages({
+  aria,
+  help,
+  error,
+}: {
+  aria: ReturnType<typeof fieldAria>;
+  help?: ReactNode;
+  error?: ReactNode;
+}) {
+  return (
+    <>
       {error != null && (
         <p id={aria.errorId} className={styles.error}>
           {error}
@@ -50,11 +71,18 @@ export function Field({ label, help, error, optional, id, children }: FieldProps
           {help}
         </p>
       )}
-    </div>
+    </>
   );
 }
 
+const cx = (...names: (string | undefined)[]) => names.filter(Boolean).join(" ");
+
 /** A text input styled to match `Field`. */
 export function Input({ className, ...props }: ComponentProps<"input">) {
-  return <input className={[styles.input, className].filter(Boolean).join(" ")} {...props} />;
+  return <input className={cx(styles.input, className)} {...props} />;
+}
+
+/** A file input styled to match `Field`; use it inside a `Field`. Preview is up to the page. */
+export function FileInput({ className, ...props }: Omit<ComponentProps<"input">, "type">) {
+  return <input type="file" className={cx(styles.input, styles.file, className)} {...props} />;
 }

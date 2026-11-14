@@ -12,7 +12,7 @@ const steps = [
     heading: "Autoriza a ReTren a reclamar por ti",
     label: "Autorización",
   },
-  { path: "/reclamar/enviado", heading: "Hemos recibido tu reclamación", label: "Envío" },
+  { path: "/reclamar/enviado", heading: "Resultado de tu reclamación", label: "Envío" },
 ] as const;
 
 const stepper = (page: Page) =>
@@ -58,6 +58,12 @@ for (const [index, step] of steps.entries()) {
   });
 }
 
+test("/reclamar starts the flow at its first step", async ({ page }) => {
+  await page.goto("/reclamar");
+  await expect(page).toHaveURL(/\/reclamar\/foto$/);
+  await expect(page.getByRole("heading", { level: 1, name: steps[0].heading })).toBeVisible();
+});
+
 test("completed steps are links back, later steps are not", async ({ page }) => {
   await page.goto("/reclamar/preguntas");
   const nav = stepper(page);
@@ -92,6 +98,7 @@ test.describe("keyboard", () => {
     await expect(skip).toBeVisible();
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/#contenido$/);
+    await expect(page.getByRole("main")).toBeFocused();
   });
 
   test("the flow can be walked with Tab and Enter, with a visible focus ring", async ({ page }) => {
@@ -138,6 +145,17 @@ test.describe("mobile, 375 px wide", () => {
       expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
     });
   }
+
+  test("the stepper's links back are large enough to tap", async ({ page }) => {
+    await page.goto("/reclamar/mandato");
+    const links = stepper(page).getByRole("link");
+    await expect(links).toHaveCount(3);
+    for (const link of await links.all()) {
+      const box = await link.boundingBox();
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+      expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
+    }
+  });
 });
 
 test("dark mode uses its own surface colours", async ({ page }) => {

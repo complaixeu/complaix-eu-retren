@@ -9,7 +9,7 @@ export const INTAKE_STEPS = [
   { id: "revision", label: "Revisión", title: "Revisa los datos del billete" },
   { id: "preguntas", label: "Preguntas", title: "Unas preguntas sobre el viaje" },
   { id: "mandato", label: "Autorización", title: "Autoriza a ReTren a reclamar por ti" },
-  { id: "enviado", label: "Envío", title: "Hemos recibido tu reclamación" },
+  { id: "enviado", label: "Envío", title: "Resultado de tu reclamación" },
 ] as const;
 
 export type IntakeStep = (typeof INTAKE_STEPS)[number];

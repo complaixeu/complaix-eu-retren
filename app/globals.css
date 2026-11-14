@@ -62,6 +62,14 @@
   --weight-medium: 500;
   --weight-semibold: 600;
 
+  /* Component sizes */
+  --border-width: 1px;
+  --stepper-dot: 12px;
+  --stepper-line: 2px;
+  --stepper-halo: 3px;
+  --alert-stripe: 4px;
+  --choice-size: 20px;
+
   /* Layout */
   --content-width: 36rem;
   --tap-target: 48px;

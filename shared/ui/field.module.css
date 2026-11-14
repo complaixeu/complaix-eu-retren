@@ -17,7 +17,7 @@
   width: 100%;
   min-height: var(--tap-target);
   padding: var(--space-3);
-  border: 1px solid var(--color-border-strong);
+  border: var(--border-width) solid var(--color-border-strong);
   border-radius: var(--radius-md);
   background: var(--color-surface);
   color: var(--color-text);
@@ -43,4 +43,79 @@
 .help {
   color: var(--color-text-muted);
   font-size: var(--text-sm);
+}
+
+/* File input: the native control, with its button styled like a secondary Button */
+.file {
+  padding: var(--space-2);
+  cursor: pointer;
+}
+
+.file::file-selector-button {
+  min-height: calc(var(--tap-target) - 2 * var(--space-2) - 2 * var(--border-width));
+  margin-right: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+
+/* Fieldset with radios or checkboxes */
+.fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.legend {
+  margin-bottom: var(--space-1);
+  padding: 0;
+  font-weight: var(--weight-medium);
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+}
+
+.choiceRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--tap-target);
+}
+
+.choiceInput {
+  flex: none;
+  width: var(--choice-size);
+  height: var(--choice-size);
+  margin: 0;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.choiceLabel {
+  flex: 1;
+  padding-block: var(--space-2);
+  cursor: pointer;
+}
+
+.choiceMessages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-left: calc(var(--choice-size) + var(--space-3));
 }

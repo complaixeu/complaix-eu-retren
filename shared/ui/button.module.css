@@ -6,7 +6,7 @@
   width: 100%;
   min-height: var(--tap-target);
   padding: var(--space-3) var(--space-5);
-  border: 1px solid transparent;
+  border: var(--border-width) solid transparent;
   border-radius: var(--radius-md);
   font: inherit;
   font-weight: var(--weight-medium);
@@ -63,4 +63,8 @@
   background: var(--color-surface-sunken);
   border-color: var(--color-border);
   color: var(--color-text-muted);
+}
+
+.button[aria-busy="true"] {
+  cursor: progress;
 }
