@@ -14,7 +14,11 @@ import {
   injectOperatorReply,
   runDemoTick,
 } from "../../../features/claims/team";
-import { TEAM_SESSION_COOKIE, signInTeamMember } from "../../../features/claims/team-access";
+import {
+  TEAM_SESSION_COOKIE,
+  revokeTeamSession,
+  signInTeamMember,
+} from "../../../features/claims/team-access";
 import { ingestForTeam } from "../../../features/claims/team-ingest";
 import { LOGIN_PATH, requireTeam } from "./_lib/session";
 
@@ -49,6 +53,10 @@ export async function login(formData: FormData): Promise<void> {
 
 export async function logout(): Promise<void> {
   const jar = await cookies();
+  // Revoke the session on the Auth server too, not only forget it in this browser.
+  await revokeTeamSession(jar.get(TEAM_SESSION_COOKIE)?.value, (jwt) =>
+    createServiceClient().auth.admin.signOut(jwt),
+  );
   jar.delete(TEAM_SESSION_COOKIE);
   jar.delete(DEMO_CLOCK_COOKIE);
   redirect(LOGIN_PATH);
@@ -88,6 +96,8 @@ export async function injectReply(formData: FormData): Promise<void> {
 
 export async function advanceClock(formData: FormData): Promise<void> {
   await requireTeam();
+  // The clock moves for the case being viewed only.
+  const caseId = str(formData, "caseId");
   const jar = await cookies();
   const next = (() => {
     try {
@@ -100,8 +110,8 @@ export async function advanceClock(formData: FormData): Promise<void> {
     backTo(formData),
     async () => {
       assertDemoMode();
-      if (!next) throw new TeamActionError("bad_input");
-      await runDemoTick(createServiceClient(), next);
+      if (!next || !/^[0-9a-f-]{36}$/i.test(caseId)) throw new TeamActionError("bad_input");
+      await runDemoTick(createServiceClient(), next, caseId);
       return { aviso: "reloj_movido" };
     },
     async () => {
@@ -119,9 +129,11 @@ export async function advanceClock(formData: FormData): Promise<void> {
 
 export async function resetClock(formData: FormData): Promise<void> {
   await requireTeam();
-  assertDemoMode();
-  (await cookies()).delete(DEMO_CLOCK_COOKIE);
-  redirect(withParam(backTo(formData), "aviso", "reloj_reiniciado"));
+  await perform(backTo(formData), async () => {
+    assertDemoMode();
+    (await cookies()).delete(DEMO_CLOCK_COOKIE);
+    return { aviso: "reloj_reiniciado" };
+  });
 }
 
 export async function resolveItem(formData: FormData): Promise<void> {

@@ -53,3 +53,9 @@ alter table public.messages add column team_resolved_at timestamptz;
 
 comment on column public.messages.team_resolved_at is
   'Set when the team marked an inbound mail with no case as handled (C9). Never cleared.';
+
+-- A queue item is resolved once, even when two people click at the same moment: the database
+-- refuses the second `team_queue_resolved` event for the same item (23505).
+create unique index case_events_team_resolved_once
+  on public.case_events (case_id, (data ->> 'resolves'))
+  where kind = 'team_queue_resolved';

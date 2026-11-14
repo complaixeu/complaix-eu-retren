@@ -46,9 +46,11 @@ export class TeamActionError extends Error {
   }
 }
 
-/** The simulated mailbox and the demo clock exist only with DEMO_MODE=1 (never in production). */
+/** The simulated mailbox and the demo clock exist only with DEMO_MODE=1 and fake mail. */
 export function assertDemoMode(env: Env = process.env): void {
   if (env.DEMO_MODE !== "1") throw new TeamActionError("demo_only");
+  // Even in the demo: a real mail provider could send what these tools queue.
+  if ((env.MAIL_PROVIDER ?? "fake") !== "fake") throw new TeamActionError("demo_only");
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -329,6 +331,8 @@ export async function resolveQueueItem(
     kind: TEAM_RESOLVED_EVENT,
     data: { resolves: item.id, resolved_kind: event.data.kind },
   });
+  // The unique index is the real guard against two people resolving at once.
+  if (error?.code === "23505") throw new TeamActionError("already_resolved");
   if (error) throw error;
 }
 
@@ -370,20 +374,22 @@ export type ClockResult = {
 const MAX_ROUNDS = 6;
 
 /**
- * Runs the tick at `now` (timer actions, then the initial claims and every queued mail, like
- * POST /api/claims/tick). A case moves one stage per round, so it repeats until nothing is due:
+ * Runs the tick at `now` for ONE case (the one being viewed; other cases are never touched):
+ * timer actions, then its initial claim and queued mail, like POST /api/claims/tick. A case moves one stage per round, so it repeats until nothing is due:
  * moving the clock to d30 queues the d12 and the d30 reminder, as hourly ticks would have.
  */
 export async function runDemoTick(
   db: ServiceClient,
   now: Date,
+  caseId: string,
   env: Env = process.env,
 ): Promise<ClockResult> {
   assertDemoMode(env);
+  if (!UUID_RE.test(caseId)) throw new TeamActionError("bad_input");
   const out: ClockResult = { now: now.toISOString(), timerActions: 0, initialClaims: 0, sent: 0 };
   for (let i = 0; i < MAX_ROUNDS; i++) {
-    const tick = await runTick(db, now);
-    const outbound = await runOutbound(db, now, { env });
+    const tick = await runTick(db, now, { caseId });
+    const outbound = await runOutbound(db, now, { env }, undefined, { caseId });
     out.timerActions += tick.actions.length;
     out.initialClaims += outbound.initialClaims.filter((c) => c.ok).length;
     out.sent += outbound.sent.filter((s) => s.status === "sent").length;

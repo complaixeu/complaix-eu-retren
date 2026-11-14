@@ -7,7 +7,11 @@ const mocks = vi.hoisted(() => ({
   token: undefined as string | undefined,
   cookieSet: vi.fn(),
   cookieDelete: vi.fn(),
-  createServiceClient: vi.fn(() => ({ from: vi.fn() })),
+  signOut: vi.fn(async () => ({ error: null })),
+  createServiceClient: vi.fn(() => ({
+    from: vi.fn(),
+    auth: { admin: { signOut: mocks.signOut } },
+  })),
   injectOperatorReply: vi.fn(async () => ({ outcome: "applied" })),
   resolveQueueItem: vi.fn(async () => undefined),
   runDemoTick: vi.fn(async () => ({})),
@@ -72,7 +76,7 @@ async function actions() {
 describe("without a team session", () => {
   const calls: [string, Record<string, string>][] = [
     ["injectReply", { caseId: ID, fixture: "approved-01" }],
-    ["advanceClock", { days: "30" }],
+    ["advanceClock", { days: "30", caseId: ID }],
     ["resetClock", {}],
     ["resolveItem", { id: ID, source: "event" }],
   ];
@@ -106,6 +110,24 @@ describe("without a team session", () => {
   });
 });
 
+describe("logout", () => {
+  it("revokes the session on the Auth server and clears the cookies", async () => {
+    mocks.token = "good";
+    const a = await actions();
+    await expect(a.logout()).rejects.toThrow("REDIRECT /equipo/entrar");
+    expect(mocks.signOut).toHaveBeenCalledWith("good");
+    expect(mocks.cookieDelete).toHaveBeenCalledWith("retren_team_at");
+  });
+
+  it("clears the cookies even when the revoke fails", async () => {
+    mocks.token = "good";
+    mocks.signOut.mockRejectedValueOnce(new Error("down"));
+    const a = await actions();
+    await expect(a.logout()).rejects.toThrow("REDIRECT /equipo/entrar");
+    expect(mocks.cookieDelete).toHaveBeenCalledWith("retren_team_at");
+  });
+});
+
 describe("with a team session", () => {
   beforeEach(() => {
     mocks.token = "good";
@@ -132,13 +154,30 @@ describe("with a team session", () => {
     expect(mocks.injectOperatorReply).not.toHaveBeenCalled();
   });
 
+  it("does not move the clock without a case", async () => {
+    const a = await actions();
+    await expect(a.advanceClock(form({ days: "30" }))).rejects.toThrow("?error=bad_input");
+    expect(mocks.runDemoTick).not.toHaveBeenCalled();
+  });
+
   it("does not move the clock outside DEMO_MODE, and ignores a bad step", async () => {
     const a = await actions();
-    await expect(a.advanceClock(form({ days: "0" }))).rejects.toThrow("?error=bad_input");
+    await expect(a.advanceClock(form({ days: "0", caseId: ID }))).rejects.toThrow(
+      "?error=bad_input",
+    );
     process.env.DEMO_MODE = "0";
-    await expect(a.advanceClock(form({ days: "30" }))).rejects.toThrow("?error=demo_only");
+    await expect(a.advanceClock(form({ days: "30", caseId: ID }))).rejects.toThrow(
+      "?error=demo_only",
+    );
     expect(mocks.runDemoTick).not.toHaveBeenCalled();
     expect(mocks.cookieSet).not.toHaveBeenCalled();
+  });
+
+  it("answers a reset outside DEMO_MODE with an error redirect, not a crash", async () => {
+    process.env.DEMO_MODE = "0";
+    const a = await actions();
+    await expect(a.resetClock(form({}))).rejects.toThrow("REDIRECT /equipo?error=demo_only");
+    expect(mocks.cookieDelete).not.toHaveBeenCalled();
   });
 
   it("only goes back to the team pages, whatever `back` says", async () => {
@@ -153,8 +192,12 @@ describe("with a team session", () => {
 
   it("moves the clock forward and keeps the demo clock in this session's cookie", async () => {
     const a = await actions();
-    await expect(a.advanceClock(form({ days: "30" }))).rejects.toThrow("?aviso=reloj_movido");
+    await expect(a.advanceClock(form({ days: "30", caseId: ID }))).rejects.toThrow(
+      "?aviso=reloj_movido",
+    );
     expect(mocks.runDemoTick).toHaveBeenCalledTimes(1);
+    // Scoped to the case that was being viewed.
+    expect(mocks.runDemoTick).toHaveBeenCalledWith(expect.anything(), expect.any(Date), ID);
     expect(mocks.cookieSet).toHaveBeenCalledWith(
       "retren_demo_now",
       expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),

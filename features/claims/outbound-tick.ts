@@ -41,11 +41,13 @@ export async function runOutbound(
   now: Date,
   deps: Omit<OutboundDeps, "db" | "clock"> = {},
   limit = OUTBOUND_TICK_LIMIT,
+  /** Only this case's initial claim and queued mail (the team view's demo clock). */
+  scope: { caseId?: string } = {},
 ): Promise<OutboundTickResult> {
   const result: OutboundTickResult = { initialClaims: [], sent: [] };
   const opts: OutboundDeps = { ...deps, db, clock: fixedClock(now) };
 
-  const due = await db
+  let dueQuery = db
     .from("cases")
     .select("id")
     .eq("status", "waiting_period")
@@ -55,6 +57,8 @@ export async function runOutbound(
     .or(`next_action_at.is.null,next_action_at.lte.${now.toISOString()}`)
     .order("earliest_send_at", { ascending: true })
     .limit(limit);
+  if (scope.caseId) dueQuery = dueQuery.eq("id", scope.caseId);
+  const due = await dueQuery;
   if (due.error) throw due.error;
 
   for (const { id } of due.data) {
@@ -69,7 +73,10 @@ export async function runOutbound(
   }
 
   try {
-    for (const r of await sendPending(opts, { limit })) {
+    for (const r of await sendPending(opts, {
+      limit,
+      ...(scope.caseId && { caseIds: [scope.caseId] }),
+    })) {
       result.sent.push({
         messageId: r.messageId,
         status: r.result.status,

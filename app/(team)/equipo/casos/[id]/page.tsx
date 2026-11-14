@@ -1,12 +1,19 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { createServiceClient } from "@/shared/supabase/server";
 import { Button } from "@/shared/ui";
-import { getCaseView, listFixtures } from "../../../../../features/claims/team";
+import {
+  DEMO_CLOCK_COOKIE,
+  demoNow,
+  getCaseView,
+  listFixtures,
+} from "../../../../../features/claims/team";
 import { injectReply } from "../../actions";
 import { isDemo, requireTeam } from "../../_lib/session";
+import { ClockPanel } from "../../_components/clock-panel";
 import { dateTime, reasonLabel, statusLabel } from "../../_components/labels";
 import { Notice } from "../../_components/notice";
 import { ResolveForm } from "../../_components/resolve-form";
@@ -35,7 +42,9 @@ async function CaseDetail({
   if (!view) notFound();
   const { case: c } = view;
   const back = `/equipo/casos/${c.id}`;
-  const fixtures = isDemo() ? listFixtures(c.operator) : [];
+  const demo = isDemo();
+  const fixtures = demo ? listFixtures(c.operator) : [];
+  const now = demoNow((await cookies()).get(DEMO_CLOCK_COOKIE)?.value);
 
   return (
     <>
@@ -115,6 +124,8 @@ async function CaseDetail({
           </p>
         </section>
       )}
+
+      {demo && <ClockPanel now={now.toISOString()} back={back} caseId={c.id} />}
 
       <section aria-labelledby="mensajes" className={styles.card}>
         <h2 id="mensajes" className={styles.subtitle}>

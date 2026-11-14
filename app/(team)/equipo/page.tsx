@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 import { Suspense } from "react";
 import Link from "next/link";
 import { createServiceClient } from "@/shared/supabase/server";
 import { Button } from "@/shared/ui";
-import { DEMO_CLOCK_COOKIE, demoNow, listCases, listQueue } from "../../../features/claims/team";
+import { listCases, listQueue } from "../../../features/claims/team";
 import { logout } from "./actions";
-import { isDemo, requireTeam } from "./_lib/session";
-import { ClockPanel } from "./_components/clock-panel";
+import { requireTeam } from "./_lib/session";
 import { dateTime, reasonLabel, statusLabel } from "./_components/labels";
 import { Notice } from "./_components/notice";
 import { ResolveForm } from "./_components/resolve-form";
@@ -31,8 +29,6 @@ async function Queue({ searchParams }: Pick<PageProps<"/equipo">, "searchParams"
 
   const db = createServiceClient();
   const [queue, cases] = await Promise.all([listQueue(db), listCases(db)]);
-  const demo = isDemo();
-  const now = demoNow((await cookies()).get(DEMO_CLOCK_COOKIE)?.value);
 
   return (
     <>
@@ -100,8 +96,6 @@ async function Queue({ searchParams }: Pick<PageProps<"/equipo">, "searchParams"
           </div>
         )}
       </section>
-
-      {demo && <ClockPanel now={now.toISOString()} back="/equipo" />}
 
       <section aria-labelledby="casos" className={styles.card}>
         <h2 id="casos" className={styles.subtitle}>

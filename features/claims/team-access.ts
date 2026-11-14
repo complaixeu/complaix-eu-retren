@@ -64,6 +64,23 @@ export async function verifyTeamToken(
 }
 
 /**
+ * Ends a session on the Auth server, so the token stops working even if someone copied it
+ * (admin sign-out revokes the session the token belongs to). Never throws: logging out always
+ * clears the cookie, and an expired token has nothing left to revoke.
+ */
+export async function revokeTeamSession(
+  token: string | undefined,
+  revoke: (jwt: string) => Promise<unknown>,
+): Promise<void> {
+  if (!token) return;
+  try {
+    await revoke(token);
+  } catch {
+    // Nothing more to do: the cookie is cleared by the caller.
+  }
+}
+
+/**
  * Signs in with email and password. Returns the token only for an allowlisted user; a wrong
  * password and an address that is not on the list look the same to the caller.
  */

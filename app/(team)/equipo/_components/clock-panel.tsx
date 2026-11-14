@@ -3,7 +3,7 @@ import { advanceClock, resetClock } from "../actions";
 import styles from "../team.module.css";
 
 /** The demo clock: moves "now" forward for the tick (the real clock is never touched). */
-export function ClockPanel({ now, back }: { now: string; back: string }) {
+export function ClockPanel({ now, back, caseId }: { now: string; back: string; caseId: string }) {
   const shown = new Date(now).toLocaleString("es-ES", {
     dateStyle: "long",
     timeStyle: "short",
@@ -19,10 +19,11 @@ export function ClockPanel({ now, back }: { now: string; back: string }) {
       </p>
       <p className={styles.muted}>
         Al adelantarlo se ejecuta el ciclo de plazos (recordatorios, escalada) y se envía lo
-        pendiente, igual que cada hora en el sistema real.
+        pendiente de este caso, igual que cada hora en el sistema real. Los demás casos no se tocan.
       </p>
       <form action={advanceClock} className={styles.inline}>
         <input type="hidden" name="back" value={back} />
+        <input type="hidden" name="caseId" value={caseId} />
         <label className={styles.label}>
           Días a adelantar
           <input

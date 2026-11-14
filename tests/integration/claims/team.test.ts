@@ -304,16 +304,19 @@ describe("injectOperatorReply", () => {
 });
 
 describe("runDemoTick", () => {
-  it("is demo only", async () => {
-    await expect(runDemoTick(db, new Date(), { DEMO_MODE: "0" })).rejects.toMatchObject({
-      code: "demo_only",
-    });
+  it("is demo only, and never with a real mail provider", async () => {
+    const c = await seedCase("sent", 0);
+    for (const env of [{ DEMO_MODE: "0" }, { DEMO_MODE: "1", MAIL_PROVIDER: "gmail" }]) {
+      await expect(runDemoTick(db, new Date(), c.id, env)).rejects.toMatchObject({
+        code: "demo_only",
+      });
+    }
   });
 
-  it("moved to d30, queues and sends the reminder due for a case sent today", async () => {
+  it("moved to d30, queues and sends the reminder due for the case viewed", async () => {
     const c = await seedCase("sent", 0);
     const now = new Date(Date.now() + 30 * DAY + 3_600_000);
-    const out = await runDemoTick(db, now, DEMO);
+    const out = await runDemoTick(db, now, c.id, DEMO);
     expect(out.timerActions).toBeGreaterThanOrEqual(1);
 
     const messages = await db
@@ -328,5 +331,42 @@ describe("runDemoTick", () => {
     expect(messages.data?.filter((m) => m.template?.startsWith("reminder_"))).toSatisfy(
       (rows: { status: string }[]) => rows.every((r) => r.status === "sent"),
     );
+  });
+
+  it("touches only that case: another case's due reminder and queued mail stay as they are", async () => {
+    const x = await seedCase("sent", 0);
+    const y = await seedCase("sent", 0);
+    // Y already has mail waiting in the outbox.
+    const { error } = await db.from("messages").insert({
+      case_id: y.id,
+      direction: "outbound",
+      from_address: "avisos@retren.invalid",
+      to_address: PII.email,
+      subject: `[${y.ref}] Aviso`,
+      message_id: `<${randomUUID()}@retren.example>`,
+      status: "queued",
+      template: "user_request_document",
+      body_text: "x",
+    });
+    if (error) throw error;
+
+    await runDemoTick(db, new Date(Date.now() + 30 * DAY + 3_600_000), x.id, DEMO);
+
+    const mine = await db.from("messages").select("template").eq("case_id", x.id);
+    expect(mine.data?.map((m) => m.template)).toContain("reminder_d30");
+
+    const theirs = await db
+      .from("messages")
+      .select("template, status")
+      .eq("case_id", y.id)
+      .eq("direction", "outbound");
+    expect(theirs.data?.map((m) => [m.template, m.status]).sort()).toEqual([
+      ["initial_claim", "sent"],
+      ["user_request_document", "queued"],
+    ]);
+    const events = await db.from("case_events").select("kind").eq("case_id", y.id);
+    expect(events.data?.some((e) => e.kind === "timer_action")).toBe(false);
+    const row = await db.from("cases").select("send_count, status").eq("id", y.id).single();
+    expect(row.data).toEqual({ send_count: 1, status: "sent" });
   });
 });

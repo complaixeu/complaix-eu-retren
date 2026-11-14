@@ -1,6 +1,6 @@
 -- The team view's allowlist (migration *_claims_team_view.sql, docs/plans/C-claims.md C9).
 begin;
-select plan(21);
+select plan(26);
 
 select has_table('public', 'team_members', 'team_members exists');
 select ok((select relrowsecurity from pg_class where oid = 'public.team_members'::regclass),
@@ -62,6 +62,26 @@ select is(public.is_team_member(), false, 'the email claim alone proves nothing:
 set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-0000000000c1","email":"Equipo.Uno@Retren.test","role":"authenticated"}';
 select is(public.is_team_member(), true, 'the match is case-insensitive');
 reset role;
+
+-- A queue item is resolved once: the second resolution is refused by the database.
+insert into public.cases (id, operator, status, submission, user_email)
+values ('00000000-0000-0000-0000-0000000000d1', 'iryo', 'sent', '{}', 'x@example.test'),
+       ('00000000-0000-0000-0000-0000000000d2', 'iryo', 'sent', '{}', 'x@example.test');
+select lives_ok($$insert into public.case_events (case_id, kind, data)
+  values ('00000000-0000-0000-0000-0000000000d1', 'team_queue_resolved', '{"resolves":"e1"}')$$,
+  'a queue item can be resolved');
+select throws_ok($$insert into public.case_events (case_id, kind, data)
+  values ('00000000-0000-0000-0000-0000000000d1', 'team_queue_resolved', '{"resolves":"e1"}')$$,
+  '23505', null, 'resolving the same item twice is refused');
+select lives_ok($$insert into public.case_events (case_id, kind, data)
+  values ('00000000-0000-0000-0000-0000000000d1', 'team_queue_resolved', '{"resolves":"e2"}')$$,
+  'another item of the same case can be resolved');
+select lives_ok($$insert into public.case_events (case_id, kind, data)
+  values ('00000000-0000-0000-0000-0000000000d2', 'team_queue_resolved', '{"resolves":"e1"}')$$,
+  'the same id on another case is not a clash');
+select lives_ok($$insert into public.case_events (case_id, kind, data)
+  values ('00000000-0000-0000-0000-0000000000d1', 'message_sent', '{"resolves":"e1"}')$$,
+  'other event kinds are not constrained');
 
 select * from finish();
 rollback;

@@ -134,22 +134,28 @@ test("an operator reply that asks for the IBAN moves the case to waiting_user an
   await expect(messages(page).getByText("facilite el IBAN")).toBeVisible();
 });
 
-test("moving the clock to day 30 queues and sends a reminder", async ({ page }) => {
-  const { id, ref } = await seedSentCase();
+test("moving the clock to day 30 queues and sends a reminder, for the case viewed only", async ({
+  page,
+}) => {
+  const other = await seedSentCase();
+  const { ref } = await seedSentCase();
   await signIn(page, member);
   await page.getByRole("link", { name: ref }).click();
   await expect(messages(page)).not.toContainText("reminder_");
 
-  await page.goto("/equipo");
   await page.getByLabel("Días a adelantar").fill("30");
   await page.getByRole("button", { name: "Adelantar el reloj" }).click();
   await expect(page.getByRole("status")).toContainText("Reloj adelantado");
 
-  await page.goto(`/equipo/casos/${id}`);
   await expect(messages(page)).toContainText("reminder_d30");
   await expect(messages(page)).toContainText("sent");
-  // The demo clock belongs to this session and is shown on the queue page.
-  await page.goto("/equipo");
+
+  // Another case, equally due, was not touched.
+  await page.goto(`/equipo/casos/${other.id}`);
+  await expect(heading(page, `Caso ${other.ref}`)).toBeVisible();
+  await expect(messages(page)).not.toContainText("reminder_");
+
+  // The demo clock belongs to this session and is shown on the case page.
   const expected = new Date(Date.now() + 30 * DAY).toLocaleDateString("es-ES", {
     dateStyle: "long",
     timeZone: "Europe/Madrid",

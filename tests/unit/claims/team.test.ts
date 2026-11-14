@@ -41,6 +41,13 @@ describe("assertDemoMode", () => {
       expect(() => assertDemoMode(env)).toThrow(TeamActionError);
     }
   });
+
+  it("refuses a real mail provider, even in DEMO_MODE", () => {
+    expect(() => assertDemoMode({ DEMO_MODE: "1", MAIL_PROVIDER: "fake" })).not.toThrow();
+    for (const MAIL_PROVIDER of ["gmail", "other"]) {
+      expect(() => assertDemoMode({ DEMO_MODE: "1", MAIL_PROVIDER })).toThrow(TeamActionError);
+    }
+  });
 });
 
 describe("the demo clock", () => {
