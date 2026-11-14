@@ -166,6 +166,28 @@ export type Database = {
         };
         Relationships: [];
       };
+      claims_mail_poll_state: {
+        Row: {
+          last_uid: number;
+          mailbox: string;
+          uid_validity: number;
+          updated_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          last_uid: number;
+          mailbox: string;
+          uid_validity: number;
+          updated_at?: string;
+        };
+        Update: {
+          last_uid?: number;
+          mailbox?: string;
+          uid_validity?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       messages: {
         Row: {
           body_text: string | null;
@@ -178,6 +200,7 @@ export type Database = {
           from_address: string;
           id: string;
           in_reply_to: string | null;
+          inbound_queue_reason: string | null;
           message_id: string | null;
           provider_id: string | null;
           raw_path: string | null;
@@ -201,6 +224,7 @@ export type Database = {
           from_address: string;
           id?: string;
           in_reply_to?: string | null;
+          inbound_queue_reason?: string | null;
           message_id?: string | null;
           provider_id?: string | null;
           raw_path?: string | null;
@@ -223,6 +247,7 @@ export type Database = {
           from_address?: string;
           id?: string;
           in_reply_to?: string | null;
+          inbound_queue_reason?: string | null;
           message_id?: string | null;
           provider_id?: string | null;
           raw_path?: string | null;
@@ -312,6 +337,16 @@ export type Database = {
           p_reason: string;
         };
         Returns: boolean;
+      };
+      claims_record_inbound: {
+        Args: {
+          p_case_id: string;
+          p_expected_status: Database["public"]["Enums"]["case_status"];
+          p_message: Json;
+          p_queue_reason: string;
+          p_to_status: Database["public"]["Enums"]["case_status"];
+        };
+        Returns: Json;
       };
       claims_send_initial_claim: {
         Args: {
