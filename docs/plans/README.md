@@ -201,7 +201,10 @@ other task that isn't blocked. Never sit idle, and never work around the reason.
 
 ## 7. Prompts
 
-### Kickoff (the developer pastes this once)
+### Kickoff
+
+**Normally you don't paste anything: `pnpm empezar` builds and sends these prompts
+(PREFLIGHT.md §4).** They are here for reference, and in case you need to start by hand.
 
 Claude Code (A or C):
 
