@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { fullTicket, manualExtraction, partialExtraction } from "../../fixtures/intake/extraction";
-import { completeReview, draftData, seedDraftData, uploadPlaceholderTicket } from "./draft-helpers";
+import { completeReview, draftData, seedDraftData, uploadPlaceholderTicket } from "./support/draft";
 
 // [A4] Review screen: every field of the ticket is editable, the ones the extraction couldn't
 // read are marked and asked for, the localizador must be confirmed explicitly, and the reviewed
