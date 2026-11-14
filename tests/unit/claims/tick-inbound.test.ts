@@ -17,6 +17,7 @@ vi.mock("@/features/claims/tick", async (orig) => ({
   }),
 }));
 vi.mock("@/features/claims/outbound-tick", () => ({
+  outboundLimitFromEnv: () => 100,
   runOutbound: vi.fn(async () => {
     order.push("outbound");
     return { initialClaims: [], sent: [] };
