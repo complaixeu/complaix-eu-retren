@@ -1,0 +1,18 @@
+From: Soporte <soporte@correo.example>
+To: Retren Reclamaciones <reclamaciones@retren.example>
+Subject: Re: Reclamacion por retraso [RTN-T023]
+Date: Mon, 02 Nov 2026 10:23:00 +0100
+Message-ID: <fixture-wrong-sender-02@mail.example>
+In-Reply-To: <claim-rtn-t023@retren.example>
+References: <claim-rtn-t023@retren.example>
+X-Retren-Golden-Accept: asks_for_data, other
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Hola,
+
+Necesitamos que nos facilite el IBAN de su cuenta para tramitar el pago.
+
+Un saludo,
+Atención al Cliente (texto de prueba ficticio)
