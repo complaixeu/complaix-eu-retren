@@ -41,12 +41,18 @@ cleanup() {
   if [ "$supabase_up" = 1 ] && [ "$keep" = 0 ]; then
     pnpm exec supabase stop --no-backup >/dev/null 2>&1 || true
   fi
-  for f in "${parked[@]}"; do mv -f "$f.parked" "$f"; done
+  for f in ${parked[@]+"${parked[@]}"}; do mv -f "$f.parked" "$f"; done
 }
 trap cleanup EXIT
 for f in .env.local .env.development.local .env.production.local .env.test.local; do
   if [ -e "$f" ]; then mv "$f" "$f.parked"; parked+=("$f"); fi
 done
+
+# Same Node major as CI and Vercel (package.json engines / .nvmrc). pnpm's
+# engineStrict skips this check when the lockfile is already up to date.
+want="$(tr -dc '0-9' < .nvmrc)"
+have="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo none)"
+[ "$have" = "$want" ] || fail "Node $want.x required (CI uses it); this shell has Node ${have}. Run: nvm use"
 
 # ── job: verify ─────────────────────────────────────────────────────────────
 step "[verify] Install (frozen lockfile)"; pnpm install --frozen-lockfile
@@ -67,6 +73,13 @@ if [ "$full" = 0 ]; then step "verify green (run with --full for migrate + deplo
 # ── job: migrate_dev (local Supabase instead of DEV) ───────────────────────
 docker info >/dev/null 2>&1 || fail "Docker is not usable by $(whoami). See docs/LOCAL_CI.md → Prerequisites."
 command -v jq >/dev/null || fail "jq is required"
+
+step "[migrations] New migrations are newer than everything on origin/develop"
+if git rev-parse --verify -q origin/develop >/dev/null; then
+  bash scripts/check-migration-order.sh origin/develop
+else
+  echo "origin/develop not found locally (run: git fetch origin); skipping the order check"
+fi
 
 step "[migrate_dev] Start throwaway local Supabase (applies every migration from empty)"
 pnpm exec supabase stop --no-backup >/dev/null 2>&1 || true

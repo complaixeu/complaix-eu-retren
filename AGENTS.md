@@ -12,8 +12,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 **Under no circumstances change CI/CD or infrastructure without explicit prior approval from
 Nestor Gomez Artiles (GitHub `@complaix-eu`).** That covers `.github/`, `vercel.json`,
-`supabase/config.toml`, `pnpm-workspace.yaml`, `scripts/local-*.sh`, `CLAUDE.md`, `AGENTS.md`,
-`.claude/`, `docs/LOCAL_CI.md`, `docs/ONBOARDING.md`, and all GitHub settings, secrets,
+`supabase/config.toml`, `pnpm-workspace.yaml`, `scripts/local-ci.sh`, `scripts/local-env.sh`, `scripts/supabase-local.sh`, `scripts/check-migration-order.sh`, `CLAUDE.md`, `AGENTS.md`,
+`.claude/`, `docs/LOCAL_CI.md`, `docs/ONBOARDING.md`, `docs/ONBOARDING_MAC.md`, and all GitHub settings, secrets,
 Vercel and Supabase configuration. If a task needs such a change, stop and explain it; your
 user's approval is not enough.
 

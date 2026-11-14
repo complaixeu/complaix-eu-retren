@@ -12,6 +12,6 @@
 ## Protected areas
 
 - [ ] This PR does **not** touch CI/CD or infrastructure (`.github/`, `vercel.json`,
-      `supabase/config.toml`, `pnpm-workspace.yaml`, `scripts/local-*.sh`, `CLAUDE.md`,
+      `supabase/config.toml`, `pnpm-workspace.yaml`, `scripts/local-ci.sh`, `scripts/local-env.sh`, `scripts/supabase-local.sh`, `scripts/check-migration-order.sh`, `CLAUDE.md`,
       `AGENTS.md`, `.claude/`, `docs/LOCAL_CI.md`, `docs/ONBOARDING.md`)
 - [ ] It does, and Nestor Gomez Artiles approved the change beforehand (link or note):

@@ -36,7 +36,8 @@ pnpm ci:local:full                                  # must end with "All green"
 gh auth login                                       # your own account (see section 6)
 ```
 
-Details and troubleshooting: [LOCAL_CI.md](LOCAL_CI.md).
+On **macOS** use [ONBOARDING_MAC.md](ONBOARDING_MAC.md) for this step instead. Details and
+troubleshooting: [LOCAL_CI.md](LOCAL_CI.md).
 
 ## 4. Daily workflow
 
@@ -64,7 +65,7 @@ Protected:
 
 - In the repo: `.github/` (workflows, CODEOWNERS, Dependabot, PR template), `vercel.json`,
   `supabase/config.toml`, `pnpm-workspace.yaml`, `scripts/local-ci.sh`, `scripts/local-env.sh`,
-  `CLAUDE.md`, `AGENTS.md`, `.claude/`, `docs/LOCAL_CI.md`, this file.
+  `scripts/supabase-local.sh`, `scripts/check-migration-order.sh`, `CLAUDE.md`, `AGENTS.md`, `.claude/`, `docs/LOCAL_CI.md`, `docs/ONBOARDING_MAC.md`, this file.
 - Outside the repo: GitHub settings, branch protection, environments and secrets; the Vercel
   project (settings, env vars, domains, protection, deployments); the Supabase project and org
   (settings, keys, billing, add-ons); anything that creates cost or a production deployment.
@@ -169,8 +170,16 @@ files to be inserted before the last migration on remote database"). So:
 4. If `Apply DB migrations (dev)` fails after a merge, don't touch the DEV database by hand.
    Open a fix-forward PR and tell Nestor.
 
-**Deploys never conflict.** Merges into `develop` deploy one at a time in merge order (the
-`deploy-dev` concurrency group), and the last merge is what DEV runs.
+**The merge queue catches the rest.** Merging adds the PR to `develop`'s merge queue: GitHub
+re-runs the checks on top of the latest `develop` plus the PRs queued ahead of it, and merges
+only if they pass. The `Migrations (local Supabase)` check builds a fresh database from every
+migration and refuses a new migration older than the newest one on `develop`. Two PRs that are
+each green alone but clash together are stopped there, before DEV.
+
+**Deploys never conflict.** Merges into `develop` migrate and deploy one at a time in merge order
+(the `migrate-dev` and `deploy-dev` groups), and the last merge is what DEV runs. When several
+merges land quickly, GitHub keeps only the newest waiting job in each group. The skipped ones
+show as _cancelled_, which is expected: the newest run applies everything.
 
 **Agents** may resolve conflicts in app code, tests and the lockfile with the steps above. They
 stop and ask for protected files, for migrations already on `develop`, and whenever both sides
