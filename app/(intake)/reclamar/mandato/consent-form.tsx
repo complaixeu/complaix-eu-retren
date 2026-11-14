@@ -40,10 +40,20 @@ export function ConsentForm({ action, boxes, backHref }: ConsentFormProps) {
     if (state.status === "missing" && formRef.current) focusFirstInvalid(formRef.current);
   }, [state]);
 
-  // Flagged by the browser or by the server, and still unchecked. A checked box drops its error.
+  // Boxes the user has touched since the server last answered: their server error is gone.
+  const [touched, setTouched] = useState<ConsentBox[]>([]);
+  const [answered, setAnswered] = useState(state);
+  if (answered !== state) {
+    setAnswered(state);
+    setTouched([]);
+  }
+
+  // Flagged by the browser while unchecked, or refused by the server until the user touches the
+  // box again. The server reads the posted form, so its answer wins over the local state.
   const refused = state.status === "missing" ? state.missing : [];
   const invalid = CONSENT_BOXES.filter(
-    (box) => (flagged.includes(box) || refused.includes(box)) && !checked[box],
+    (box) =>
+      (flagged.includes(box) && !checked[box]) || (refused.includes(box) && !touched.includes(box)),
   );
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -80,6 +90,7 @@ export function ConsentForm({ action, boxes, backHref }: ConsentFormProps) {
             onChange={(event) => {
               const value = event.currentTarget.checked;
               setChecked((current) => ({ ...current, [box]: value }));
+              setTouched((current) => (current.includes(box) ? current : [...current, box]));
             }}
           />
         ))}

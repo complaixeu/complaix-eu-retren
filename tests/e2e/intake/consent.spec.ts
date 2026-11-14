@@ -112,15 +112,20 @@ test.describe("with a reviewed trip", () => {
     expect(await consentsOf(draftId)).toHaveLength(1);
   });
 
-  test.describe("without JavaScript", () => {
-    test.use({ javaScriptEnabled: false });
-
-    test("the server refuses a single checkbox too", async ({ page }) => {
-      await mandateBox(page).check();
-      await accept(page).click();
-      await expect(page.getByText("Falta tu aceptación")).toBeVisible();
-      expect(await consentsOf(draftId)).toHaveLength(0);
+  test("the server refuses a box that is not checked in the posted form", async ({ page }) => {
+    // Both boxes pass the browser's check, then one is unchecked behind React's back: the
+    // posted form lacks it, and only the server can refuse it.
+    await mandateBox(page).check();
+    await privacyBox(page).check();
+    await privacyBox(page).evaluate((el) => {
+      (el as HTMLInputElement).checked = false;
     });
+    await accept(page).click();
+    await expect(missingAlert(page)).toBeVisible();
+    await expect(privacyBox(page)).toHaveAttribute("aria-invalid", "true");
+    await expect(privacyBox(page)).toBeFocused();
+    await expect(page).toHaveURL(/\/reclamar\/mandato$/);
+    expect(await consentsOf(draftId)).toHaveLength(0);
   });
 
   test.describe("mobile, 375 px wide", () => {
