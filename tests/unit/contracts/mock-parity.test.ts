@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 // Each domain's public entry point and its mock export exactly the same names, so swapping the
 // mock for the real implementation never breaks a consumer (docs/plans/README.md §2).
@@ -15,4 +15,15 @@ describe("mock parity", () => {
       expect(Object.keys(r).sort()).toEqual(Object.keys(m).sort());
     });
   }
+
+  it("documents: public API and mock functions have matching types", async () => {
+    const [real, mock] = await Promise.all([
+      import("@/features/documents"),
+      import("@/features/documents/mock"),
+    ]);
+
+    expectTypeOf(real.buildEuForm).toEqualTypeOf(mock.buildEuForm);
+    expectTypeOf(real.buildMandate).toEqualTypeOf(mock.buildMandate);
+    expectTypeOf(real.renderTemplate).toEqualTypeOf(mock.renderTemplate);
+  });
 });

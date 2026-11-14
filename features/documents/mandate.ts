@@ -1,6 +1,6 @@
 import fontkit from "@pdf-lib/fontkit";
 import { readFile } from "node:fs/promises";
-import { createRequire } from "node:module";
+import path from "node:path";
 import { PDFDocument, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { MandateData, type MandateData as MandateDataType } from "@/shared/contracts";
 
@@ -10,8 +10,10 @@ const PAGE_HEIGHT = 841.89;
 const MARGIN = 56;
 const BODY_SIZE = 10.5;
 const LINE_HEIGHT = 15;
-const require = createRequire(import.meta.url);
-const REGULAR_FONT_PATH = require.resolve("next/dist/compiled/@vercel/og/Geist-Regular.ttf");
+const REGULAR_FONT_PATH = path.join(
+  process.cwd(),
+  "node_modules/next/dist/compiled/@vercel/og/Geist-Regular.ttf",
+);
 const BOLD_FONT_PATH = REGULAR_FONT_PATH;
 const fontBytes = Promise.all([readFile(REGULAR_FONT_PATH), readFile(BOLD_FONT_PATH)]);
 
