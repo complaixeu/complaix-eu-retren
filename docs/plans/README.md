@@ -118,9 +118,9 @@ pass. If a test is wrong, fix it in the same PR and say why.
 
 Email is the core of the product and the riskiest part, so it is tested at every layer.
 
-1. **Ports:** `MailTransport.send()` (outbound) and `/api/claims/inbound` (inbound, a JSON or raw
-   MIME webhook guarded by a shared secret). Fake transport in tests and in the demo, real provider
-   later.
+1. **Ports:** `MailTransport.send()` (outbound) and `ingestMessage(raw)` (inbound). The real
+   provider is Gmail / Google Workspace: SMTP to send, and the hourly tick reads the mailbox over
+   IMAP (C3, C4). Fake transport in tests and in the demo.
 2. **Transactional outbox:** every outgoing mail is first a row in `messages` (`queued`), and a
    sender marks it `sent`. Tests assert the rows, not a network call.
 3. **Safety rules, unit-tested one by one:**
