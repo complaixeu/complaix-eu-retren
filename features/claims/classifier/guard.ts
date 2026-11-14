@@ -17,11 +17,13 @@ const INSTRUCTION_LIKE: RegExp[] = [
   /^\s*(system|assistant|developer)\s*:/m,
   /\bsystem prompt\b/,
   /\bthe category is\b/,
-  /\b(reenvi[ea]n?|envi[ea]n?|remit[ae]n?|forward|send)\b.{0,30}\b(sus|los|the|all)\b.{0,20}\b(datos|data|case file|expediente|documentos)\b/,
+  // Forwarding the case elsewhere. A plain "envíe los documentos" is an ordinary asks_for_data.
+  /\b(reenvi[ea]n?|forward)\b.{0,30}\b(sus|los|the|all)\b.{0,20}\b(datos|data|case file|expediente|documentos)\b/,
+  /\b(otra direccion|direccion externa|another (e-?mail )?address|external address)\b/,
 ];
 
 function normalize(s: string): string {
-  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
 export function senderDomain(from: string): string | undefined {

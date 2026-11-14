@@ -32,6 +32,7 @@ const DECISIVE: Record<Decisive, RegExp[]> = {
     /\bcopia del (dni|nie|pasaporte|documento)\b/,
     /\bdocumentacion adicional\b/,
     /\bnecesitamos que nos (facilite|envie|remita|indique)\b/,
+    /\b(envie|adjunte|remita)n? (el|la|los|las|un|una)\b.{0,40}\b(documentos?|certificado|justificante|copia)\b/,
   ],
   refers_to_form: [
     /\bformulario (web|online|de reclamaciones)\b/,
@@ -49,7 +50,7 @@ const ACKNOWLEDGEMENT: RegExp[] = [
 ];
 
 function normalize(s: string): string {
-  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
 export function fakeCategory(text: string): ReplyCategory {
