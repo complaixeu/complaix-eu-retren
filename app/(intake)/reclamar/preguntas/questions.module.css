@@ -26,6 +26,15 @@
   padding-top: var(--space-4);
   border-top: var(--border-width) solid var(--color-border);
 }
+
+.pending {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.pending:empty {
+  display: none;
+}
 @media (min-width: 40rem) {
   .actions {
     flex-direction: row-reverse;

@@ -8,6 +8,7 @@ import {
   Checkbox,
   Field,
   Fieldset,
+  FormCompletion,
   Input,
   Radio,
   focusFirstInvalid,
@@ -103,6 +104,7 @@ export function ReviewForm({
               defaultChecked={value === option.value}
               // The group's error is on the fieldset; this lets focus land on its first option.
               aria-invalid={error ? true : undefined}
+              required={field.required || undefined}
             />
           ))}
         </Fieldset>
@@ -147,6 +149,7 @@ export function ReviewForm({
           name="bookingRefConfirmed"
           value={CONFIRM_VALUE}
           label="He comprobado el localizador"
+          aria-required="true"
           defaultChecked={shown.bookingRefConfirmed === CONFIRM_VALUE}
           error={errors.bookingRefConfirmed}
         />
@@ -169,6 +172,7 @@ export function ReviewForm({
           </Alert>
         )
       )}
+      <FormCompletion formRef={formRef} label="Datos del billete" />
 
       {sections.map((section) => (
         <section
@@ -199,6 +203,9 @@ export function ReviewForm({
           Atrás
         </ButtonLink>
       </div>
+      <p role="status" aria-live="polite" className={styles.pending}>
+        {pending ? "Guardando los datos del billete…" : ""}
+      </p>
     </form>
   );
 }
