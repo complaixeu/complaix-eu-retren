@@ -200,9 +200,10 @@ test.describe("mobile, 375 px wide", () => {
 
       // The first step's primary action is its upload button ([A1]), the review's its submit
       // button ([A4]) and the authorization step's its accept button ([A6]); the others are links.
-      const primary = page
+      const main = page.getByRole("main");
+      const primary = main
         .getByRole("link", { name: /^(Reclamar|Empezar reclamación|Continuar|Volver al inicio)$/ })
-        .or(page.getByRole("button", { name: /^(Subir billete|Continuar|Aceptar y enviar)$/ }));
+        .or(main.getByRole("button", { name: /^(Subir billete|Continuar|Aceptar y enviar)$/ }));
       await expect(primary).toBeVisible();
       const box = await primary.boundingBox();
       expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
