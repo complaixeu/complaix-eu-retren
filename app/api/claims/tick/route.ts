@@ -2,8 +2,7 @@
 // (migration *_claims_tick_schedule.sql) with `Authorization: Bearer <TICK_SECRET>` and body {}.
 // In DEMO_MODE=1 the body may carry `{ "now": "<ISO date-time>" }` to move the clock forward.
 import { ZodError } from "zod";
-// Same domain (C owns app/api/claims/), so a relative import into its internals. The tick is
-// not part of claims' public API (index.ts), which other domains use.
+// Relative on purpose: same domain (C owns app/api/claims/), and the tick stays off claims' public API.
 import { isTickAuthorized, resolveTickNow, runTick } from "../../../../features/claims/tick";
 import { createServiceClient } from "@/shared/supabase/server";
 
