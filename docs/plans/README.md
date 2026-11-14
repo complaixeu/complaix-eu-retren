@@ -213,24 +213,11 @@ Claude Code (A or C):
 > [C only: before marking each PR ready, have Codex review the diff with the Codex plugin and fix
 > what it finds.]
 
-Codex (B), one unattended run per lane from the main clone:
-
-```bash
-# Codex's own config (~/.codex/config.toml) must keep the sandbox; for pnpm and gh it needs network:
-#   [sandbox_workspace_write]
-#   network_access = true
-for lane in 1 2 3; do
-  git worktree add "../retren-b$lane" -b "feat/rules-lane$lane" origin/develop
-  (cd "../retren-b$lane" && pnpm install)
-  codex exec --approve-for-me -s workspace-write -C "../retren-b$lane" \
-    "You are lane $lane of domain B (Rules & docs) of ReTren. Read AGENTS.md, docs/ARCHITECTURE.md,
-     docs/TEAM_WORKFLOW.md, docs/plans/README.md and docs/plans/B-rules-docs.md. Do every task of
-     lane $lane in order, each on its own branch from origin/develop, following README §5 step 4,
-     until the lane is merged. Stop only for README §6." \
-    -o "../retren-b$lane.last.md" &
-done
-wait
-```
+Codex (B): `caffeinate -dimsu bash scripts/agents/run-codex-lanes.sh` from the main clone
+(`DRY_RUN=1` first to see what it does). It checks the preflight, creates B's tracker issue once,
+and runs one `codex exec --approve-for-me -s workspace-write` per lane, each in its own worktree,
+with the lane prompt built in. Codex's own `~/.codex/config.toml` must allow network in the
+workspace-write sandbox (PREFLIGHT §2).
 
 Domain B has no database, so its three lanes rarely need the local-Supabase lock. `pnpm test:all` still
 takes the lock, so they queue briefly. Never use `--dangerously-bypass-approvals-and-sandbox`.

@@ -97,12 +97,17 @@ caffeinate -dimsu claude --permission-mode bypassPermissions
 #   2. paste the kickoff prompt for your domain from plans/README.md §7
 ```
 
-**B (Codex):** from the main clone, inside `caffeinate`, run the lane loop from
-[README.md §7](README.md#7-prompts):
+**B (Codex):** from the main clone:
 
 ```bash
-caffeinate -dimsu bash -c '<the "for lane in 1 2 3" loop from plans/README.md §7>'
+cd ~/path/to/complaix-eu-retren && git checkout develop && git pull
+DRY_RUN=1 bash scripts/agents/run-codex-lanes.sh   # optional: shows what it will do
+caffeinate -dimsu bash scripts/agents/run-codex-lanes.sh
 ```
+
+It re-runs the preflight, creates the `Tracker: B Rules & docs` issue once, gives each lane its own
+worktree (`../retren-b1..3`), and starts the three Codex lanes with their logs in
+`../retren-b<lane>.log`.
 
 Within a few minutes your **tracker issue** (`Tracker: <domain>`) appears on GitHub with one box per
 task. If it doesn't, the run hasn't really started: look at the terminal before you leave.
