@@ -6,6 +6,7 @@ import { systemClock } from "@/shared/clock";
 import { OperatorId, type CaseStatus, type Clock, type MailTransport } from "@/shared/contracts";
 import { provider } from "@/shared/providers";
 import { createServiceClient, type ServiceClient } from "@/shared/supabase/server";
+import { purgeForwardedDocuments } from "./actions";
 import { DEFAULT_SENDING_DOMAIN } from "./classifier";
 import {
   buildMailMessage,
@@ -66,7 +67,8 @@ export async function sendQueued(
   const env = deps.env ?? process.env;
   const now = (deps.clock ?? systemClock).now();
   const providerName = deps.providerName ?? provider("MAIL_PROVIDER", env);
-  const purge = deps.purgeForwardedDocuments ?? (async () => {}); // TODO(C6): default helper
+  const purge =
+    deps.purgeForwardedDocuments ?? ((id: string) => purgeForwardedDocuments(id, { db }));
 
   const claimed = await db
     .from("messages")

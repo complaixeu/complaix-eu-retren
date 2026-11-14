@@ -50,26 +50,44 @@ Email testing strategy: [README §4](README.md#4-email-how-we-test-it). It is bi
 
 ### C3: Outbound `sendInitialClaim(caseId)` and the transport
 
-- `MailTransport` (`fake`, writing to the outbox only; real provider later).
+- `MailTransport`: `fake` (writes to the outbox only) and `gmail` (SMTP through Google
+  Workspace, `nodemailer`, port 465 TLS, an app password). `MAIL_PROVIDER=fake | gmail`, default
+  `fake`. The sender is the dedicated Retren mailbox (`SMTP_USER`); `MAIL_SENDING_DOMAIN` is its
+  domain. Env: `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`.
 - Builds the attachments with `buildEuForm`, `buildMandate` and the stored ticket, renders
   `initial_claim`, and adds threading headers.
 - Enforces the **recipient allowlist** (the operator config address only), the **attachment
   allowlist**, `MAIL_REDIRECT_ALL_TO` outside production, and the **send cap**.
 - Tests:
   - unit: a non-operator recipient is refused; an attachment not on the allowlist is refused; the
-    cap is reached; the redirect is applied; the headers are correct.
+    cap is reached; the redirect is applied; the headers are correct; the `gmail` transport builds
+    the right message with nodemailer's JSON/stream transport (no network).
   - integration: the case moves to `sent`; the outbox row has 3 attachments; an event is logged;
     an inactive operator (Renfe, Ouigo) is never sent automatically.
 
-### C4: Inbound `/api/claims/inbound`
+### C4: Inbound: read the mailbox over IMAP
 
-- Guarded by a shared-secret header whose value is `process.env.INBOUND_SECRET` (constant-time
-  compare; 401 when it is unset). Parses MIME (`mailparser`) and matches the case by
-  `[RTN-ref]` and/or `In-Reply-To`. A sender that isn't the operator's domain, or an unknown
-  reference, goes to the team queue. Raw mail goes to private storage.
+Decided 2026-11-14 (Nestor): Gmail / Google Workspace, so there is no provider webhook. The app
+polls the mailbox instead, and there is no public inbound endpoint and no `INBOUND_SECRET`.
+
+- `ingestMessage(raw)` is the one entry point for incoming mail: parses MIME (`mailparser`) and
+  matches the case by `[RTN-ref]` and/or `In-Reply-To`. A sender that isn't the operator's domain,
+  or an unknown reference, goes to the team queue. Raw mail goes to private storage. The
+  simulated mailbox (C9) calls the same function.
+- `pollInbox()` (`imapflow`), run by the existing hourly tick (`/api/claims/tick`, C7) when
+  `MAIL_PROVIDER=gmail`: reads only `INBOX`, only unseen messages, and marks a message seen only
+  after it is stored. Idempotent: `Message-ID` is unique, so a message read twice is stored once.
+- **Never reads our own mail:** it skips anything sent from our own address, and anything
+  addressed to `MAIL_REDIRECT_ALL_TO`. The redirect target must be a different mailbox from
+  `SMTP_USER`; refuse to start if they are the same.
+- Env: `IMAP_HOST`, `IMAP_PORT`, `IMAP_SECURE`; `IMAP_USER` and `IMAP_PASS` default to
+  `SMTP_USER` and `SMTP_PASS`.
 - Tests:
-  - integration with `.eml` fixtures: matched, unknown reference, wrong sender, spoofed reference,
-    missing secret → 401.
+  - integration with `.eml` fixtures through `ingestMessage`: matched, unknown reference, wrong
+    sender, spoofed reference, the same `Message-ID` twice, a message from our own address, a
+    redirected copy.
+  - unit: `pollInbox` against a fake IMAP client: only unseen, seen only after storing, a failure
+    mid-batch leaves the rest unseen; same mailbox for redirect and sender → refuses to start.
   - pgTAP: the storage bucket for raw mail is private.
 
 ### C5: Classifier
@@ -110,7 +128,8 @@ Email testing strategy: [README §4](README.md#4-email-how-we-test-it). It is bi
 
   An operator reply stops the schedule; waiting on the user pauses it; the send cap applies.
 
-- The tick endpoint is guarded by a secret and processes the due cases. A `now` override is
+- The tick endpoint is guarded by a secret and processes the due cases (and, from C4, reads the
+  mailbox). A `now` override is
   allowed only when `DEMO_MODE=1`.
 - **The scheduler already exists** (migration `*_claims_tick_schedule.sql`): `pg_cron` calls it
   every hour as `POST /api/claims/tick` with `Authorization: Bearer <TICK_SECRET>`, body `{}`,

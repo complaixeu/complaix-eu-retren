@@ -249,6 +249,17 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      claims_apply_reply_action: {
+        Args: {
+          p_case_id: string;
+          p_category: Database["public"]["Enums"]["reply_category"];
+          p_expected_send_count: number;
+          p_expected_status: Database["public"]["Enums"]["case_status"];
+          p_message_id: string;
+          p_plan: Json;
+        };
+        Returns: Json;
+      };
       claims_apply_timer_action: {
         Args: {
           p_case_id: string;
@@ -264,6 +275,7 @@ export type Database = {
         };
         Returns: string;
       };
+      claims_case_operator_address: { Args: { p_case_id: string }; Returns: string };
       claims_create_case: {
         Args: {
           p_earliest_send_at: string;
@@ -279,7 +291,28 @@ export type Database = {
         };
         Returns: string;
       };
+      claims_forward_user_document: {
+        Args: {
+          p_attachment_id: string;
+          p_case_id: string;
+          p_expected_send_count: number;
+          p_mail: Json;
+          p_next_action_at: string;
+        };
+        Returns: Json;
+      };
+      claims_mark_forwarded_documents_deleted: { Args: { p_message_id: string }; Returns: number };
+      claims_max_sends_per_case: { Args: Record<PropertyKey, never>; Returns: number };
       claims_new_public_ref: { Args: Record<PropertyKey, never>; Returns: string };
+      claims_queue_for_team: {
+        Args: {
+          p_case_id: string;
+          p_category: Database["public"]["Enums"]["reply_category"];
+          p_message_id: string;
+          p_reason: string;
+        };
+        Returns: boolean;
+      };
       claims_send_initial_claim: {
         Args: {
           p_attachments: Json;

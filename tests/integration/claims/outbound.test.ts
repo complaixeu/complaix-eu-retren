@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createCase } from "@/features/claims";
+import { USER_DOCUMENTS_BUCKET } from "@/features/claims/actions";
 import {
   DOCUMENTS_BUCKET,
   TEAM_QUEUE_EVENT,
@@ -20,8 +21,6 @@ import { TICKET_PLACEHOLDER_PNG } from "../../fixtures/claims/ticket";
 // Outbound (plan C3) against the local Supabase: sendInitialClaim moves a ready case to `sent`
 // with the claim and its 3 attachments in the outbox, and sendQueued is the one place a queued
 // row is sent (fake transport only, never the network).
-// TODO(C6 merge): import USER_DOCUMENTS_BUCKET from features/claims/actions.
-const USER_DOCUMENTS_BUCKET = "claims-user-documents";
 const CREATED = fixedClock("2026-01-16T10:00:00.000Z");
 // submissionFixture(90): arrival 13:30 Madrid (12:30 UTC) on 2026-01-15; the rules mock waits 48 h.
 const EARLIEST = "2026-01-17T12:30:00.000Z";
@@ -37,12 +36,6 @@ beforeAll(async () => {
   const { data } = await db.storage.getBucket(TICKET_BUCKET);
   if (!data) {
     const { error } = await db.storage.createBucket(TICKET_BUCKET, { public: false });
-    if (error && !/already exists/i.test(error.message)) throw error;
-  }
-  // The user documents bucket is C6's migration; same fallback until it is on develop.
-  const docs = await db.storage.getBucket(USER_DOCUMENTS_BUCKET);
-  if (!docs.data) {
-    const { error } = await db.storage.createBucket(USER_DOCUMENTS_BUCKET, { public: false });
     if (error && !/already exists/i.test(error.message)) throw error;
   }
 });
@@ -517,7 +510,7 @@ describe("sendQueued (local Supabase)", () => {
     expect(att.data?.deleted_at).not.toBeNull();
     const { events } = await stored(f.caseId);
     expect(events.filter((e) => e.kind === "user_document_deleted").map((e) => e.data)).toEqual([
-      { attachment_id: f.attachmentId },
+      { message_id: f.queuedId, attachment_ids: [f.attachmentId] },
     ]);
   });
 
