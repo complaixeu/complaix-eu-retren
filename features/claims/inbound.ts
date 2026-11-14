@@ -258,6 +258,14 @@ export const DEFAULT_AUTHSERV_ID = "mx.google.com";
  * Anyone can write an Authentication-Results header into a mail they send. The receiving server
  * (Gmail) adds its own on top of the mail, so only the topmost header is trusted, and only when it
  * names that server (`authservId`). Anything else gives no domain at all.
+ *
+ * RESIDUAL RISK: "topmost" assumes Gmail really prepends its own header to every mail it receives.
+ * Mail that did not arrive over SMTP (imported, or created inside the mailbox) may carry no header
+ * of Gmail's, and then the topmost one is whatever its sender wrote: an attacker could forge
+ * `mx.google.com; dkim=pass header.d=<operator domain>`. That needs a mail in the mailbox without
+ * Gmail's own header, which SMTP delivery doesn't allow; keep it that way (never import or
+ * forward mail into this mailbox). Even then the mail only reaches the classifier and C6's
+ * template actions: nothing it says is ever used as a recipient.
  */
 export function dkimPassDomains(authResults: readonly string[], authservId: string): string[] {
   const top = authResults[0];

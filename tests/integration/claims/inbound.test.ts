@@ -534,12 +534,14 @@ describe("ingestMessage (local Supabase)", () => {
       lastUid: 9,
       failedUid: 10,
       failedAttempts: 2,
+      failedSince: new Date("2030-01-01T00:00:00Z"),
     });
     expect(await store.read(box)).toEqual({
       uidValidity: BigInt(123),
       lastUid: 9,
       failedUid: 10,
       failedAttempts: 2,
+      failedSince: new Date("2030-01-01T00:00:00Z"),
     });
     // A poison mail: a case-less team-queue item with the UID and a code, no content; once.
     await store.markPoison(box, BigInt(123), 10);

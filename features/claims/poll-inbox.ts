@@ -16,6 +16,7 @@ import { getOperatorConfig } from "@/features/rules";
 import { OperatorId } from "@/shared/contracts";
 import { createServiceClient, type ServiceClient } from "@/shared/supabase/server";
 import { ingestMessage, type IngestResult } from "./inbound";
+import { sendingDomain } from "./send-queued";
 
 type Env = Record<string, string | undefined>;
 
@@ -28,6 +29,8 @@ export interface ImapSearch {
   uid?: string;
   subject?: string;
   from?: string;
+  /** A header contains this text (IMAP SEARCH HEADER). */
+  header?: Record<string, string>;
   or?: ImapSearch[];
 }
 
@@ -53,6 +56,8 @@ export interface PollState {
   /** The mail that failed last, and how many runs in a row it failed. Absent: none. */
   failedUid?: number;
   failedAttempts?: number;
+  /** When that mail first failed (poison needs 3 failures AND POISON_AFTER_MS since then). */
+  failedSince?: Date;
 }
 
 export interface PollStateStore {
@@ -62,8 +67,13 @@ export interface PollStateStore {
   markPoison(mailbox: string, uidValidity: bigint, uid: number): Promise<void>;
 }
 
-/** Runs in a row one mail may fail before it is put in the team queue and skipped. */
+/**
+ * A mail that failed on our side (storage, database) is put in the team queue and skipped only
+ * after POISON_ATTEMPTS failures AND POISON_AFTER_MS since its first one: a transient outage of
+ * a few hours never skips real claim mail. Fetch and connection errors never count at all.
+ */
 export const POISON_ATTEMPTS = 3;
+export const POISON_AFTER_MS = 24 * 3_600_000;
 /** The team-queue code of a mail that kept failing (messages.inbound_queue_reason). */
 export const POISON_REASON = "unreadable_mail";
 
@@ -87,6 +97,8 @@ export interface PollDeps {
   /** The IMAP client; one from the IMAP_* env when left out. */
   client?: ImapClient;
   state?: PollStateStore;
+  /** The clock for the failure window; the real one when left out. */
+  now?: () => Date;
   ingest?: (raw: Buffer) => Promise<IngestResult>;
   limit?: number;
 }
@@ -154,7 +166,7 @@ export function dbPollState(db: ServiceClient): PollStateStore {
     async read(mailbox) {
       const { data, error } = await db
         .from("claims_mail_poll_state")
-        .select("uid_validity, last_uid, failed_uid, failed_attempts")
+        .select("uid_validity, last_uid, failed_uid, failed_attempts, failed_since")
         .eq("mailbox", mailbox)
         .maybeSingle();
       if (error) throw error;
@@ -165,6 +177,7 @@ export function dbPollState(db: ServiceClient): PollStateStore {
             ...(data.failed_uid !== null && {
               failedUid: Number(data.failed_uid),
               failedAttempts: data.failed_attempts ?? 0,
+              ...(data.failed_since && { failedSince: new Date(data.failed_since) }),
             }),
           }
         : null;
@@ -176,6 +189,8 @@ export function dbPollState(db: ServiceClient): PollStateStore {
         last_uid: state.lastUid,
         failed_uid: state.failedUid ?? null,
         failed_attempts: state.failedUid !== undefined ? (state.failedAttempts ?? 0) : null,
+        failed_since:
+          state.failedUid !== undefined ? (state.failedSince?.toISOString() ?? null) : null,
         updated_at: new Date().toISOString(),
       });
       if (error) throw error;
@@ -210,11 +225,22 @@ export function operatorDomains(): string[] {
   return [...new Set(domains)];
 }
 
-/** Subject contains `[RTN-`, or the sender is in an operator's domain; UIDs after `lastUid`. */
-export function claimSearch(lastUid: number, domains: string[]): ImapSearch {
+/**
+ * Claim mail only, searched on the server, for UIDs after `lastUid`: the subject contains
+ * `[RTN-`, or the sender is in an operator's domain, or it threads onto our own mail (its
+ * In-Reply-To or References holds a Message-ID of our sending domain, which is where C3's
+ * newMessageId puts our domain). The last one catches a reply from any other domain (a ticketing
+ * system) that dropped our reference; ingestMessage then queues it as a wrong sender.
+ */
+export function claimSearch(lastUid: number, domains: string[], sendingDomain: string): ImapSearch {
   return {
     uid: `${lastUid + 1}:*`,
-    or: [{ subject: "[RTN-" }, ...domains.map((d) => ({ from: `@${d}` }))],
+    or: [
+      { subject: "[RTN-" },
+      ...domains.map((d) => ({ from: `@${d}` })),
+      { header: { "in-reply-to": `@${sendingDomain}` } },
+      { header: { references: `@${sendingDomain}` } },
+    ],
   };
 }
 
@@ -246,20 +272,28 @@ export async function pollInbox(deps: PollDeps = {}): Promise<PollResult> {
     }
 
     const found =
-      (await client.search(claimSearch(saved.lastUid, operatorDomains()), { uid: true })) || [];
+      (await client.search(claimSearch(saved.lastUid, operatorDomains(), sendingDomain(env)), {
+        uid: true,
+      })) || [];
     // `N:*` always includes the last mail, even when N is past it: keep only what is new.
     const uids = [...new Set(found)].filter((u) => u > saved.lastUid).sort((a, b) => a - b);
     const batch = uids.slice(0, limit);
     const result: PollResult = { started: "resumed", processed: 0, outcomes: {} };
     const validity = box.uidValidity;
     let lastUid = saved.lastUid;
+    const clock = deps.now ?? (() => new Date());
     let failure =
       saved.failedUid !== undefined
-        ? { uid: saved.failedUid, attempts: saved.failedAttempts ?? 0 }
+        ? {
+            uid: saved.failedUid,
+            attempts: saved.failedAttempts ?? 0,
+            since: saved.failedSince ?? clock(),
+          }
         : null;
 
     for (const uid of batch) {
       let outcome: IngestResult | null;
+      let dropped = false;
       try {
         const msg = await client.fetchOne(String(uid), { source: true, uid: true }, { uid: true });
         // Gone since the search (deleted by someone else): nothing to read.
@@ -268,21 +302,25 @@ export async function pollInbox(deps: PollDeps = {}): Promise<PollResult> {
             ? await ingest(msg.source)
             : { outcome: "skipped", reason: "unparseable" };
       } catch {
-        // The connection dropped mid-batch: this mail is read again next time.
+        // The connection dropped or the fetch failed: nothing is wrong with the mail. It stops
+        // the run and is read again next tick, and it never counts towards the poison limit.
         outcome = null;
+        dropped = true;
+      }
+      if (dropped) {
+        result.failedAtUid = uid;
+        await writeFailure(state, validity, Math.max(lastUid, uid - 1), failure);
+        return result;
       }
       if (!outcome || outcome.outcome === "error") {
-        const attempts = failure?.uid === uid ? failure.attempts + 1 : 1;
-        if (attempts < POISON_ATTEMPTS) {
+        const same = failure?.uid === uid ? failure : null;
+        const attempts = (same?.attempts ?? 0) + 1;
+        const since = same?.since ?? clock();
+        if (attempts < POISON_ATTEMPTS || clock().getTime() - since.getTime() < POISON_AFTER_MS) {
           // Stop here; the unrelated mail before it is covered, the failed one is read again.
           result.failedAtUid = uid;
-          failure = { uid, attempts };
-          await state.write(INBOX, {
-            uidValidity: validity,
-            lastUid: Math.max(lastUid, uid - 1),
-            failedUid: uid,
-            failedAttempts: attempts,
-          });
+          failure = { uid, attempts, since };
+          await writeFailure(state, validity, Math.max(lastUid, uid - 1), failure);
           return result;
         }
         // A poison mail: the team is told (UID and code only) and the batch goes on without it.
@@ -307,4 +345,22 @@ export async function pollInbox(deps: PollDeps = {}): Promise<PollResult> {
   } finally {
     await client.logout().catch(() => {});
   }
+}
+
+/** Saves the position, keeping the failure count of the mail that is still failing, if any. */
+function writeFailure(
+  state: PollStateStore,
+  uidValidity: bigint,
+  lastUid: number,
+  failure: { uid: number; attempts: number; since: Date } | null,
+): Promise<void> {
+  return state.write(INBOX, {
+    uidValidity,
+    lastUid,
+    ...(failure && {
+      failedUid: failure.uid,
+      failedAttempts: failure.attempts,
+      failedSince: failure.since,
+    }),
+  });
 }

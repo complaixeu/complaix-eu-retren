@@ -22,11 +22,13 @@ create table public.claims_mail_poll_state (
   mailbox text primary key check (length(mailbox) > 0),
   uid_validity bigint not null check (uid_validity > 0),
   last_uid bigint not null check (last_uid >= 0),
-  -- The mail that failed last and how many runs in a row it failed. After 3, pollInbox puts it
-  -- in the team queue (its UID and a code only) and moves past it, so one bad mail never blocks
-  -- the mailbox. Null: nothing is failing.
+  -- The mail that failed last on our side, how many runs in a row it failed and when it first
+  -- did. After 3 failures AND 24 hours since the first, pollInbox puts it in the team queue (its
+  -- UID and a code only) and moves past it, so one bad mail never blocks the mailbox for good, and
+  -- a short outage never skips claim mail. Null: nothing is failing.
   failed_uid bigint check (failed_uid is null or failed_uid > 0),
   failed_attempts integer check (failed_attempts is null or failed_attempts >= 0),
+  failed_since timestamptz,
   updated_at timestamptz not null default now()
 );
 

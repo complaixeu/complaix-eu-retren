@@ -26,7 +26,13 @@ const ENV = {
   MAIL_REDIRECT_ALL_TO: "team@retren.example",
 };
 
-type FakeMail = { uid: number; subject: string; from: string };
+type FakeMail = {
+  uid: number;
+  subject: string;
+  from: string;
+  inReplyTo?: string;
+  references?: string;
+};
 
 /** An in-memory IMAP mailbox. It records every call; anything that changes the mailbox is a mutation. */
 class FakeImap implements ImapClient {
@@ -79,7 +85,11 @@ class FakeImap implements ImapClient {
       (query.or ?? [query]).some(
         (c) =>
           (c.subject !== undefined && m.subject.includes(c.subject)) ||
-          (c.from !== undefined && m.from.includes(c.from)),
+          (c.from !== undefined && m.from.includes(c.from)) ||
+          (c.header?.["in-reply-to"] !== undefined &&
+            (m.inReplyTo ?? "").includes(c.header["in-reply-to"])) ||
+          (c.header?.references !== undefined &&
+            (m.references ?? "").includes(c.header.references)),
       );
     return this.mails.filter((m) => inRange(m.uid) && matches(m)).map((m) => m.uid);
   }
@@ -252,6 +262,7 @@ describe("pollInbox", () => {
       lastUid: 3,
       failedUid: 4,
       failedAttempts: 1,
+      failedSince: expect.any(Date),
     });
     expect(imap.loggedOut).toBe(true);
 
@@ -270,12 +281,8 @@ describe("pollInbox", () => {
     const out = await pollInbox({ client: imap, state, ingest, env: ENV });
     expect(seen).toEqual([2]);
     expect(out.failedAtUid).toBe(3);
-    expect(state.value).toEqual({
-      uidValidity: BigInt(1),
-      lastUid: 2,
-      failedUid: 3,
-      failedAttempts: 1,
-    });
+    // A fetch error is not the mail's fault: no failure is counted.
+    expect(state.value).toEqual({ uidValidity: BigInt(1), lastUid: 2 });
   });
 
   it("reads at most `limit` mails per run and continues on the next one", async () => {
@@ -326,25 +333,30 @@ describe("pollInbox", () => {
     }
   });
 
-  it("a mail that fails 3 times is put in the team queue (UID and code only) and skipped", async () => {
+  it("a mail that fails 3 times over 24 hours is put in the team queue (UID and code only) and skipped", async () => {
     const imap = new FakeImap([1, 2, 3, 4].map(claimMail));
     const state = memoryState({ uidValidity: BigInt(1), lastUid: 1 });
     const failing = recordingIngest(new Set([3]));
 
-    const first = await pollInbox({ client: imap, state, ingest: failing.ingest, env: ENV });
+    const clock = { t: Date.parse("2030-01-01T00:00:00Z") };
+    const now = () => new Date(clock.t);
+    const first = await pollInbox({ client: imap, state, ingest: failing.ingest, env: ENV, now });
     expect(first.failedAtUid).toBe(3);
     expect(state.value).toEqual({
       uidValidity: BigInt(1),
       lastUid: 2,
       failedUid: 3,
       failedAttempts: 1,
+      failedSince: expect.any(Date),
     });
-    await pollInbox({ client: imap, state, ingest: failing.ingest, env: ENV });
+    clock.t += 3_600_000;
+    await pollInbox({ client: imap, state, ingest: failing.ingest, env: ENV, now });
     expect(state.value).toMatchObject({ lastUid: 2, failedUid: 3, failedAttempts: 2 });
     expect(state.poisoned).toEqual([]);
 
-    // The 3rd failure: marked for the team, skipped, and the next mail is read.
-    const third = await pollInbox({ client: imap, state, ingest: failing.ingest, env: ENV });
+    // The 3rd failure, 24 h after the first: marked for the team, skipped, the next mail is read.
+    clock.t = Date.parse("2030-01-02T00:00:00Z");
+    const third = await pollInbox({ client: imap, state, ingest: failing.ingest, env: ENV, now });
     expect(state.poisoned).toEqual([{ uidValidity: BigInt(1), uid: 3 }]);
     expect(third).toMatchObject({ poisonedUids: [3] });
     expect(third.failedAtUid).toBeUndefined();
@@ -429,5 +441,103 @@ describe("pollInbox", () => {
       env: ENV,
     });
     expect(state.value).toMatchObject({ lastUid: 3, failedUid: 4, failedAttempts: 1 });
+  });
+
+  it("failures within 3 hours are never skipped, however many (no poison before 24 h)", async () => {
+    const imap = new FakeImap([1, 2, 3].map(claimMail));
+    const state = memoryState({ uidValidity: BigInt(1), lastUid: 1 });
+    const failing = recordingIngest(new Set([2]));
+    const clock = { t: Date.parse("2030-01-01T00:00:00Z") };
+    const now = () => new Date(clock.t);
+    for (let i = 0; i < 6; i++) {
+      await pollInbox({ client: imap, state, ingest: failing.ingest, env: ENV, now });
+      clock.t += 30 * 60_000;
+    }
+    expect(state.poisoned).toEqual([]);
+    expect(state.value).toMatchObject({ lastUid: 1, failedUid: 2, failedAttempts: 6 });
+    expect(state.value?.failedSince?.toISOString()).toBe("2030-01-01T00:00:00.000Z");
+  });
+
+  it("3+ failures spanning 24 hours are skipped, and the next mail is read", async () => {
+    const imap = new FakeImap([1, 2, 3].map(claimMail));
+    const state = memoryState({ uidValidity: BigInt(1), lastUid: 1 });
+    const failing = recordingIngest(new Set([2]));
+    const clock = { t: Date.parse("2030-01-01T00:00:00Z") };
+    const now = () => new Date(clock.t);
+    for (const hours of [0, 1, 2]) {
+      clock.t = Date.parse("2030-01-01T00:00:00Z") + hours * 3_600_000;
+      await pollInbox({ client: imap, state, ingest: failing.ingest, env: ENV, now });
+    }
+    expect(state.poisoned).toEqual([]);
+    clock.t = Date.parse("2030-01-02T00:00:00Z");
+    const out = await pollInbox({ client: imap, state, ingest: failing.ingest, env: ENV, now });
+    expect(state.poisoned).toEqual([{ uidValidity: BigInt(1), uid: 2 }]);
+    expect(out.poisonedUids).toEqual([2]);
+    expect(failing.seen.at(-1)).toBe(3);
+    expect(state.value).toEqual({ uidValidity: BigInt(1), lastUid: 3 });
+  });
+
+  it("a connection drop or fetch error never counts towards the limit", async () => {
+    const imap = new FakeImap([1, 2, 3].map(claimMail));
+    imap.failFetch.add(2);
+    const state = memoryState({ uidValidity: BigInt(1), lastUid: 1 });
+    const { ingest } = recordingIngest();
+    const clock = { t: Date.parse("2030-01-01T00:00:00Z") };
+    for (let i = 0; i < 5; i++) {
+      const out = await pollInbox({
+        client: imap,
+        state,
+        ingest,
+        env: ENV,
+        now: () => new Date(clock.t),
+      });
+      expect(out.failedAtUid).toBe(2);
+      clock.t += 24 * 3_600_000;
+    }
+    expect(state.poisoned).toEqual([]);
+    expect(state.value?.failedAttempts ?? 0).toBe(0);
+    expect(state.value?.lastUid).toBe(1);
+    // The mailbox comes back: the mail is read normally.
+    imap.failFetch.clear();
+    await pollInbox({ client: imap, state, ingest, env: ENV });
+    expect(state.value).toEqual({ uidValidity: BigInt(1), lastUid: 3 });
+  });
+
+  it("a threaded reply from another domain with no reference is fetched (and team-queued)", async () => {
+    const reply: FakeMail = {
+      uid: 2,
+      subject: "Re: Reclamacion por retraso",
+      from: "soporte@tickets.example",
+      inReplyTo: "<rtn-abcd0001.uuid@retren.example>",
+    };
+    const imap = new FakeImap([claimMail(1), reply, unrelated(3)]);
+    const state = memoryState({ uidValidity: BigInt(1), lastUid: 1 });
+    const { ingest, seen } = recordingIngest();
+    await pollInbox({ client: imap, state, ingest, env: ENV });
+    expect(imap.searches[0].or).toEqual(
+      expect.arrayContaining([
+        { header: { "in-reply-to": "@retren.example" } },
+        { header: { references: "@retren.example" } },
+      ]),
+    );
+    // The threaded reply reaches ingestMessage (which then queues it as a wrong sender); the
+    // unrelated newsletter never leaves the server.
+    expect(seen).toEqual([2]);
+    expect(imap.fetched).toEqual([2]);
+  });
+
+  it("the sending domain is MAIL_SENDING_DOMAIN, else SMTP_USER's domain (as C3's Message-IDs)", async () => {
+    const imap = new FakeImap([claimMail(1), claimMail(2)]);
+    const state = memoryState({ uidValidity: BigInt(1), lastUid: 1 });
+    const { ingest } = recordingIngest();
+    await pollInbox({
+      client: imap,
+      state,
+      ingest,
+      env: { ...ENV, MAIL_SENDING_DOMAIN: "mail.retren.example" },
+    });
+    expect(imap.searches[0].or).toEqual(
+      expect.arrayContaining([{ header: { "in-reply-to": "@mail.retren.example" } }]),
+    );
   });
 });
