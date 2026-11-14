@@ -341,6 +341,48 @@ describe("the sender refuses user mail outside the allowlist", () => {
     for (const v of Object.values(PII)) expect(text).not.toContain(v);
     expect(text).not.toContain(to);
   });
+
+  it("user_escalation_signature to the user: refused until it is a TemplateKind", async () => {
+    // Nothing of ours can render it yet (queueEscalationSignatureRequest refuses), so a row of
+    // that kind can only come from somewhere else: never sent.
+    const t = createFakeTransport();
+    const c = await seedCase({ status: "escalated" });
+    const id = await rogue(c.id, PII.email, ESCALATION_SIGNATURE_KIND);
+    const [res] = await send(t, c.id);
+    expect(res).toEqual({
+      messageId: id,
+      result: { status: "failed", reason: "user_kind_not_allowed" },
+    });
+    expect(t.outbox).toEqual([]);
+    expect(await teamQueue(c.id)).toContainEqual(
+      expect.objectContaining({
+        reason: "user_kind_not_allowed",
+        message_id: id,
+        template: ESCALATION_SIGNATURE_KIND,
+      }),
+    );
+  });
+
+  it("a null-template row whose linked event names an operator kind, to the user: refused", async () => {
+    // The sender derives the kind from the event that links the row (C6's operator_mail_queued).
+    const t = createFakeTransport();
+    const c = await seedCase({ status: "sent" });
+    const id = await rogue(c.id, PII.email, null);
+    const { error } = await db.from("case_events").insert({
+      case_id: c.id,
+      kind: "operator_mail_queued",
+      data: { template: "insistence_after_denial", message_id: id },
+    });
+    if (error) throw error;
+    const [res] = await send(t, c.id);
+    expect(res).toEqual({
+      messageId: id,
+      result: { status: "failed", reason: "user_kind_not_allowed" },
+    });
+    expect(t.outbox).toEqual([]);
+    const { data } = await db.from("messages").select("template").eq("id", id).single();
+    expect(data?.template).toBe("insistence_after_denial");
+  });
 });
 
 describe("queueEscalationSignatureRequest (§7.3)", () => {

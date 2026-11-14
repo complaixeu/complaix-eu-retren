@@ -3,7 +3,12 @@
 // queued it (initial claim, C6 actions, C7 timers, C8 notices). Internal to domain C.
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import type { CaseStatus, MailMessage, OperatorPublicConfig } from "@/shared/contracts";
+import {
+  TemplateKind,
+  type CaseStatus,
+  type MailMessage,
+  type OperatorPublicConfig,
+} from "@/shared/contracts";
 import { provider } from "@/shared/providers";
 import { MAX_SENDS_PER_CASE } from "./timers";
 
@@ -58,9 +63,18 @@ export const USER_NOTICE_KINDS: readonly string[] = Object.freeze([
   ESCALATION_SIGNATURE_KIND,
 ]);
 
-/** Whether mail of this kind may go to the user. An unknown or missing kind never may. */
-export function userMailAllowed(template: string | null | undefined): boolean {
+/** Whether this is a user notice kind: it may go to the case's user and to nobody else. */
+export function isUserNoticeKind(template: string | null | undefined): boolean {
   return typeof template === "string" && USER_NOTICE_KINDS.includes(template);
+}
+
+/**
+ * Whether mail of this kind may be sent to the user now: a user notice kind that is also a
+ * TemplateKind, so only our own template can have produced it. The escalation exception is
+ * refused until shared/contracts has it. An unknown or missing kind never may.
+ */
+export function userMailAllowed(template: string | null | undefined): boolean {
+  return isUserNoticeKind(template) && TemplateKind.safeParse(template).success;
 }
 
 /**
@@ -83,7 +97,7 @@ export function checkRecipient(input: {
       ? { ok: true, audience: "user" }
       : { ok: false, reason: "user_kind_not_allowed" };
   }
-  if (userMailAllowed(input.template)) return { ok: false, reason: "recipient_not_allowed" };
+  if (isUserNoticeKind(input.template)) return { ok: false, reason: "recipient_not_allowed" };
   const { channel } = input.operator;
   if (channel.type !== "email" || to !== normalise(channel.address)) {
     return { ok: false, reason: "recipient_not_allowed" };

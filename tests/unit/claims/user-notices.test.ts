@@ -38,8 +38,17 @@ describe("the user-kind allowlist", () => {
     expect(TemplateKind.safeParse(ESCALATION_SIGNATURE_KIND).success).toBe(false);
   });
 
-  it("the allowed kinds reach the case's own user", () => {
-    for (const kind of USER_NOTICE_KINDS) {
+  it("the escalation exception is refused to the user until it is a TemplateKind", () => {
+    // Nothing of ours can render it yet, so a row of that kind can't be our template.
+    expect(userMailAllowed(ESCALATION_SIGNATURE_KIND)).toBe(false);
+    expect(toUser(ESCALATION_SIGNATURE_KIND)).toEqual({
+      ok: false,
+      reason: "user_kind_not_allowed",
+    });
+  });
+
+  it("the document request and the final result reach the case's own user", () => {
+    for (const kind of ["user_request_document", "user_final_result"]) {
       expect(userMailAllowed(kind)).toBe(true);
       expect(toUser(kind)).toEqual({ ok: true, audience: "user" });
       // Case and spacing of the address never matter.
