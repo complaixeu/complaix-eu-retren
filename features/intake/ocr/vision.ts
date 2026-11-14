@@ -17,7 +17,18 @@ const TIMEOUT_MS = 20_000;
 const IMAGE_TYPES = new Set(["image/jpeg", "image/jpg", "image/png"]);
 const FEATURES = [{ type: "DOCUMENT_TEXT_DETECTION" }];
 
-type Annotated = { fullTextAnnotation?: { text?: unknown } };
+type Annotated = {
+  fullTextAnnotation?: { text?: unknown };
+  error?: { code?: unknown };
+};
+
+/** A per-request error inside an HTTP 200: throw with the code only, never message or key. */
+function assertNoError(r: Annotated | undefined): void {
+  if (r?.error) {
+    const code = typeof r.error.code === "number" ? r.error.code : "unknown";
+    throw new Error(`Vision OCR returned error code ${code}`);
+  }
+}
 
 function textOf(r: Annotated | undefined): string {
   const t = r?.fullTextAnnotation?.text;
@@ -48,8 +59,13 @@ export function createVisionOcr(opts: { apiKey: string; fetch?: FetchLike }): Oc
         const data = (await call("images:annotate", {
           requests: [{ image: { content }, features: FEATURES }],
         })) as { responses?: Annotated[] };
+        assertNoError(data.responses?.[0]);
         text = textOf(data.responses?.[0]);
       } else if (type === "application/pdf") {
+        // Inline `files:annotate` accepts at most 5 pages per request and a limited payload
+        // (about 20 MB request size, so about 10 MB of PDF after base64); larger or longer
+        // PDFs would need the async GCS flow. A1 caps uploads at 10 MB; only the first 5
+        // pages are read, enough for a ticket.
         const data = (await call("files:annotate", {
           requests: [
             {
@@ -58,8 +74,11 @@ export function createVisionOcr(opts: { apiKey: string; fetch?: FetchLike }): Oc
               pages: [1, 2, 3, 4, 5],
             },
           ],
-        })) as { responses?: { responses?: Annotated[] }[] };
-        text = (data.responses?.[0]?.responses ?? []).map(textOf).filter(Boolean).join("\n");
+        })) as { responses?: (Annotated & { responses?: Annotated[] })[] };
+        assertNoError(data.responses?.[0]);
+        const pages = data.responses?.[0]?.responses ?? [];
+        pages.forEach(assertNoError);
+        text = pages.map(textOf).filter(Boolean).join("\n");
       } else {
         return { text: "", quality: "unreadable" };
       }

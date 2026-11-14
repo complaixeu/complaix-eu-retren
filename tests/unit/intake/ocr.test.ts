@@ -3,13 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import { createFakeOcr } from "@/features/intake/ocr/fake";
 import { createOcr } from "@/features/intake/ocr";
 import { classifyQuality, MIN_TEXT_LENGTH } from "@/features/intake/ocr/quality";
-import { createVisionOcr } from "@/features/intake/ocr/vision";
+import { createVisionOcr, type FetchLike } from "@/features/intake/ocr/vision";
 import { fixtureTextsByHash, ocrFixtureFiles, ocrFixtureTexts } from "@/tests/fixtures/intake/ocr";
 
 const json = (name: string) =>
   JSON.parse(readFileSync(new URL(`../../fixtures/intake/${name}`, import.meta.url), "utf8"));
 const reply = (body: unknown, status = 200) =>
-  vi.fn(async (_url: string, _init: RequestInit) => new Response(JSON.stringify(body), { status }));
+  vi.fn<FetchLike>(async () => new Response(JSON.stringify(body), { status }));
 
 describe("classifyQuality", () => {
   it("empty or very short text is unreadable", () => {
@@ -61,7 +61,11 @@ describe("vision OCR", () => {
       bytes: file.bytes,
       contentType: "application/pdf",
     });
-    expect(fetch.mock.calls[0][0]).toContain("files:annotate");
+    const [url, init] = fetch.mock.calls[0];
+    expect(url).toContain("files:annotate");
+    const req = JSON.parse(init.body as string).requests[0];
+    expect(req.inputConfig.mimeType).toBe("application/pdf");
+    expect(req.pages).toEqual([1, 2, 3, 4, 5]);
     expect(r.quality).toBe("ok");
     expect(r.text).toContain("Pagina uno");
     expect(r.text).toContain("Pagina dos");
@@ -94,7 +98,27 @@ describe("vision OCR", () => {
   });
 });
 
+describe("vision OCR errors in a 200 response", () => {
+  it("throws with only the error code, never the message or key", async () => {
+    const fetch = reply({
+      responses: [{ error: { code: 3, message: "bad k-secret payload" } }],
+    });
+    const err = await createVisionOcr({ apiKey: "k-secret", fetch })
+      .readText({ bytes: new Uint8Array([1]), contentType: "image/png" })
+      .catch((e: Error) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toContain("3");
+    expect((err as Error).message).not.toContain("k-secret");
+    expect((err as Error).message).not.toContain("payload");
+  });
+});
+
 describe("createOcr", () => {
+  it("passes defaultText to the fake", async () => {
+    const ocr = createOcr({}, { defaultText: "Billete de ejemplo con texto legible suficiente" });
+    const r = await ocr.readText({ bytes: new Uint8Array([9]), contentType: "image/png" });
+    expect(r.quality).toBe("ok");
+  });
   it("defaults to the fake", () => {
     expect(createOcr({})).toBeDefined();
   });

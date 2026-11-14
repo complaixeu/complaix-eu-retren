@@ -10,12 +10,12 @@ import { createVisionOcr, type FetchLike } from "./vision";
  */
 export function createOcr(
   env: Record<string, string | undefined> = process.env,
-  deps: { fetch?: FetchLike; fixtures?: Record<string, string> } = {},
+  deps: { fetch?: FetchLike; fixtures?: Record<string, string>; defaultText?: string } = {},
 ): OcrProvider {
   if (provider("OCR_PROVIDER", env) === "vision") {
     const apiKey = env.GOOGLE_CLOUD_VISION_API_KEY;
     if (!apiKey) throw new Error("OCR_PROVIDER=vision needs GOOGLE_CLOUD_VISION_API_KEY to be set");
     return createVisionOcr({ apiKey, fetch: deps.fetch });
   }
-  return createFakeOcr({ fixtures: deps.fixtures });
+  return createFakeOcr({ fixtures: deps.fixtures, defaultText: deps.defaultText });
 }
