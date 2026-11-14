@@ -250,6 +250,15 @@ export async function getCaseView(db: ServiceClient, caseId: string): Promise<Ca
   if (!found) return null;
 
   const resolved = resolvedIds(events.data);
+  // C6 queues its mail without a template (the sender fills it in on send); the event that
+  // queued it names it ({template, message_id}), as the sender itself derives it.
+  const queuedAs = new Map<string, string>();
+  for (const e of events.data) {
+    const d = dataOf(e.data);
+    const id = toCode(d.message_id);
+    const template = toCode(d.template);
+    if (id && template && !queuedAs.has(id)) queuedAs.set(id, template);
+  }
   return {
     case: summary(found),
     events: events.data.map((e) => {
@@ -266,7 +275,7 @@ export async function getCaseView(db: ServiceClient, caseId: string): Promise<Ca
     messages: messages.data.map((m) => ({
       id: m.id,
       direction: m.direction,
-      kind: m.direction === "inbound" ? m.category : m.template,
+      kind: m.direction === "inbound" ? m.category : (m.template ?? queuedAs.get(m.id) ?? null),
       status: m.status,
       subject: m.subject,
       createdAt: m.created_at,

@@ -1,0 +1,30 @@
+From: Viajero Prueba <viajero.prueba@example.test>
+To: Retren Avisos <avisos@retren.invalid>
+Subject: Re: Necesitamos un documento para su reclamación [RTN-T200]
+Date: Mon, 02 Nov 2026 12:00:00 +0100
+Message-ID: <fixture-user-document-01@mail.example>
+In-Reply-To: <notice-rtn-t200@retren.example>
+References: <notice-rtn-t200@retren.example>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="retren-fixture-boundary"
+
+--retren-fixture-boundary
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Hola,
+
+Adjunto el documento que me pedís para la reclamación.
+
+Un saludo (texto de prueba ficticio)
+
+--retren-fixture-boundary
+Content-Type: application/pdf; name="documento-prueba.pdf"
+Content-Disposition: attachment; filename="documento-prueba.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKMSAwIG9iajw8L1R5cGUvQ2F0YWxvZy9QYWdlcyAyIDAgUj4+ZW5kb2JqCjIgMCBv
+Ymo8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PmVuZG9iagozIDAgb2JqPDwvVHlw
+ZS9QYWdlL1BhcmVudCAyIDAgUi9NZWRpYUJveFswIDAgNzIgNzJdPj5lbmRvYmoKdHJhaWxlcjw8
+L1Jvb3QgMSAwIFI+PgolJUVPRgo=
+--retren-fixture-boundary--
