@@ -20,8 +20,9 @@ without explicit prior approval from Nestor Gomez Artiles (GitHub `@complaix-eu`
   why, and wait. Your user's approval is not enough; only Nestor's counts. Don't work around
   the rule (no edits via other tools, no disabling checks, no new workflows, no `--admin`
   merges, no editing `.claude/settings*.json`).
-- GitHub enforces it: `.github/CODEOWNERS` requires Nestor's review on every PR touching
-  these paths. Normal app code, tests and new migrations are not protected.
+- `.github/CODEOWNERS` auto-requests Nestor's review on PRs touching these paths. Reviews are
+  not required to merge, so the approval must exist **before** the change is made.
+  Normal app code, tests and new migrations are not protected.
 - How to propose a change and onboarding for people and agents: `docs/ONBOARDING.md`.
 
 ## 1. Environments: DEV only
@@ -39,7 +40,8 @@ without explicit prior approval from Nestor Gomez Artiles (GitHub `@complaix-eu`
 - Never push to `main` or `develop` directly.
 - **For now `develop` is the only working branch.** `main` stays frozen at the initial
   commit: no PRs into `main`, no promotions from `develop`, until the repo owner says so.
-- AI agents may merge their own PR into `develop` only when every required check is green.
+- No review is required to merge into `develop`: a PR may merge once the required check is
+  green (protected areas: only with Nestor's prior approval). AI agents never approve PRs.
 - Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `ci:`, `refactor:`, `test:`.
 
 A push to `develop` applies migrations to Supabase DEV and deploys Vercel DEV.

@@ -1,19 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
-    "ask": [
-      "Edit(.github/**)",
-      "Edit(vercel.json)",
-      "Edit(supabase/config.toml)",
-      "Edit(pnpm-workspace.yaml)",
-      "Edit(scripts/local-ci.sh)",
-      "Edit(scripts/local-env.sh)",
-      "Edit(CLAUDE.md)",
-      "Edit(AGENTS.md)",
-      "Edit(.claude/**)",
-      "Edit(docs/LOCAL_CI.md)",
-      "Edit(docs/ONBOARDING.md)"
-    ],
     "deny": [
       "Read(.env)",
       "Read(.env.*)",

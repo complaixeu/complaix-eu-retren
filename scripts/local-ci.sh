@@ -35,7 +35,9 @@ fail() { printf '\033[1;31m✗ %s\033[0m\n' "$1" >&2; exit 1; }
 # Next reads .env*.local; CI has none. Park them for the run.
 parked=(); supabase_up=0; app_pid=""
 cleanup() {
-  [ -n "$app_pid" ] && kill "$app_pid" 2>/dev/null || true
+  # The app runs in its own process group (set -m): kill the whole group, or
+  # next-server survives pnpm and keeps the port open after the run.
+  if [ -n "$app_pid" ]; then kill -- "-$app_pid" 2>/dev/null || kill "$app_pid" 2>/dev/null || true; fi
   if [ "$supabase_up" = 1 ] && [ "$keep" = 0 ]; then
     pnpm exec supabase stop --no-backup >/dev/null 2>&1 || true
   fi
@@ -91,12 +93,20 @@ NEXT_PUBLIC_APP_URL="http://localhost:$APP_PORT" \
   pnpm build
 
 step "[deploy_dev] Start app on http://localhost:$APP_PORT (stands in for vercel deploy)"
+# Refuse a busy port: otherwise the smoke check could hit some other server.
+if curl -s -o /dev/null "http://127.0.0.1:$APP_PORT/" 2>/dev/null; then
+  fail "Port $APP_PORT is already in use. Stop that process or set APP_PORT=<free port>."
+fi
+# Bound to 127.0.0.1 only (never all interfaces on a shared VPS). `set -m` gives
+# the background job its own process group (portable; macOS has no setsid).
+set -m
 NEXT_PUBLIC_SUPABASE_URL="$api_url" \
 NEXT_PUBLIC_SUPABASE_ANON_KEY="$anon_key" \
 SUPABASE_SERVICE_ROLE_KEY="$service_key" \
 NEXT_PUBLIC_APP_URL="http://localhost:$APP_PORT" \
-  pnpm start -p "$APP_PORT" >"${TMPDIR:-/tmp}/retren-local-ci-app.log" 2>&1 &
+  pnpm start -p "$APP_PORT" -H 127.0.0.1 >"${TMPDIR:-/tmp}/retren-local-ci-app.log" 2>&1 &
 app_pid=$!
+set +m
 
 step "[deploy_dev] Smoke check /api/health (same loop as CI)"
 status_code=000

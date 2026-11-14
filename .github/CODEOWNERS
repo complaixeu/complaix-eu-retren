@@ -1,6 +1,7 @@
 # Protected areas: CI/CD, infrastructure, and the rules for humans and agents.
-# Any PR touching these paths needs an approving review from
-# Nestor Gomez Artiles (@complaix-eu) before it can merge into develop.
+# GitHub automatically requests a review from Nestor Gomez Artiles (@complaix-eu)
+# on any PR touching these paths. Reviews are not required to merge, but changes
+# here must be approved by Nestor beforehand (CLAUDE.md §0).
 # See CLAUDE.md §0 and docs/ONBOARDING.md.
 
 /.github/                 @complaix-eu

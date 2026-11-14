@@ -41,6 +41,14 @@ The script runs in a clean environment (`env -i`) like a GitHub runner and tempo
 Resources: the local stack (Postgres, Auth, REST, Storage, Kong) needs roughly 1.5–2.5 GB RAM
 while running. It is started on demand and stopped at the end of the run, never left always-on.
 
+**On a server with a public IP (like the shared VPS):** Docker publishes the local Supabase
+ports (54321 API, 54322 Postgres with the CLI's default password) on **all interfaces**, and
+Docker's port rules bypass `ufw`. Either block those ports in the hosting provider's firewall or
+make Docker bind to localhost by default (`/etc/docker/daemon.json`: `{"ip": "127.0.0.1"}`, then
+restart Docker; this affects every container on the machine, so the server admin decides). The app
+itself is always started on `127.0.0.1`. To view it from your laptop, use an SSH tunnel
+([ONBOARDING.md §8](ONBOARDING.md)).
+
 ## Commands
 
 ```bash
