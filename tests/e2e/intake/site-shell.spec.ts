@@ -12,7 +12,9 @@ test("the public pages share a light ReTren website frame on phone and desktop",
 
     await expect(page.getByRole("banner")).toBeVisible();
     await expect(page.getByRole("link", { name: "ReTren, inicio" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "ReTren, inicio" }).locator("svg")).toBeVisible();
+    const logo = page.getByRole("link", { name: "ReTren, inicio" }).locator("img");
+    await expect(logo).toBeVisible();
+    await expect(logo).toHaveAttribute("src", "/gemini-svg.svg");
     await expect(page.getByRole("link", { name: "Empezar reclamación" }).first()).toBeVisible();
     await expect(page.getByRole("contentinfo")).toBeVisible();
 
