@@ -1,0 +1,5 @@
+# Single-package repo. allowBuilds: packages permitted to run install scripts.
+allowBuilds:
+  sharp: false
+  unrs-resolver: false
+  supabase: true
