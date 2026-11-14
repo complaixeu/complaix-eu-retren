@@ -118,7 +118,7 @@ test("continuar and atrás move through every step in order", async ({ page }) =
       await page.getByLabel("Número de documento").fill("12345678Z");
       await page.getByLabel("Email").fill("viajera@example.com");
       await page.getByLabel("Fecha de llegada").fill("2026-11-14");
-      await page.getByLabel("Hora de llegada").fill("18:25");
+      await page.getByLabel("Hora de llegada", { exact: true }).fill("18:25");
       await page.getByRole("radio", { name: "No", exact: true }).check();
       await page.getByRole("radio", { name: "Dinero" }).check();
       await page.getByRole("button", { name: "Continuar" }).click();
