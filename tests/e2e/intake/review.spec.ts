@@ -13,6 +13,7 @@ const confirm = (page: Page) =>
   page.getByRole("checkbox", { name: "He comprobado el localizador" });
 const continueButton = (page: Page) => page.getByRole("button", { name: "Continuar" });
 const MISSING = /No aparece en el billete/;
+const NEXT_DAY = /Llegas después de medianoche: lo guardamos como llegada del día siguiente\./;
 // The form's error summary. Next's route announcer is also a role="alert", so match by its text.
 const errorSummary = (page: Page) =>
   page.getByRole("alert").filter({ hasText: "Faltan datos o hay alguno que corregir" });
@@ -130,18 +131,47 @@ test("an edited field is saved to the draft and shown again on the way back", as
   await page.reload();
   await expect(field(page, "Estación de origen")).toHaveValue("Estación Corregida");
   await expect(field(page, "Localizador")).toHaveValue("QWE987");
-  await expect(confirm(page)).toBeChecked();
+  // A saved review never comes back pre-confirmed: the localizador is checked on every submit.
+  await expect(confirm(page)).not.toBeChecked();
+  await continueButton(page).click();
+  await expect(confirm(page)).toBeFocused();
+  await expect(confirm(page)).toHaveAccessibleDescription(/Marca la casilla/);
 });
 
-test("arrival before departure is refused with the error under the arrival", async ({ page }) => {
+test("an arrival after midnight is saved as the next day, with a note", async ({ page }) => {
   await openWith(page, { extraction: { quality: "ok", data: fullTicket, missing: [] } });
-  await field(page, "Hora de llegada prevista").fill("08:00");
+  const arrival = field(page, "Hora de llegada prevista");
+  await expect(arrival).not.toHaveAccessibleDescription(NEXT_DAY);
+
+  await field(page, "Hora de salida prevista").fill("23:10");
+  await arrival.fill("01:40");
+  // The note shows as soon as both times are in, before anything is sent.
+  await expect(page.getByText(NEXT_DAY)).toBeVisible();
+  await expect(arrival).toHaveAccessibleDescription(NEXT_DAY);
+  await expect(arrival).not.toHaveAttribute("aria-invalid");
+
+  await confirm(page).check();
+  await continueButton(page).click();
+  await expect(page).toHaveURL(/\/reclamar\/preguntas$/);
+  expect(await draftData(page.context())).toMatchObject({
+    review: { ticket: { scheduledDeparture: "23:10", scheduledArrival: "01:40" } },
+  });
+
+  // And again on the way back, from what was saved.
+  await page.goto("/reclamar/revision");
+  await expect(page.getByText(NEXT_DAY)).toBeVisible();
+});
+
+test("an arrival at the same time as the departure is refused", async ({ page }) => {
+  await openWith(page, { extraction: { quality: "ok", data: fullTicket, missing: [] } });
+  await field(page, "Hora de llegada prevista").fill("09:10");
   await confirm(page).check();
   await continueButton(page).click();
   await expect(field(page, "Hora de llegada prevista")).toBeFocused();
   await expect(field(page, "Hora de llegada prevista")).toHaveAccessibleDescription(
-    /posterior a la de salida/,
+    /no puede ser la misma que la de salida/,
   );
+  await expect(page).toHaveURL(/\/reclamar\/revision$/);
 });
 
 test("with nothing read, every field is typed by hand", async ({ page }) => {
@@ -164,8 +194,23 @@ test.describe("mobile, 375 px wide", () => {
           () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
         );
       expect(await overflow()).toBeLessThanOrEqual(0);
-      for (const target of [continueButton(page), field(page, "Localizador")]) {
-        expect((await target.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+      // A radio or checkbox is tapped through its label, so the label is what must be large.
+      const choiceLabel = (name: string) => page.getByText(name, { exact: true });
+      for (const target of [
+        continueButton(page),
+        field(page, "Localizador"),
+        field(page, "Fecha del viaje"),
+        field(page, "Fecha de compra (opcional)"),
+        field(page, "Hora de salida prevista"),
+        field(page, "Hora de llegada prevista"),
+        choiceLabel("Iryo"),
+        choiceLabel("Renfe"),
+        choiceLabel("Ouigo"),
+        choiceLabel("No lo recuerdo"),
+        choiceLabel("He comprobado el localizador"),
+      ]) {
+        const box = await target.boundingBox();
+        expect(box?.height ?? 0, String(target)).toBeGreaterThanOrEqual(44);
       }
       await continueButton(page).click();
       await expect(errorSummary(page)).toBeVisible();

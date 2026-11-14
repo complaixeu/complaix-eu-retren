@@ -40,3 +40,24 @@ export type ReviewFormState =
 
 /** The value a checked "He comprobado el localizador" box posts. */
 export const CONFIRM_VALUE = "yes";
+
+export type ArrivalWarning = "next_day_arrival" | "long_trip";
+
+const LONG_TRIP_MINUTES = 10 * 60;
+const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+
+/**
+ * The notes under the arrival time, worked out as the user types. Mirrors `reviewWarnings` in
+ * features/intake/review/validate.ts (a unit test compares them on every pair of times); the
+ * server's result is the one that is shown again on the way back.
+ */
+export function arrivalWarnings(departure: string, arrival: string): ArrivalWarning[] {
+  const hhmm = /^\d{2}:\d{2}$/;
+  if (!hhmm.test(departure) || !hhmm.test(arrival) || departure === arrival) return [];
+  const nextDay = arrival < departure;
+  const duration = minutes(arrival) - minutes(departure) + (nextDay ? 24 * 60 : 0);
+  const out: ArrivalWarning[] = [];
+  if (nextDay) out.push("next_day_arrival");
+  if (duration > LONG_TRIP_MINUTES) out.push("long_trip");
+  return out;
+}

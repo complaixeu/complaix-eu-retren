@@ -72,11 +72,16 @@ export {
   REVIEW_SECTIONS,
   reviewErrorMessage,
   reviewErrorMessages,
+  reviewWarningMessage,
+  REVIEW_WARNING_MESSAGES,
+  LONG_TRIP_MINUTES,
   type ReviewErrorCode,
   type ReviewErrors,
   type ReviewField,
   type ReviewInputName,
   type ReviewSection,
+  type ReviewWarningCode,
+  type ReviewWarnings,
 } from "./review/fields";
 export { StoredReview, readReview, type ReviewStart } from "./review/read";
 export { submitReview, type ReviewSubmitResult } from "./review/submit";
@@ -84,6 +89,7 @@ export {
   BOOKING_REF_CONFIRMED,
   parseReviewDate,
   parseReviewTime,
+  reviewWarnings,
   validateReview,
   type ReviewValidation,
   type ReviewValues,

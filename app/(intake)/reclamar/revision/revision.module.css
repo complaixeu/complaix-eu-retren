@@ -64,6 +64,13 @@
   border-inline-start: var(--alert-stripe) solid var(--color-warning);
 }
 
+/* A note on a value that is fine but unusual, like an arrival after midnight: in the text colour,
+   so it reads as information and not as an error. */
+.note {
+  color: var(--color-text);
+  font-weight: var(--weight-medium);
+}
+
 .missingNote {
   color: var(--color-warning);
   font-weight: var(--weight-medium);

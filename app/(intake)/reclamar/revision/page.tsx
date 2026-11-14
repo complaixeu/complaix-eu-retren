@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import {
-  BOOKING_REF_CONFIRMED,
+  REVIEW_WARNING_MESSAGES,
   REVIEW_FIELDS,
   REVIEW_SECTIONS,
   intakeStepHref,
@@ -41,6 +41,7 @@ async function ReviewStep() {
         sections={sectionsFor(start)}
         values={valuesFor(start)}
         missingCount={start.source === "extraction" ? start.missing.length : 0}
+        warningMessages={REVIEW_WARNING_MESSAGES}
         backHref={intakeStepHref(previous!)}
       />
     </>
@@ -78,6 +79,7 @@ function valuesFor(start: ReviewStart): Record<string, string> {
   for (const [name, value] of Object.entries(start.ticket)) {
     if (typeof value === "string") values[name] = value;
   }
-  if (start.confirmed) values.bookingRefConfirmed = BOOKING_REF_CONFIRMED;
+  // Never pre-confirmed, not even over a saved review: the localizador is checked on every
+  // submit, and a page without JavaScript can't skip it by editing it.
   return values;
 }

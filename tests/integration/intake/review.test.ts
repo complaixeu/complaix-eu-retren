@@ -70,12 +70,12 @@ describe("submitReview (local Supabase)", () => {
   it("stores nothing when the review is invalid or the localizador isn't confirmed", async () => {
     const { jar, id } = await draftWithExtraction();
     const invalid = await submitReview(
-      reviewForm({ scheduledDeparture: "12:00", scheduledArrival: "11:00" }),
+      reviewForm({ scheduledDeparture: "12:00", scheduledArrival: "12:00" }),
       { db, clock, jar },
     );
     expect(invalid).toMatchObject({
       ok: false,
-      errors: { scheduledArrival: "arrival_not_after_departure" },
+      errors: { scheduledArrival: "same_time" },
     });
     const unconfirmed = await submitReview(reviewForm({ bookingRefConfirmed: null }), {
       db,
@@ -108,5 +108,27 @@ describe("submitReview (local Supabase)", () => {
     await expect(submitReview(reviewForm(), { db, clock, jar: memoryJar() })).rejects.toMatchObject(
       { digest: expect.stringContaining("/reclamar/foto") },
     );
+  });
+
+  it("checks for a draft before the form: invalid input without a draft redirects too", async () => {
+    // No draft, no validation: the form's contents (and their errors) are never looked at.
+    await expect(
+      submitReview(reviewForm({ origin: "", bookingRefConfirmed: null }), {
+        db,
+        clock,
+        jar: memoryJar(),
+      }),
+    ).rejects.toMatchObject({ digest: expect.stringContaining("/reclamar/foto") });
+  });
+
+  it("stores an arrival after midnight as the times given", async () => {
+    const { jar, id } = await draftWithExtraction();
+    const result = await submitReview(
+      reviewForm({ scheduledDeparture: "23:10", scheduledArrival: "01:40" }),
+      { db, clock, jar },
+    );
+    expect(result.ok).toBe(true);
+    const review = (await getDraft(id, { db, clock }))?.data.review as Record<string, unknown>;
+    expect(review.ticket).toMatchObject({ scheduledDeparture: "23:10", scheduledArrival: "01:40" });
   });
 });

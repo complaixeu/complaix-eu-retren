@@ -3,11 +3,13 @@ import {
   REVIEW_FIELDS,
   REVIEW_REQUIRED_FIELDS,
   reviewErrorMessage,
+  reviewWarningMessage,
 } from "@/features/intake/review/fields";
 import { readReview } from "@/features/intake/review/read";
 import {
   parseReviewDate,
   parseReviewTime,
+  reviewWarnings,
   validateReview,
 } from "@/features/intake/review/validate";
 import { SubmittedTicket, TicketData } from "@/shared/contracts";
@@ -60,7 +62,7 @@ describe("the field list", () => {
 describe("validateReview", () => {
   it("accepts a complete review and returns a SubmittedTicket", () => {
     const result = validate();
-    expect(result).toEqual({ ok: true, ticket: fullTicket });
+    expect(result).toEqual({ ok: true, ticket: fullTicket, warnings: {} });
     if (result.ok) expect(SubmittedTicket.safeParse(result.ticket).success).toBe(true);
   });
 
@@ -176,12 +178,52 @@ describe("validateReview", () => {
       expect(validate({ scheduledDeparture: "00:00", scheduledArrival: "00:01" }).ok).toBe(true);
     });
 
-    it("requires the arrival to be after the departure", () => {
-      expect(errorsOf({ scheduledDeparture: "11:55", scheduledArrival: "09:10" })).toEqual({
-        scheduledArrival: "arrival_not_after_departure",
-      });
+    it("refuses an arrival at the same time as the departure", () => {
       expect(errorsOf({ scheduledDeparture: "10:00", scheduledArrival: "10:00" })).toEqual({
-        scheduledArrival: "arrival_not_after_departure",
+        scheduledArrival: "same_time",
+      });
+      expect(errorsOf({ scheduledDeparture: "0:05", scheduledArrival: "00:05" })).toEqual({
+        scheduledArrival: "same_time",
+      });
+    });
+
+    // Like domain C (features/claims/create-case.ts), an arrival earlier than the departure is an
+    // arrival on the next day: late trains do arrive after midnight.
+    it("accepts an arrival after midnight, with a note that it's the next day", () => {
+      const result = validate({ scheduledDeparture: "23:10", scheduledArrival: "01:40" });
+      expect(result).toEqual({
+        ok: true,
+        ticket: { ...fullTicket, scheduledDeparture: "23:10", scheduledArrival: "01:40" },
+        warnings: { scheduledArrival: ["next_day_arrival"] },
+      });
+    });
+
+    it("warns, without blocking, when the trip would take over 10 hours", () => {
+      const overnight = validate({ scheduledDeparture: "11:55", scheduledArrival: "09:10" });
+      expect(overnight.ok && overnight.warnings).toEqual({
+        scheduledArrival: ["next_day_arrival", "long_trip"],
+      });
+      const long = validate({ scheduledDeparture: "08:00", scheduledArrival: "18:01" });
+      expect(long.ok && long.warnings).toEqual({ scheduledArrival: ["long_trip"] });
+      const tenHours = validate({ scheduledDeparture: "08:00", scheduledArrival: "18:00" });
+      expect(tenHours.ok && tenHours.warnings).toEqual({});
+    });
+
+    it("has no warnings for a usual daytime trip", () => {
+      const result = validate();
+      expect(result.ok && result.warnings).toEqual({});
+    });
+
+    it("keeps the warnings next to the errors when something else is wrong", () => {
+      const result = validate({
+        scheduledDeparture: "23:10",
+        scheduledArrival: "01:40",
+        origin: "",
+      });
+      expect(result).toMatchObject({
+        ok: false,
+        errors: { origin: "required" },
+        warnings: { scheduledArrival: ["next_day_arrival"] },
       });
     });
 
@@ -214,9 +256,13 @@ describe("reviewErrorMessage", () => {
       "Escribe el localizador tal como aparece en el billete.",
     );
     expect(reviewErrorMessage("bookingRefConfirmed", "unconfirmed")).toMatch(/localizador/);
-    expect(reviewErrorMessage("scheduledArrival", "arrival_not_after_departure")).toMatch(
-      /posterior a la de salida/,
+    expect(reviewErrorMessage("scheduledArrival", "same_time")).toMatch(
+      /no puede ser la misma que la de salida/,
     );
+    expect(reviewWarningMessage("next_day_arrival")).toBe(
+      "Llegas después de medianoche: lo guardamos como llegada del día siguiente.",
+    );
+    expect(reviewWarningMessage("long_trip")).toMatch(/más de 10 horas/);
     for (const field of REVIEW_REQUIRED_FIELDS) {
       expect(reviewErrorMessage(field, "required")).toMatch(/\.$/);
     }
@@ -294,5 +340,30 @@ describe("the client form's mirror of the server", () => {
     const { CONFIRM_VALUE } = await import("@/app/(intake)/reclamar/revision/review-state");
     const { BOOKING_REF_CONFIRMED } = await import("@/features/intake/review/validate");
     expect(CONFIRM_VALUE).toBe(BOOKING_REF_CONFIRMED);
+  });
+
+  it("shows the same arrival note as the server, for every pair of times", async () => {
+    const { arrivalWarnings } = await import("@/app/(intake)/reclamar/revision/review-state");
+    const times: string[] = [];
+    for (let h = 0; h < 24; h++) {
+      for (const m of [0, 1, 15, 30, 45, 59]) {
+        times.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
+      }
+    }
+    for (const departure of times) {
+      for (const arrival of times) {
+        expect(arrivalWarnings(departure, arrival)).toEqual(
+          reviewWarnings(departure, arrival).scheduledArrival ?? [],
+        );
+      }
+    }
+  });
+
+  it("says nothing about the arrival until both times are complete", async () => {
+    const { arrivalWarnings } = await import("@/app/(intake)/reclamar/revision/review-state");
+    expect(arrivalWarnings("23:10", "")).toEqual([]);
+    expect(arrivalWarnings("", "01:40")).toEqual([]);
+    expect(arrivalWarnings("23:10", "1:4")).toEqual([]);
+    expect(reviewWarnings(undefined, "01:40")).toEqual({});
   });
 });

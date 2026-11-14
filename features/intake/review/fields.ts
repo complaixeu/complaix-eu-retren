@@ -16,10 +16,18 @@ export type ReviewErrorCode =
   | "future_date"
   | "purchase_after_travel"
   | "invalid_time"
-  | "arrival_not_after_departure"
+  | "same_time"
   | "unconfirmed";
 
 export type ReviewErrors = Partial<Record<ReviewInputName, ReviewErrorCode>>;
+
+/** Shown under a field but never blocking: the value is fine, worth a second look. */
+export type ReviewWarningCode = "next_day_arrival" | "long_trip";
+
+export type ReviewWarnings = Partial<Record<ReviewInputName, ReviewWarningCode[]>>;
+
+/** A trip longer than this (in minutes) gets the `long_trip` note. */
+export const LONG_TRIP_MINUTES = 10 * 60;
 
 export type ReviewSection = "ticket" | "trip" | "passenger" | "purchase";
 
@@ -191,8 +199,8 @@ export function reviewErrorMessage(input: ReviewInputName, code: ReviewErrorCode
       return "La fecha de compra no puede ser posterior a la del viaje.";
     case "invalid_time":
       return "Escribe la hora como HH:MM, por ejemplo 09:05.";
-    case "arrival_not_after_departure":
-      return "La hora de llegada tiene que ser posterior a la de salida.";
+    case "same_time":
+      return "La hora de llegada no puede ser la misma que la de salida. Revisa las dos.";
     case "unconfirmed":
       return "Marca la casilla cuando hayas comprobado que el localizador coincide con el del billete.";
   }
@@ -208,3 +216,16 @@ export function reviewErrorMessages(
   }
   return out;
 }
+
+const warningMessages: Record<ReviewWarningCode, string> = {
+  next_day_arrival: "Llegas después de medianoche: lo guardamos como llegada del día siguiente.",
+  long_trip: "Según estas horas, el viaje dura más de 10 horas. Comprueba que son las del billete.",
+};
+
+/** The note shown under a field for a warning code. */
+export function reviewWarningMessage(code: ReviewWarningCode): string {
+  return warningMessages[code];
+}
+
+/** Every warning message by code, for the client form, which shows them as the user types. */
+export const REVIEW_WARNING_MESSAGES: Readonly<Record<ReviewWarningCode, string>> = warningMessages;

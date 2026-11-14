@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, type ReactNode } from "react";
+import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Alert,
   Button,
@@ -16,6 +16,8 @@ import intake from "../_components/intake.module.css";
 import styles from "./revision.module.css";
 import {
   CONFIRM_VALUE,
+  arrivalWarnings,
+  type ArrivalWarning,
   type ReviewFieldView,
   type ReviewFormState,
   type ReviewFormValues,
@@ -29,6 +31,8 @@ export interface ReviewFormProps {
   values: ReviewFormValues;
   /** How many fields the extraction couldn't read (0 when typed by hand). */
   missingCount: number;
+  /** The notes under the arrival time, by code (`REVIEW_WARNING_MESSAGES`). */
+  warningMessages: Readonly<Record<ArrivalWarning, string>>;
   backHref: string;
 }
 
@@ -45,7 +49,14 @@ const MISSING_NOTE = "No aparece en el billete: escríbelo tú.";
  * error the form comes back with what the user typed and focus moves to the first field to fix.
  * It gets everything as props and imports no domain code (tests/unit/intake/client-boundary).
  */
-export function ReviewForm({ action, sections, values, missingCount, backHref }: ReviewFormProps) {
+export function ReviewForm({
+  action,
+  sections,
+  values,
+  missingCount,
+  warningMessages,
+  backHref,
+}: ReviewFormProps) {
   const [state, formAction, pending] = useActionState(action, IDLE);
   const formRef = useRef<HTMLFormElement>(null);
   const confirmRef = useRef<HTMLInputElement>(null);
@@ -53,6 +64,16 @@ export function ReviewForm({ action, sections, values, missingCount, backHref }:
   const shown = state.status === "error" ? state.values : values;
   const errors = state.status === "error" ? state.errors : {};
   const attempt = state.status === "error" ? state.attempt : 0;
+
+  // The two times as they are typed, for the non-blocking note under the arrival (e.g. an
+  // arrival after midnight). The server takes an earlier arrival as the next day too.
+  const [times, setTimes] = useState({
+    scheduledDeparture: values.scheduledDeparture ?? "",
+    scheduledArrival: values.scheduledArrival ?? "",
+  });
+  const arrivalNotes = arrivalWarnings(times.scheduledDeparture, times.scheduledArrival).map(
+    (code) => warningMessages[code],
+  );
 
   useEffect(() => {
     if (state.status === "error" && formRef.current) focusFirstInvalid(formRef.current);
@@ -66,7 +87,8 @@ export function ReviewForm({ action, sections, values, missingCount, backHref }:
   const renderField = (field: ReviewFieldView): ReactNode => {
     const error = errors[field.name];
     // Under an error, the error says what to do: the "missing" note would only repeat it.
-    const help = helpOf(field, error != null);
+    const notes = field.name === "scheduledArrival" ? arrivalNotes : [];
+    const help = helpOf(field, error != null, notes);
     const value = shown[field.name] ?? "";
 
     if (field.kind === "choice") {
@@ -100,7 +122,16 @@ export function ReviewForm({ action, sections, values, missingCount, backHref }:
             aria-required={field.required || undefined}
             spellCheck={field.name === "bookingRef" ? false : undefined}
             autoCapitalize={field.name === "bookingRef" ? "characters" : undefined}
-            onChange={field.name === "bookingRef" ? unconfirm : undefined}
+            onChange={
+              field.name === "bookingRef"
+                ? unconfirm
+                : field.kind === "time"
+                  ? (event) => {
+                      const { value: typed } = event.currentTarget;
+                      setTimes((t) => ({ ...t, [field.name]: typed }));
+                    }
+                  : undefined
+            }
           />
         )}
       </Field>
@@ -172,12 +203,22 @@ export function ReviewForm({ action, sections, values, missingCount, backHref }:
   );
 }
 
-function helpOf(field: ReviewFieldView, hasError: boolean): ReactNode {
-  if (!field.missing || hasError) return field.help;
+/**
+ * The text under a field: the "missing" mark (dropped under an error, which already says what to
+ * do), then any notes on the value, then the field's own help.
+ */
+function helpOf(field: ReviewFieldView, hasError: boolean, notes: string[]): ReactNode {
+  const missing = field.missing && !hasError;
+  if (!missing && notes.length === 0) return field.help;
   return (
     <>
-      <span className={styles.missingNote}>{MISSING_NOTE}</span>
-      {field.help && <> {field.help}</>}
+      {missing && <span className={styles.missingNote}>{MISSING_NOTE} </span>}
+      {notes.map((note) => (
+        <span key={note} className={styles.note}>
+          {note}{" "}
+        </span>
+      ))}
+      {field.help}
     </>
   );
 }

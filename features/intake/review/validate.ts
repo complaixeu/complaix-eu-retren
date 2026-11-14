@@ -1,23 +1,28 @@
 import { SubmittedTicket, type TicketField } from "@/shared/contracts";
 import {
+  LONG_TRIP_MINUTES,
   REVIEW_FIELDS,
   REVIEW_MAX_LENGTH,
   type ReviewErrors,
   type ReviewInputName,
+  type ReviewWarningCode,
+  type ReviewWarnings,
 } from "./fields";
 
 /**
  * Server-side check of the review form ([A4]). The form posts plain strings; this trims them,
  * normalizes dates and times, and checks what a case needs (`SubmittedTicket`): real calendar
- * dates, a trip and a purchase that already happened, `HH:MM` times and an arrival after the
- * departure. Pure: the clock comes in as `now`.
+ * dates, a trip and a purchase that already happened, `HH:MM` times and an arrival that isn't
+ * the departure time. Times that look odd but may be right come back as `warnings`, which never
+ * block. Pure: the clock comes in as `now`.
  */
 
 /** What the user typed, per input, to put back in the form after an error. */
 export type ReviewValues = Partial<Record<ReviewInputName, string>>;
 
 export type ReviewValidation =
-  { ok: true; ticket: SubmittedTicket } | { ok: false; values: ReviewValues; errors: ReviewErrors };
+  | { ok: true; ticket: SubmittedTicket; warnings: ReviewWarnings }
+  | { ok: false; values: ReviewValues; errors: ReviewErrors; warnings: ReviewWarnings };
 
 /** The value a checked "He comprobado el localizador" box posts. */
 export const BOOKING_REF_CONFIRMED = "yes";
@@ -103,19 +108,41 @@ export function validateReview(form: Form, { now }: { now: Date }): ReviewValida
   else if (purchaseDate && travelDate && purchaseDate > travelDate) {
     errors.purchaseDate = "purchase_after_travel";
   }
-  // No arrival date on the ticket: the trains we claim for arrive the day they leave.
-  if (scheduledDeparture && scheduledArrival && scheduledArrival <= scheduledDeparture) {
-    errors.scheduledArrival = "arrival_not_after_departure";
+  // The ticket has no arrival date. An earlier arrival time means the next day (as in domain C's
+  // `toEligibilityInput`); the same time can't be right either way.
+  if (scheduledDeparture && scheduledDeparture === scheduledArrival) {
+    errors.scheduledArrival = "same_time";
   }
+  const warnings = reviewWarnings(scheduledDeparture, scheduledArrival);
 
   const confirmed = text(form, "bookingRefConfirmed");
   values.bookingRefConfirmed = confirmed;
   if (confirmed !== BOOKING_REF_CONFIRMED) errors.bookingRefConfirmed = "unconfirmed";
 
-  if (Object.keys(errors).length > 0) return { ok: false, values, errors };
+  if (Object.keys(errors).length > 0) return { ok: false, values, errors, warnings };
 
   // The checks above cover every rule of the contract; parsing again keeps the type honest.
   const parsed = SubmittedTicket.safeParse(ticket);
   if (!parsed.success) throw new Error("review passed its checks but not SubmittedTicket");
-  return { ok: true, ticket: parsed.data };
+  return { ok: true, ticket: parsed.data, warnings };
+}
+
+const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+
+/**
+ * The non-blocking notes on the times, from two `HH:MM` values: an arrival earlier than the
+ * departure is on the next day, and a trip of over `LONG_TRIP_MINUTES` is worth a second look.
+ * Nothing when either time is missing or not `HH:MM`, or when they are equal (that's an error).
+ * The client form mirrors this as `arrivalWarnings` (tests/unit/intake/review.test.ts).
+ */
+export function reviewWarnings(departure?: string, arrival?: string): ReviewWarnings {
+  const hhmm = /^\d{2}:\d{2}$/;
+  if (!departure || !arrival || !hhmm.test(departure) || !hhmm.test(arrival)) return {};
+  if (departure === arrival) return {};
+  const nextDay = arrival < departure;
+  const duration = minutes(arrival) - minutes(departure) + (nextDay ? 24 * 60 : 0);
+  const codes: ReviewWarningCode[] = [];
+  if (nextDay) codes.push("next_day_arrival");
+  if (duration > LONG_TRIP_MINUTES) codes.push("long_trip");
+  return codes.length > 0 ? { scheduledArrival: codes } : {};
 }
