@@ -1,0 +1,35 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+/playwright-report
+/test-results
+
+# next.js
+/.next/
+/out/
+/build
+*.tsbuildinfo
+next-env.d.ts
+
+# env files: only .env.example is committed
+.env
+.env.*
+!.env.example
+
+# platform state (contains project IDs / tokens)
+.vercel
+.supabase
+supabase/.temp
+supabase/.branches
+
+# misc
+.DS_Store
+*.pem
+*.log
+.idea
+.vscode/*
+!.vscode/extensions.json
