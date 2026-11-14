@@ -228,6 +228,17 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      claims_apply_reply_action: {
+        Args: {
+          p_case_id: string;
+          p_category: Database["public"]["Enums"]["reply_category"];
+          p_expected_send_count: number;
+          p_expected_status: Database["public"]["Enums"]["case_status"];
+          p_message_id: string;
+          p_plan: Json;
+        };
+        Returns: Json;
+      };
       claims_create_case: {
         Args: {
           p_earliest_send_at: string;
@@ -243,6 +254,18 @@ export type Database = {
         };
         Returns: string;
       };
+      claims_forward_user_document: {
+        Args: {
+          p_attachment_id: string;
+          p_case_id: string;
+          p_expected_send_count: number;
+          p_mail: Json;
+          p_next_action_at: string;
+        };
+        Returns: string;
+      };
+      claims_mark_user_document_deleted: { Args: { p_attachment_id: string }; Returns: boolean };
+      claims_max_sends_per_case: { Args: Record<PropertyKey, never>; Returns: number };
       claims_new_public_ref: { Args: Record<PropertyKey, never>; Returns: string };
     };
     Enums: {
