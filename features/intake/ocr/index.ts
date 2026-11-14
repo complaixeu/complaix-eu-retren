@@ -2,6 +2,7 @@ import type { OcrProvider } from "@/shared/contracts";
 import { provider } from "@/shared/providers";
 import { createFakeOcr } from "./fake";
 import { createVisionOcr, type FetchLike } from "./vision";
+import { createGeminiOcr } from "./gemini";
 
 /**
  * Picks the OCR implementation from OCR_PROVIDER (`fake` by default, see shared/providers.ts).
@@ -12,7 +13,17 @@ export function createOcr(
   env: Record<string, string | undefined> = process.env,
   deps: { fetch?: FetchLike; fixtures?: Record<string, string>; defaultText?: string } = {},
 ): OcrProvider {
-  if (provider("OCR_PROVIDER", env) === "vision") {
+  const selected = provider("OCR_PROVIDER", env);
+  if (selected === "gemini") {
+    const apiKey = env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("OCR_PROVIDER=gemini needs GEMINI_API_KEY to be set");
+    return createGeminiOcr({
+      apiKey,
+      model: env.GEMINI_OCR_MODEL ?? env.GEMINI_EXTRACTION_MODEL,
+      fetch: deps.fetch,
+    });
+  }
+  if (selected === "vision") {
     const apiKey = env.GOOGLE_CLOUD_VISION_API_KEY;
     if (!apiKey) throw new Error("OCR_PROVIDER=vision needs GOOGLE_CLOUD_VISION_API_KEY to be set");
     return createVisionOcr({ apiKey, fetch: deps.fetch });
