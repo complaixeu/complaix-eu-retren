@@ -26,17 +26,25 @@ How to run it:
 - A dependency is done when `git log origin/develop --oneline --grep='\[<ID>\]'` prints a line.
   Until then, build against the other domain's `mock.ts`. Never start a task whose dependency is
   neither merged nor mocked.
-- Start one `retren-implementer` subagent per ready task with the Agent tool and
+- Start one implementer subagent per ready task with the Agent tool and
   `isolation: "worktree"`. At most 3 at a time, one per lane, never two touching the same files.
   Give each one its task ID and title, the domain, the plan file and its branch name
-  `feat/<domain>-<id>-<slug>`.
+  `feat/<domain>-<id>-<slug>`. **Pick the agent by task kind** (`docs/plans/README.md` §5, "Which
+  model"), and follow the plan's per-task table where it has one:
+  - `retren-ui-implementer` (Opus) for any task that adds or changes a page in `app/` or a
+    component in `shared/ui/`;
+  - `retren-implementer` (Sonnet) for every other task;
+  - `retren-chore` (Haiku) for mechanical work: syncing worktrees after a merge, re-running tests,
+    formatting, ticking the tracker, summarising a failed CI run. Never give it a task to
+    implement, and never let it resolve a conflict.
 - Before a PR is marked ready, start a `retren-reviewer` subagent on its diff and have the
   implementer fix what it finds. Domain C: also have Codex review the diff through the Codex
   plugin.
 - Merging is `gh pr merge` with no flags (merge queue). Wait for `MERGED`. Never approve a PR,
   never use `--admin`, never push to `develop` or `main`.
-- After each merge: merge `origin/develop` into every other open worktree, re-run their tests, and
-  tick the task in the tracker issue `Tracker: <domain>` (create it if it does not exist).
+- After each merge: have `retren-chore` merge `origin/develop` into every other open worktree,
+  re-run their tests and tick the task in the tracker issue `Tracker: <domain>` (create it if it
+  does not exist). A conflict or a failing test it reports goes back to that task's implementer.
 - When the plan is done: run the domain's full e2e suite on the latest `develop`, post a final
   report on the tracker issue and stop.
 

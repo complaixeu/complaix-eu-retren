@@ -36,6 +36,24 @@ Decided by Nestor, 2026-11-14.
 - Accessibility does not change for looks: visible focus ring, contrast AA, labels on every input,
   and the e2e specs keep using roles and labels (A8 runs axe on every step).
 
+## Model per task
+
+Follows `docs/plans/README.md` §5 "Which model"; this table wins for domain A.
+
+| Task | Agent                   | Model  | Why                                                       |
+| ---- | ----------------------- | ------ | --------------------------------------------------------- |
+| A0   | `retren-ui-implementer` | Opus   | Design tokens, layout and `shared/ui/`: sets the look     |
+| A1   | `retren-ui-implementer` | Opus   | Upload screen with preview and errors (plus bucket/table) |
+| A2   | `retren-implementer`    | Sonnet | OCR port and adapter, no UI                               |
+| A3   | `retren-ui-implementer` | Opus   | Extraction plus the "otra foto" / manual-entry screens    |
+| A4   | `retren-ui-implementer` | Opus   | Review screen                                             |
+| A5   | `retren-ui-implementer` | Opus   | Questions screen                                          |
+| A6   | `retren-ui-implementer` | Opus   | Mandate and consent screen (plus the `consents` table)    |
+| A7   | `retren-ui-implementer` | Opus   | Result screens                                            |
+| A8   | `retren-implementer`    | Sonnet | E2E and accessibility suite, no new UI                    |
+
+Syncing worktrees, re-running tests, formatting and tracker updates go to `retren-chore` (Haiku).
+
 ## Lanes
 
 | Lane | Tasks        | Theme                                |
