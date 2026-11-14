@@ -28,14 +28,24 @@ const chunks = <T>(items: T[], size = CHUNK) =>
  *
  * Nothing calls it on a schedule yet: a scheduler (cron, the claims tick) is infrastructure and
  * Nestor decides it.
+ *
+ * Orphans under `uploads/` can also come back: a signed upload URL (`beginTicketUpload`) stays
+ * valid for about 2 hours, so someone who kept it can PUT a file again after the upload cookie
+ * is gone, and nothing will ever finish it. The token can't overwrite (no upsert) and the object
+ * is never served; this purge is the backstop that deletes it once it is older than the TTL.
  */
 export async function purgeExpiredDrafts(
   now: Date,
-  deps: { db?: ServiceClient } = {},
+  deps: {
+    db?: ServiceClient;
+    /** Storage listing page size; tests use a small one. */
+    pageSize?: number;
+  } = {},
 ): Promise<PurgeResult> {
   const raw = deps.db ?? createServiceClient();
   const db = intakeClient(raw);
   const bucket = raw.storage.from(TICKET_BUCKET);
+  const pageSize = deps.pageSize ?? PAGE;
 
   const expired = await db
     .from("intake_drafts")
@@ -49,9 +59,9 @@ export async function purgeExpiredDrafts(
   const old: string[] = [];
   for (const prefix of PURGED_PREFIXES) {
     const folder = prefix.slice(0, -1);
-    for (let offset = 0; ; offset += PAGE) {
+    for (let offset = 0; ; offset += pageSize) {
       const { data, error } = await bucket.list(folder, {
-        limit: PAGE,
+        limit: pageSize,
         offset,
         sortBy: { column: "name", order: "asc" },
       });
@@ -62,7 +72,7 @@ export async function purgeExpiredDrafts(
           old.push(`${prefix}${item.name}`);
         }
       }
-      if (!data || data.length < PAGE) break;
+      if (!data || data.length < pageSize) break;
     }
   }
 

@@ -12,6 +12,7 @@ import { fixedClock } from "@/shared/clock";
 import { createServiceClient, type ServiceClient } from "@/shared/supabase/server";
 import { waitForDb } from "../../fixtures/claims/db-ready";
 import {
+  PLACEHOLDER_JPEG,
   PLACEHOLDER_PDF,
   PLACEHOLDER_PNG,
   PLACEHOLDER_TEXT,
@@ -160,6 +161,25 @@ describe("beginTicketUpload → PUT → finishTicketUpload", () => {
       });
       expect(await exists(staged)).toBe(false);
     });
+  });
+
+  it("stores the detected content type, not the one the PUT claimed", async () => {
+    const { jar } = memoryJar();
+    const begun = await beginTicketUpload(
+      { name: "billete.png", type: "image/png", size: PLACEHOLDER_JPEG.length },
+      { db, jar },
+    );
+    if (!begun.ok) throw new Error(begun.error);
+    expect((await put(begun.uploadUrl, PLACEHOLDER_JPEG, "image/png")).status).toBe(200);
+    const staged = stagedPath(begun.uploadUrl);
+
+    const done = await finishTicketUpload({ db, clock, jar });
+    if (!done.ok) throw new Error(done.error);
+    expect(done.draft.ticket).toMatchObject({ contentType: "image/jpeg" });
+    expect(done.draft.ticket!.path).toMatch(/\.jpg$/);
+    const info = await db.storage.from(TICKET_BUCKET).info(done.draft.ticket!.path);
+    expect(info.data?.contentType).toBe("image/jpeg");
+    expect(await exists(staged)).toBe(false);
   });
 
   it("reports a missing object as not received", async () => {

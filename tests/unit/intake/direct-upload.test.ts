@@ -52,10 +52,12 @@ describe("checkStoredTicket (the server check after a direct upload)", () => {
     ["heic", PLACEHOLDER_HEIC],
   ] as const)("accepts a stored %s and keeps it", async (type, bytes) => {
     const { objects, removed } = memoryObjects({ [staged]: bytes });
+    // The bytes come back, so the server re-uploads them under the detected content type.
     expect(await checkStoredTicket(staged, objects)).toEqual({
       ok: true,
       type,
       size: bytes.byteLength,
+      bytes,
     });
     expect(removed).toEqual([]);
   });

@@ -12,7 +12,7 @@ import {
  * The direct upload (A1 follow-up): the browser PUTs the file straight into Storage through a
  * signed upload URL, so no request to our server carries the file (hosting platforms cap request
  * bodies well under 10 MB). The file lands in a staging area, `uploads/<uuid>`, and only the
- * server check below moves it to its final, never-shown key under `drafts/`.
+ * server check below copies it, with the detected type, to a never-shown key under `drafts/`.
  */
 export const UPLOAD_PREFIX = "uploads/";
 
@@ -70,7 +70,7 @@ export interface StoredObjects {
 }
 
 export type StoredTicketCheck =
-  | { ok: true; type: TicketType; size: number }
+  | { ok: true; type: TicketType; size: number; bytes: Uint8Array }
   | {
       ok: false;
       error: Extract<TicketUploadError, "empty" | "too_large" | "wrong_type" | "not_received">;
@@ -99,7 +99,7 @@ export async function checkStoredTicket(
   const bytes = await objects.read(path);
   if (!bytes) return { ok: false, error: "not_received" };
   const type = detectTicketType(bytes.subarray(0, TICKET_SNIFF_BYTES));
-  return type ? { ok: true, type, size } : refuse("wrong_type");
+  return type ? { ok: true, type, size, bytes } : refuse("wrong_type");
 }
 
 /** `StoredObjects` over a Storage bucket, through the service client. */

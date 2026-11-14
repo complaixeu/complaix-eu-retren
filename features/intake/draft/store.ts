@@ -112,8 +112,12 @@ export type DraftFromUploadResult =
 
 /**
  * The second half of a direct upload: checks the staged object (`uploads/<id>`) by its size and
- * first bytes, deleting it if it fails, then moves it to a new key under `drafts/` and creates
- * the draft. The staged key is the only one the browser ever saw.
+ * first bytes, deleting it if it fails; then stores the checked bytes under a new key in
+ * `drafts/` with the *detected* content type, creates the draft and deletes the staged copy. The
+ * staged key is the only one the browser ever saw.
+ *
+ * A re-upload rather than `move()`: a move keeps the metadata of the browser's PUT, whose
+ * content type the signed token doesn't bind, so a JPEG sent as `image/png` would stay `image/png`.
  */
 export async function createDraftFromUpload(
   upload: { id: string; filename: string },
@@ -128,11 +132,20 @@ export async function createDraftFromUpload(
   if (!checked.ok) return checked;
 
   const path = finalTicketPath(checked.type);
-  const moved = await db.storage.from(TICKET_BUCKET).move(staged, path);
-  if (moved.error) throw new Error(`ticket move failed: ${moved.error.message}`);
+  const stored = await db.storage.from(TICKET_BUCKET).upload(path, checked.bytes, {
+    contentType: TICKET_TYPES[checked.type].contentType,
+    upsert: false,
+  });
+  if (stored.error) throw new Error(`ticket store failed: ${stored.error.message}`);
 
+  // insertDraft removes the final object if the row can't be created. The staged copy then
+  // stays, so finishing can be retried (the upload cookie is kept on a throw).
   const filename = cleanFilename(upload.filename);
   const draft = await insertDraft({ path, type: checked.type, filename, size: checked.size }, deps);
+
+  const removed = await db.storage.from(TICKET_BUCKET).remove([staged]);
+  // Best effort: the draft is made; a leftover staged copy is never served and the purge removes it.
+  if (removed.error) console.error("[intake] staged ticket delete failed:", removed.error.message);
   return { ok: true, draft };
 }
 
