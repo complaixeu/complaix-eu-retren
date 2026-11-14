@@ -6,7 +6,7 @@
 // that operator only (./outbound.ts, ./inbound.ts). The value is `operatorId:email` pairs, comma
 // separated. Errors name the variable and the entry number, never an address (the logs are public).
 import { z } from "zod";
-import { OperatorId } from "@/shared/contracts";
+import { OperatorId, type OperatorPublicConfig } from "@/shared/contracts";
 
 type Env = Record<string, string | undefined>;
 
@@ -54,4 +54,19 @@ export function operatorInboxes(env: Env = process.env): OperatorInboxes {
     out.set(id.data, address);
   });
   return out;
+}
+
+/**
+ * The operator as this environment may mail it: the one rule every claims path that checks the
+ * channel or `active` uses. Outside production, an operator with a mapped test inbox counts as
+ * active with an email channel to that inbox, whatever features/rules says (a web form, or
+ * inactive). Production and unmapped operators come back unchanged (the same object).
+ */
+export function effectiveOperator(
+  operator: OperatorPublicConfig,
+  env: Env = process.env,
+): OperatorPublicConfig {
+  const inbox = operatorInboxes(env).get(operator.id);
+  if (!inbox) return operator;
+  return { ...operator, active: true, channel: { type: "email", address: inbox } };
 }

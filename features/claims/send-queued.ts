@@ -10,7 +10,7 @@ import { createServiceClient, type ServiceClient } from "@/shared/supabase/serve
 import { purgeForwardedDocuments, USER_DOCUMENTS_BUCKET } from "./actions";
 import { DOCUMENTS_BUCKET, TICKET_BUCKET } from "./buckets";
 import { DEFAULT_SENDING_DOMAIN } from "./classifier";
-import { operatorInboxes } from "./operator-inboxes";
+import { effectiveOperator, operatorInboxes } from "./operator-inboxes";
 import {
   buildMailMessage,
   checkAttachments,
@@ -185,7 +185,7 @@ async function deliver(
   const c = kase.data!;
   progress.kind = row.template ?? (await messageKind(db, caseId, row));
 
-  const operator = getOperatorConfig(OperatorId.parse(c.operator));
+  const operator = effectiveOperator(getOperatorConfig(OperatorId.parse(c.operator)), env);
   const text = m.body_text ?? "";
   const recipient = checkRecipient({
     to: m.to_address,
