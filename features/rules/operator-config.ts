@@ -65,15 +65,17 @@ export const OperatorConfig = OperatorPublicConfig.extend({
 });
 export type OperatorConfig = z.infer<typeof OperatorConfig>;
 
-// B1 needs one real lookup target so getOperatorConfig has its specified two-argument contract.
-// B2 replaces this seed with the complete, sourced registry for all three operators.
 const DEFAULT_OPERATOR_CONFIGS: readonly OperatorConfig[] = [
   OperatorConfig.parse({
     id: "iryo",
     displayName: "Iryo",
     version: "2026-11-13",
     validFrom: "2026-11-13",
-    sourceUrls: ["https://iryo.eu/"],
+    sourceUrls: [
+      "https://iryo.eu/es/viaja/servicio-postventa",
+      "https://iryo.eu/es/legal/condiciones-generales-del-contrato-de-transportes",
+      "https://iryo.eu/es/atencion-al-cliente",
+    ],
     consultedAt: "2026-11-13",
     channel: { type: "email", address: "atencion.cliente@iryo.eu" },
     active: true,
@@ -108,6 +110,87 @@ const DEFAULT_OPERATOR_CONFIGS: readonly OperatorConfig[] = [
       intermediary: { payment: ["voucher"] },
     },
     payment: { default: ["voucher"], onMoneyRequest: ["money"] },
+    templates: { style: "formal" },
+  }),
+  OperatorConfig.parse({
+    id: "renfe",
+    displayName: "Renfe",
+    version: "2026-11-13",
+    validFrom: "2026-11-13",
+    sourceUrls: [
+      "https://www.renfe.com/es/es/ayuda/compromiso-puntualidad",
+      "https://www.renfe.com/es/es/ayuda/contactar-renfe.html",
+      "https://www.renfe.com/es/es/normativa.html",
+    ],
+    consultedAt: "2026-11-13",
+    channel: { type: "web_form", url: "https://venta.renfe.com/vol/claimsMenu.do" },
+    active: false,
+    responseDays: 30,
+    minWait: { amount: 24, unit: "hours", anchor: "arrival" },
+    deadline: { amount: 3, unit: "months", anchor: "trip" },
+    tiers: [
+      {
+        minDelayMinutes: 60,
+        maxDelayMinutes: 90,
+        percent: 50,
+        payment: ["money", "voucher"],
+        status: "eligible",
+      },
+      {
+        minDelayMinutes: 91,
+        percent: 100,
+        payment: ["money", "voucher"],
+        status: "eligible",
+      },
+    ],
+    exclusions: {
+      forceMajeure: { sendAnyway: true, note: "decide la empresa" },
+      adifSpeedLimit: { policy: "excluded", purchaseDateOnOrAfter: "2026-01-31" },
+      intermediary: {},
+    },
+    payment: { default: ["money", "voucher"] },
+    templates: { style: "formal" },
+  }),
+  OperatorConfig.parse({
+    id: "ouigo",
+    displayName: "Ouigo",
+    version: "2026-11-13",
+    validFrom: "2026-11-13",
+    sourceUrls: ["https://www.ouigo.com/es/condiciones-generales-de-transporte-ouigo"],
+    consultedAt: "2026-11-13",
+    channel: { type: "web_form", url: "https://ouigo.zendesk.com/hc/es/requests/new" },
+    active: false,
+    responseDays: 30,
+    minWait: { amount: 7, unit: "days", anchor: "trip" },
+    deadline: { amount: 3, unit: "months", anchor: "trip" },
+    tiers: [
+      {
+        minDelayMinutes: 30,
+        maxDelayMinutes: 59,
+        percent: 50,
+        payment: ["non_refundable_voucher"],
+        status: "eligible",
+      },
+      {
+        minDelayMinutes: 60,
+        maxDelayMinutes: 89,
+        percent: 50,
+        payment: ["refundable_voucher"],
+        status: "eligible",
+      },
+      {
+        minDelayMinutes: 90,
+        percent: 100,
+        payment: ["refundable_voucher"],
+        status: "eligible",
+      },
+    ],
+    exclusions: {
+      forceMajeure: { sendAnyway: true, note: "decide la empresa" },
+      adifSpeedLimit: { policy: "not_applicable" },
+      intermediary: {},
+    },
+    payment: { default: ["non_refundable_voucher", "refundable_voucher"] },
     templates: { style: "formal" },
   }),
 ];
