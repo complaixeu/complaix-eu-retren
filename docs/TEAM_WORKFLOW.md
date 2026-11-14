@@ -89,23 +89,27 @@ first, so everyone can see who owns what).
 
 ### ⚠️ One local Supabase per machine
 
-All worktrees share **one** local Supabase (`project_id = "retren"`), and `pnpm ci:local:full`
-stops and restarts it. Two agents running it at the same time, or one running it while another
-uses the local DB, kill each other's database. Until there is a lock in the script itself, every
-agent wraps any use of the local Supabase (`ci:local:full`, `db:start`, `db:reset`, dev against the
-local DB) in this lock:
+All worktrees share **one** local Supabase (`project_id = "retren"`), and both the test gate and
+`pnpm ci:local:full` stop and restart it. Two agents doing that at once kill each other's database,
+so there is one machine-wide lock, `${TMPDIR:-/tmp}/retren-supabase.lock` (a directory holding
+the owner's PID).
+
+- **`pnpm test:all` takes the lock itself.** It waits while someone else holds it and removes a
+  stale lock whose PID is gone. Never wrap it in the snippet below: that would deadlock.
+- **Everything else that uses local Supabase** (`pnpm ci:local:full`, `db:start`, `db:reset`, a dev
+  server against the local DB) is wrapped in the same lock. Until it's built into
+  `scripts/local-ci.sh` (#17), use:
 
 ```bash
 lock="${TMPDIR:-/tmp}/retren-supabase.lock"
 until mkdir "$lock" 2>/dev/null; do echo "local Supabase busy, waiting…"; sleep 30; done
+echo $$ >"$lock/pid"
 pnpm ci:local:full; rc=$?
-rmdir "$lock"; (exit $rc)
+rm -rf "$lock"; (exit $rc)
 ```
 
-- A stale lock (left behind by a crashed run) may be removed only if `pgrep -f local-ci.sh` prints
-  nothing.
-- While iterating, use `pnpm ci:local`: it needs no Docker and no lock. Run `--full` once, under
-  the lock, before pushing.
+- Never delete a lock whose PID is still alive (`kill -0 "$(cat "$lock/pid")"` succeeds).
+- While iterating, `pnpm test` (unit) and `pnpm ci:local` need no Docker and no lock.
 - Domain B rarely needs the database at all.
 
 ## 4. Staying in sync: pull often so conflicts don't snowball
@@ -121,7 +125,7 @@ rmdir "$lock"; (exit $rc)
 git fetch origin
 git merge origin/develop          # merge, never rebase: no force-push is ever needed
 # if pnpm-lock.yaml changed:            pnpm install
-# if supabase/migrations/ changed:      pnpm db:reset (under the lock)
+# if supabase/migrations/ changed:      pnpm db:reset (under the lock), or just pnpm test:all
 ```
 
 Conflicts: [ONBOARDING.md §7](ONBOARDING.md#7-conflicts). For `pnpm-lock.yaml`, take `develop`'s
@@ -173,7 +177,7 @@ Paste this at the start of each agent (Claude Code or Codex), filling in the bra
 > `features/<domain>/index.ts` or their mocks. If you need a change in `shared/contracts/`,
 > another domain, `package.json` or a protected area, stop and tell me. Work in your own worktree
 > and branch. Run `git fetch origin && git merge origin/develop` when you start, before every push
-> and at least every 2 hours. Use the local-Supabase lock (TEAM_WORKFLOW §3) for anything that
+> and at least every 2 hours. `pnpm test:all` takes the local-Supabase lock itself; wrap anything else that
 > uses local Supabase. Run `pnpm ci:local:full` before pushing. Open PRs as drafts against
 > `develop`, small and single-purpose.
 
@@ -192,4 +196,5 @@ Update the owner names in section 1 when people change domains.
 ## 9. Autonomous execution
 
 Each domain has a task-by-task plan with the tests every step must pass, and the kickoff prompts
-that let each harness spawn its own subagents: [plans/README.md](plans/README.md).
+that let each harness spawn its own subagents: [plans/README.md](plans/README.md). Before leaving
+the agents running, every person does [plans/PREFLIGHT.md](plans/PREFLIGHT.md).
