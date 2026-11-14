@@ -40,8 +40,10 @@ without explicit prior approval from Nestor Gomez Artiles (GitHub `@complaix-eu`
 - Never push to `main` or `develop` directly.
 - **For now `develop` is the only working branch.** `main` stays frozen at the initial
   commit: no PRs into `main`, no promotions from `develop`, until the repo owner says so.
-- No review is required to merge into `develop`: a PR may merge once the required check is
-  green (protected areas: only with Nestor's prior approval). AI agents never approve PRs.
+- No review is required to merge into `develop`: once the required checks are green, `gh pr merge`
+  adds the PR to the **merge queue**, which re-checks it on top of the latest `develop` and then
+  squash-merges it (protected areas: only with Nestor's prior approval). AI agents never approve
+  PRs and never bypass the queue.
 - Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `ci:`, `refactor:`, `test:`.
 
 A push to `develop` applies migrations to Supabase DEV and deploys Vercel DEV.
