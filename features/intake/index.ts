@@ -63,3 +63,28 @@ export {
   type IntakeStepId,
   type IntakeStepperItem,
 } from "./steps";
+
+// Server-side only: the review step ([A4]). Reads `data.extraction` / `data.review` from the
+// draft and stores the reviewed ticket as `data.review`.
+export {
+  REVIEW_FIELDS,
+  REVIEW_REQUIRED_FIELDS,
+  REVIEW_SECTIONS,
+  reviewErrorMessage,
+  reviewErrorMessages,
+  type ReviewErrorCode,
+  type ReviewErrors,
+  type ReviewField,
+  type ReviewInputName,
+  type ReviewSection,
+} from "./review/fields";
+export { StoredReview, readReview, type ReviewStart } from "./review/read";
+export { submitReview, type ReviewSubmitResult } from "./review/submit";
+export {
+  BOOKING_REF_CONFIRMED,
+  parseReviewDate,
+  parseReviewTime,
+  validateReview,
+  type ReviewValidation,
+  type ReviewValues,
+} from "./review/validate";

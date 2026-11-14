@@ -1,8 +1,20 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PLACEHOLDER_PDF } from "../../fixtures/intake/tickets";
+import { completeReview, uploadPlaceholderTicket } from "./draft-helpers";
 
 // [A0] Flow skeleton: landing → every step renders its heading, the stepper marks the current
 // step, and the flow works from the keyboard. Roles and labels only (docs/plans/README.md §3).
+// Since [A4] the review step needs a draft (without one it redirects to the upload) and has its
+// own form instead of a "Continuar" link, so these specs upload a ticket before visiting it and
+// fill the review in to get past it.
+
+/** Steps that redirect to the upload without a current draft. */
+const needsDraft = new Set<string>(["/reclamar/revision"]);
+
+async function visit(page: Page, path: string) {
+  if (needsDraft.has(path)) await uploadPlaceholderTicket(page);
+  await page.goto(path);
+}
 
 const steps = [
   { path: "/reclamar/foto", heading: "Sube la foto de tu billete", label: "Billete" },
@@ -51,7 +63,7 @@ for (const [index, step] of steps.entries()) {
   test(`step ${index + 1} (${step.path}) renders its heading and is the current step`, async ({
     page,
   }) => {
-    await page.goto(step.path);
+    await visit(page, step.path);
     await expect(page.getByRole("heading", { level: 1, name: step.heading })).toBeVisible();
     await expect(page).toHaveTitle(new RegExp(step.heading));
 
@@ -90,7 +102,8 @@ test("continuar and atrás move through every step in order", async ({ page }) =
   await chooseTicket(page);
   await page.getByRole("button", { name: "Subir billete" }).click();
   for (const next of steps.slice(1)) {
-    await page.getByRole("link", { name: "Continuar" }).click();
+    if (page.url().endsWith("/reclamar/revision")) await completeReview(page);
+    else await page.getByRole("link", { name: "Continuar" }).click();
     await expect(page.getByRole("heading", { level: 1, name: next.heading })).toBeVisible();
   }
   await expect(page.getByRole("link", { name: "Continuar" })).toHaveCount(0);
@@ -103,7 +116,7 @@ test.describe("keyboard", () => {
   test("the first Tab reaches the skip link, which moves focus to the content", async ({
     page,
   }) => {
-    await page.goto("/reclamar/revision");
+    await visit(page, "/reclamar/revision");
     await page.keyboard.press("Tab");
     const skip = page.getByRole("link", { name: "Saltar al contenido" });
     await expect(skip).toBeFocused();
@@ -148,16 +161,17 @@ test.describe("mobile, 375 px wide", () => {
     test(`${path} fits without horizontal scrolling and has large tap targets`, async ({
       page,
     }) => {
-      await page.goto(path);
+      await visit(page, path);
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
       expect(overflow).toBeLessThanOrEqual(0);
 
-      // The first step's primary action is its upload button ([A1]); the others are links.
+      // The first step's primary action is its upload button ([A1]) and the review's is its
+      // submit button ([A4]); the others are links.
       const primary = page
         .getByRole("link", { name: /^(Reclamar|Continuar|Volver al inicio)$/ })
-        .or(page.getByRole("button", { name: "Subir billete" }));
+        .or(page.getByRole("button", { name: /^(Subir billete|Continuar)$/ }));
       await expect(primary).toBeVisible();
       const box = await primary.boundingBox();
       expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
