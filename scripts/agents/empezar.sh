@@ -20,15 +20,20 @@ if [ -z "$role" ]; then
   esac
 fi
 case "$role" in A|B|C) ;; *) echo "usage: pnpm empezar [A|B|C]" >&2; exit 2 ;; esac
-echo "GitHub: ${login:-?} → domain $role"
+if [ -n "${EMPEZAR_SYNCED:-}" ]; then echo "GitHub: ${login:-?} → domain $role"; fi
 
 wake=(); [ "$(uname -s)" = Darwin ] && wake=(caffeinate -dimsu)
 
-if [ -n "$(git status --porcelain)" ]; then
-  echo "You have uncommitted changes. Commit or stash them first: agents start from a clean develop." >&2
-  [ -n "${DRY_RUN:-}" ] || exit 1
-else
-  git checkout -q develop && git pull -q --ff-only
+# Sync first, then re-run this script from the freshly pulled file: bash reads a script as it
+# goes, so switching branches under a running script would mix two versions of it.
+if [ -z "${EMPEZAR_SYNCED:-}" ]; then
+  if [ -n "$(git status --porcelain)" ]; then
+    echo "You have uncommitted changes. Commit or stash them first: agents start from a clean develop." >&2
+    [ -n "${DRY_RUN:-}" ] || exit 1
+  elif [ -z "${DRY_RUN:-}" ]; then
+    git checkout -q develop && git pull -q --ff-only
+  fi
+  exec env EMPEZAR_SYNCED=1 bash scripts/agents/empezar.sh "$role"
 fi
 
 if [ -n "${DRY_RUN:-}" ]; then bash scripts/preflight.sh "$role" || true
@@ -39,15 +44,13 @@ if [ "$role" = B ]; then
   exec "${wake[@]}" bash scripts/agents/run-codex-lanes.sh
 fi
 
-plan="$( [ "$role" = A ] && echo "A-intake" || echo "C-claims")"
-name="$( [ "$role" = A ] && echo "A Intake" || echo "C Claims engine")"
-review=""
-[ "$role" = C ] && review=" Before marking each PR ready, have Codex review the diff with the Codex plugin (codex:rescue, read-only review) and fix every real defect it reports, re-running pnpm test:all."
-prompt="Empezar. You are the orchestrator for domain ${name} of ReTren, running unattended for hours. Read CLAUDE.md, docs/ARCHITECTURE.md, docs/TEAM_WORKFLOW.md, docs/plans/README.md and docs/plans/${plan}.md. First create or reuse the GitHub issue 'Tracker: ${name}' with one checkbox per task of your plan. Then follow docs/plans/README.md §5 until every task in your plan is merged: use the Agent tool with isolation \"worktree\" for each task, at most 3 at a time and one per lane, giving each subagent the subagent prompt from README §7 filled in with its task. Never start a task whose dependency isn't merged unless its mock exists. Tick tasks in the tracker as they merge. Stop only for README §6, by commenting on the tracker mentioning the owner, and keep going with every unblocked task.${review}"
-
+name="$( [ "$role" = A ] && echo "A (Intake)" || echo "C (Claims engine)")"
+# The orchestrator's instructions live in .claude/agents/retren-orchestrator.md (Nestor's); this
+# only tells it the domain and to start.
+prompt="Domain ${name}. Empezar: run your domain's plan unattended until every task is merged."
 if [ -n "${DRY_RUN:-}" ]; then
-  echo "DRY_RUN: ${wake[*]} claude --permission-mode bypassPermissions <kickoff prompt for $name>"
-  echo "--- kickoff prompt ---"; echo "$prompt"; exit 0
+  echo "DRY_RUN: ${wake[*]} claude --agent retren-orchestrator --permission-mode bypassPermissions \"$prompt\""
+  exit 0
 fi
 echo "Starting Claude Code for $name. Tip: type /remote-control in the session to follow it from your phone."
-exec "${wake[@]}" claude --permission-mode bypassPermissions "$prompt"
+exec "${wake[@]}" claude --agent retren-orchestrator --permission-mode bypassPermissions "$prompt"
