@@ -220,23 +220,26 @@ async function CaseDetail({
           <ol className={styles.list}>
             {view.messages.map((m) => {
               const passenger = Boolean(m.kind?.startsWith("user_"));
+              // Only the events between this email and the next inbound email are its
+              // outcome, so a later reply never relabels an earlier one.
+              const nextInbound = view.messages.find(
+                (n) => n.direction === "inbound" && n.createdAt > m.createdAt,
+              );
+              const inWindow = (e: { createdAt: string }) =>
+                e.createdAt >= m.createdAt && (!nextInbound || e.createdAt < nextInbound.createdAt);
               const blocked =
                 m.direction === "inbound" &&
                 (m.kind === "other" ||
                   view.events.some(
                     (e) =>
-                      e.createdAt >= m.createdAt &&
+                      inWindow(e) &&
                       (["wrong_sender", "spoofed_reference", "unknown_reference"].includes(
                         e.detail ?? "",
                       ) ||
-                        [
-                          "team_queue",
-                          "escalation_filing_required",
-                          "escalation_signature_needed",
-                        ].includes(e.kind)),
+                        e.kind === "team_queue"),
                   ));
               const outcome = view.events.some(
-                (e) => e.kind === "case_resolved" || e.toStatus === "resolved",
+                (e) => inWindow(e) && (e.kind === "case_resolved" || e.toStatus === "resolved"),
               )
                 ? "Case resolved and passenger notified"
                 : m.kind === "asks_for_data"
