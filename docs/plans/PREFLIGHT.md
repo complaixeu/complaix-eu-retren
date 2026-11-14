@@ -36,8 +36,8 @@ automatically and must end with **READY**.
       the narrow fine-grained token from [ONBOARDING.md §6](../ONBOARDING.md) (Contents, Pull
       requests, Issues read/write, Actions read; no Administration, Secrets, Environments or
       Workflows), e.g. `GH_TOKEN=<that token> caffeinate -dimsu claude …`. Check it with
-      `gh api repos/complaixeu/complaix-eu-retren --jq .permissions.admin`, which must print
-      `false` inside the agent's shell.
+      the preflight, which fails if the token can read branch protection (that needs admin, and the
+      check is read-only).
 
 - [ ] Claude Code is logged in, and Remote Control works (`/remote-control`) so you can follow the
       run from your phone.
@@ -83,31 +83,29 @@ leave:**
       `pnpm`, `git`, `gh pr` and `gh issue` in your **own** `~/.claude/settings.json` (never by
       editing `.claude/settings*.json` in the repo).
 
-## 4. Start
-
-Paste exactly one kickoff and walk away.
-
-**A or C (Claude Code):**
+## 4. Start: one command
 
 ```bash
-cd ~/path/to/complaix-eu-retren && git checkout develop && git pull
-caffeinate -dimsu claude --permission-mode bypassPermissions
-# in the session:
-#   1. /remote-control                (follow it from your phone)
-#   2. paste the kickoff prompt for your domain from plans/README.md §7
+cd ~/path/to/complaix-eu-retren
+pnpm empezar
 ```
 
-**B (Codex):** from the main clone:
+That's all. `pnpm empezar`:
 
-```bash
-cd ~/path/to/complaix-eu-retren && git checkout develop && git pull
-DRY_RUN=1 bash scripts/agents/run-codex-lanes.sh   # optional: shows what it will do
-caffeinate -dimsu bash scripts/agents/run-codex-lanes.sh
-```
+1. Works out your domain from your GitHub login: `complaix-eu` → A, `micah-earl` → B,
+   `vinimp2003` → C. `pnpm empezar <A|B|C>` forces one.
+2. Refuses to start if you have uncommitted changes. Otherwise it switches to `develop` and pulls.
+3. Runs `pnpm preflight <domain> --gate`, and stops if it isn't READY.
+4. Starts your harness inside `caffeinate`:
+   - **A / C:** Claude Code with your domain's kickoff prompt already filled in. C's prompt adds the
+     Codex review step.
+   - **B:** `scripts/agents/run-codex-lanes.sh` (tracker issue, three Codex lanes).
 
-It re-runs the preflight, creates the `Tracker: B Rules & docs` issue once, gives each lane its own
-worktree (`../retren-b1..3`), and starts the three Codex lanes with their logs in
-`../retren-b<lane>.log`.
+`DRY_RUN=1 pnpm empezar` shows what it would start, without starting anything. On Claude Code,
+type `/remote-control` once the session is up if you want to follow it from your phone.
+
+A's owner (the repo admin) runs it with the narrow token: `GH_TOKEN=<token> pnpm empezar`. The
+preflight refuses a token that can administer the repo.
 
 Within a few minutes your **tracker issue** (`Tracker: <domain>`) appears on GitHub with one box per
 task. If it doesn't, the run hasn't really started: look at the terminal before you leave.

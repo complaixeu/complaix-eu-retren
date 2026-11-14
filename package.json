@@ -26,7 +26,8 @@
     "test:integration": "vitest run --config vitest.integration.config.mts",
     "test:e2e": "playwright test",
     "test:all": "bash scripts/test-all.sh",
-    "preflight": "bash scripts/preflight.sh"
+    "preflight": "bash scripts/preflight.sh",
+    "empezar": "bash scripts/agents/empezar.sh"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",

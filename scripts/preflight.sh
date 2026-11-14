@@ -48,6 +48,11 @@ if gh auth status >/dev/null 2>&1; then
   ok "gh logged in as $(gh api user --jq .login 2>/dev/null)"
   perm="$(gh repo view --json viewerPermission --jq .viewerPermission 2>/dev/null)"
   [[ "$perm" == WRITE || "$perm" == MAINTAIN || "$perm" == ADMIN ]] && ok "repo permission: $perm" || bad "repo permission: ${perm:-none}" "ask Nestor for Write (ONBOARDING §2)"
+  # The agents' token must not be able to administer the repo (ONBOARDING §6). Reading branch
+  # protection needs admin, and it is read-only, so it is a safe probe.
+  if gh api "repos/{owner}/{repo}/branches/develop/protection" >/dev/null 2>&1; then
+    bad "this GitHub token has ADMIN capability" "run agents with the narrow fine-grained token: GH_TOKEN=<token> pnpm empezar (ONBOARDING §6)"
+  else ok "token has no admin capability"; fi
 else bad "gh not logged in" "gh auth login (your own account)"; fi
 
 section "Repository"
