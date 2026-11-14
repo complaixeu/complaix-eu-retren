@@ -7,9 +7,10 @@ import {
   TICKET_BUCKET,
   sendInitialClaim,
 } from "@/features/claims/initial-claim";
-import { MAX_SENDS_PER_CASE } from "@/features/claims/send-cap";
+import { MAX_SENDS_PER_CASE } from "@/features/claims/timers";
 import { sendPending, sendQueued } from "@/features/claims/send-queued";
 import { createFakeTransport } from "@/features/claims/transport";
+import { USER_DOCUMENTS_BUCKET } from "@/features/claims/outbound";
 import { getOperatorConfig } from "@/features/rules";
 import { fixedClock } from "@/shared/clock";
 import type { OperatorId } from "@/shared/contracts";
@@ -35,6 +36,12 @@ beforeAll(async () => {
   const { data } = await db.storage.getBucket(TICKET_BUCKET);
   if (!data) {
     const { error } = await db.storage.createBucket(TICKET_BUCKET, { public: false });
+    if (error && !/already exists/i.test(error.message)) throw error;
+  }
+  // The user documents bucket is C6's migration; same fallback until it is on develop.
+  const docs = await db.storage.getBucket(USER_DOCUMENTS_BUCKET);
+  if (!docs.data) {
+    const { error } = await db.storage.createBucket(USER_DOCUMENTS_BUCKET, { public: false });
     if (error && !/already exists/i.test(error.message)) throw error;
   }
 });
@@ -225,7 +232,10 @@ describe("sendInitialClaim (local Supabase)", () => {
 
   it("is refused at the send cap", async () => {
     const { caseId } = await readyCase();
-    const upd = await db.from("cases").update({ send_count: MAX_SENDS_PER_CASE }).eq("id", caseId);
+    const upd = await db
+      .from("cases")
+      .update({ send_count: MAX_SENDS_PER_CASE - 1 })
+      .eq("id", caseId);
     expect(upd.error).toBeNull();
     expect(
       await sendInitialClaim(caseId, {
@@ -235,7 +245,7 @@ describe("sendInitialClaim (local Supabase)", () => {
       }),
     ).toEqual({ ok: false, reason: "send_cap_reached" });
     const { row, messages } = await stored(caseId);
-    expect(row).toMatchObject({ status: "waiting_period", send_count: MAX_SENDS_PER_CASE });
+    expect(row).toMatchObject({ status: "waiting_period", send_count: MAX_SENDS_PER_CASE - 1 });
     expect(messages).toEqual([]);
   });
 
@@ -448,6 +458,67 @@ describe("sendQueued (local Supabase)", () => {
       status: "failed",
       failure_reason: "transport_error",
     });
+  });
+
+  /** A forwarded user document (C6): a queued operator row with a user_document attached. */
+  async function forwarded() {
+    const q = await sentCaseWithQueued();
+    const key = `${q.caseId}/${randomUUID()}.pdf`;
+    const up = await db.storage
+      .from(USER_DOCUMENTS_BUCKET)
+      .upload(key, new TextEncoder().encode("%PDF-1.7\n% placeholder\n%%EOF\n"), {
+        contentType: "application/pdf",
+      });
+    if (up.error) throw up.error;
+    const att = await db
+      .from("attachments")
+      .insert({
+        case_id: q.caseId,
+        message_id: q.queuedId,
+        kind: "user_document",
+        storage_path: key,
+        filename: "documento.pdf",
+        content_type: "application/pdf",
+      })
+      .select("id")
+      .single();
+    if (att.error) throw att.error;
+    return { ...q, key, attachmentId: att.data.id };
+  }
+
+  const fileExists = async (key: string) =>
+    !(await db.storage.from(USER_DOCUMENTS_BUCKET).download(key)).error;
+
+  it("forward → send → the user document is gone from storage and marked deleted", async () => {
+    const f = await forwarded();
+    expect(await fileExists(f.key)).toBe(true);
+    const transport = createFakeTransport();
+    expect((await sendQueued(f.queuedId, { db, transport })).status).toBe("sent");
+    // It went out with the mail, and only then was it deleted.
+    expect(transport.outbox[0].attachments.map((a) => a.kind)).toEqual(["user_document"]);
+    expect(await fileExists(f.key)).toBe(false);
+    const att = await db.from("attachments").select("deleted_at").eq("id", f.attachmentId).single();
+    expect(att.data?.deleted_at).not.toBeNull();
+    const { events } = await stored(f.caseId);
+    expect(events.filter((e) => e.kind === "user_document_deleted").map((e) => e.data)).toEqual([
+      { attachment_id: f.attachmentId },
+    ]);
+  });
+
+  it("forward → failed send → the user document is still there for a retry", async () => {
+    const f = await forwarded();
+    const broken = {
+      send: async () => {
+        throw new Error("boom");
+      },
+    };
+    expect(await sendQueued(f.queuedId, { db, transport: broken })).toEqual({
+      status: "failed",
+      reason: "transport_error",
+    });
+    expect(await fileExists(f.key)).toBe(true);
+    const att = await db.from("attachments").select("deleted_at").eq("id", f.attachmentId).single();
+    expect(att.data?.deleted_at).toBeNull();
   });
 
   it("sendPending sends every queued row once", async () => {

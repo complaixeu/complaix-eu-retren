@@ -13,8 +13,10 @@ import {
   redirectRecipients,
   subjectWithRef,
   threadHeaders,
+  USER_DOCUMENTS_BUCKET,
+  userDocumentsToDelete,
 } from "@/features/claims/outbound";
-import { MAX_SENDS_PER_CASE } from "@/features/claims/send-cap";
+import { MAX_SENDS_PER_CASE } from "@/features/claims/timers";
 import { createFakeTransport, createMailTransport } from "@/features/claims/transport";
 import { renderTemplate } from "@/features/documents";
 import { getOperatorConfig } from "@/features/rules";
@@ -133,11 +135,14 @@ describe("send cap (initial claim)", () => {
   it("a ready case is not refused", () => {
     expect(initialClaimRefusal(ready, iryo, now)).toBeNull();
     expect(
-      initialClaimRefusal({ ...ready, sendCount: MAX_SENDS_PER_CASE - 1 }, iryo, now),
+      initialClaimRefusal({ ...ready, sendCount: MAX_SENDS_PER_CASE - 2 }, iryo, now),
     ).toBeNull();
   });
 
-  it("the cap is reached", () => {
+  it("the cap is reached (the last slot is reserved for the d45 escalation, tracker #26)", () => {
+    expect(initialClaimRefusal({ ...ready, sendCount: MAX_SENDS_PER_CASE - 1 }, iryo, now)).toBe(
+      "send_cap_reached",
+    );
     expect(initialClaimRefusal({ ...ready, sendCount: MAX_SENDS_PER_CASE }, iryo, now)).toBe(
       "send_cap_reached",
     );
@@ -343,5 +348,31 @@ describe("MailTransport", () => {
     expect(a.providerId).toMatch(/^fake-/);
     expect(a.providerId).not.toBe(b.providerId);
     expect(t.outbox).toEqual([mail, mail]);
+  });
+});
+
+describe("forwarded user documents are deleted only after a successful send", () => {
+  const atts = [
+    { id: "a1", kind: "user_document", storage_path: "case-1/iban.pdf" },
+    { id: "a2", kind: "user_document", storage_path: "claims-user-documents/case-1/dni.pdf" },
+    { id: "a3", kind: "ticket", storage_path: "tickets/x.png" },
+    { id: "a4", kind: "eu_form", storage_path: "claim-documents/case-1/formulario_ue.pdf" },
+  ];
+
+  it("after a sent mail: every user document of the row, as a key in its bucket", () => {
+    expect(USER_DOCUMENTS_BUCKET).toBe("claims-user-documents");
+    expect(userDocumentsToDelete({ status: "sent" }, atts)).toEqual([
+      { id: "a1", key: "case-1/iban.pdf" },
+      { id: "a2", key: "case-1/dni.pdf" },
+    ]);
+  });
+
+  it("after a failed or skipped send: nothing, so the send can be retried", () => {
+    expect(userDocumentsToDelete({ status: "failed" }, atts)).toEqual([]);
+    expect(userDocumentsToDelete({ status: "skipped" }, atts)).toEqual([]);
+  });
+
+  it("never the case's own documents (EU form, mandate, ticket)", () => {
+    expect(userDocumentsToDelete({ status: "sent" }, atts.slice(2))).toEqual([]);
   });
 });

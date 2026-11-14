@@ -19,12 +19,12 @@ import type { Json } from "@/shared/supabase";
 import { createServiceClient, type ServiceClient } from "@/shared/supabase/server";
 import {
   checkMockText,
+  INITIAL_CLAIM_SEND_LIMIT,
   initialClaimRefusal,
   newMessageId,
   subjectWithRef,
   type InitialClaimRefusal,
 } from "./outbound";
-import { MAX_SENDS_PER_CASE } from "./send-cap";
 import { sendingDomain, sendQueued, type OutboundDeps, type SendQueuedResult } from "./send-queued";
 import { provider } from "@/shared/providers";
 
@@ -239,7 +239,7 @@ export async function sendInitialClaim(
   const sent = await db.rpc("claims_send_initial_claim", {
     p_case_id: caseId,
     p_now: now.toISOString(),
-    p_max_sends: MAX_SENDS_PER_CASE,
+    p_max_sends: INITIAL_CLAIM_SEND_LIMIT,
     p_next_action_at: new Date(now.getTime() + FIRST_FOLLOW_UP_DAYS * DAY_MS).toISOString(),
     p_message: {
       from: claimsFrom(env),

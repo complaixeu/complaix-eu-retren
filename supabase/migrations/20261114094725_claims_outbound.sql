@@ -31,7 +31,8 @@ on conflict (id) do nothing;
 -- Records and commits the initial claim of a case, or refuses it. Returns
 -- {ok: true, message_id} or {ok: false, reason}. The checks run again here under a row lock, so
 -- two callers can never both send: the case must be in waiting_period, earliest_send_at must be
--- set and passed at p_now, and send_count must be below p_max_sends (MAX_SENDS_PER_CASE).
+-- set and passed at p_now, and send_count must be below p_max_sends (INITIAL_CLAIM_SEND_LIMIT:
+-- MAX_SENDS_PER_CASE - 1, the last slot is kept for the d45 escalation).
 -- p_message: {from, to, subject, body_text, message_id}; template is always initial_claim.
 -- p_attachments: exactly one eu_form, one mandate and one ticket
 -- [{kind, storage_path, filename, content_type, size_bytes}].

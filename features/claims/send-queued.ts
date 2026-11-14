@@ -14,6 +14,8 @@ import {
   checkRecipient,
   isStale,
   newMessageId,
+  USER_DOCUMENTS_BUCKET,
+  userDocumentsToDelete,
   type AttachmentRow,
   type OutboundRefusal,
 } from "./outbound";
@@ -88,7 +90,7 @@ export async function sendQueued(
       .single(),
     db
       .from("attachments")
-      .select("kind, case_id, deleted_at, filename, content_type, storage_path")
+      .select("id, kind, case_id, deleted_at, filename, content_type, storage_path")
       .eq("message_id", row.id),
     db
       .from("messages")
@@ -174,7 +176,25 @@ export async function sendQueued(
     .eq("id", row.id);
   if (done.error) throw done.error;
   await event(db, caseId, MESSAGE_SENT_EVENT, { message_id: row.id, template: row.template });
-  return { status: "sent", providerId };
+
+  // Only now that the mail is out: a forwarded user document is deleted (C6, ARCHITECTURE §7.1).
+  // A failed send returned above, so the file stays for a retry.
+  const result: SendQueuedResult = { status: "sent", providerId };
+  for (const doc of userDocumentsToDelete(result, attachments.data)) {
+    const removed = await db.storage.from(USER_DOCUMENTS_BUCKET).remove([doc.key]);
+    if (removed.error) throw removed.error;
+    const marked = await db
+      .from("attachments")
+      .update({ deleted_at: now.toISOString() })
+      .eq("id", doc.id)
+      .is("deleted_at", null)
+      .select("id");
+    if (marked.error) throw marked.error;
+    if (marked.data.length) {
+      await event(db, caseId, "user_document_deleted", { attachment_id: doc.id });
+    }
+  }
+  return result;
 }
 
 /**

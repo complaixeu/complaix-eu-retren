@@ -4,7 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { CaseStatus, MailMessage, OperatorPublicConfig } from "@/shared/contracts";
-import { MAX_SENDS_PER_CASE } from "./send-cap";
+import { MAX_SENDS_PER_CASE } from "./timers";
 
 type Env = Record<string, string | undefined>;
 
@@ -198,6 +198,13 @@ export type InitialClaimRefusal =
   | "mock_text";
 
 /**
+ * The initial claim may be queued only while `send_count` is below this. The last of the
+ * MAX_SENDS_PER_CASE slots is reserved for the d45 escalation (tracker #26, C7 decision), like
+ * for reminders, the insistence and forwarded documents.
+ */
+export const INITIAL_CLAIM_SEND_LIMIT = MAX_SENDS_PER_CASE - 1;
+
+/**
  * Why the initial claim can't go out now, or null. claims_send_initial_claim checks the case
  * part again under a row lock; the operator part (config) is only known here.
  */
@@ -211,7 +218,7 @@ export function initialClaimRefusal(
   if (operator.channel.type !== "email") return "operator_has_no_email_channel";
   if (c.earliestSendAt === null) return "no_earliest_send_at";
   if (Date.parse(c.earliestSendAt) > now.getTime()) return "too_early";
-  if (c.sendCount >= MAX_SENDS_PER_CASE) return "send_cap_reached";
+  if (c.sendCount >= INITIAL_CLAIM_SEND_LIMIT) return "send_cap_reached";
   return null;
 }
 
@@ -253,4 +260,30 @@ export function buildMailMessage(
       storagePath: a.storage_path,
     })),
   };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Forwarded user documents (C6)
+
+/** C6's private bucket of the documents users send for their case (deleted once forwarded). */
+export const USER_DOCUMENTS_BUCKET = "claims-user-documents";
+
+/**
+ * The user documents to delete from storage after a send: every `user_document` attached to
+ * the row, and only once the mail was actually sent. After a failed or skipped send nothing is
+ * deleted, so the send can be retried (ARCHITECTURE §7.1: forwarded, then deleted).
+ * `storage_path` is a key in USER_DOCUMENTS_BUCKET, with or without the bucket prefix.
+ */
+export function userDocumentsToDelete(
+  result: { status: "sent" | "failed" | "skipped" },
+  attachments: readonly { id: string; kind: string; storage_path: string }[],
+): { id: string; key: string }[] {
+  if (result.status !== "sent") return [];
+  const prefix = `${USER_DOCUMENTS_BUCKET}/`;
+  return attachments
+    .filter((a) => a.kind === "user_document")
+    .map((a) => ({
+      id: a.id,
+      key: a.storage_path.startsWith(prefix) ? a.storage_path.slice(prefix.length) : a.storage_path,
+    }));
 }
