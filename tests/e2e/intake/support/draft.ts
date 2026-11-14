@@ -154,12 +154,12 @@ export async function mergeIntoDraft(draftId: string, patch: Record<string, unkn
 // The review step's helpers ([A4]).
 
 /** Uploads a placeholder PDF on the first step, so the browser has a current draft. */
-export async function uploadPlaceholderTicket(page: Page) {
+export async function uploadPlaceholderTicket(page: Page, format: "image" | "pdf" = "pdf") {
   await page.goto("/reclamar/foto");
   await page.getByLabel("Foto o PDF del billete").setInputFiles({
-    name: "billete.pdf",
-    mimeType: "application/pdf",
-    buffer: Buffer.from(PLACEHOLDER_PDF),
+    name: format === "image" ? "billete.png" : "billete.pdf",
+    mimeType: format === "image" ? "image/png" : "application/pdf",
+    buffer: Buffer.from(format === "image" ? PLACEHOLDER_PNG : PLACEHOLDER_PDF),
   });
   await page.getByRole("button", { name: "Subir billete" }).click();
   await expect(page.getByRole("region", { name: "Tu billete" })).toBeVisible();
@@ -199,8 +199,8 @@ export const reviewValues = {
 } satisfies Partial<Record<keyof TicketData, string>>;
 
 /** Fills every required field of the review step, confirms the localizador and continues. */
-export async function completeReview(page: Page) {
-  const v = reviewValues;
+export async function completeReview(page: Page, overrides: Partial<typeof reviewValues> = {}) {
+  const v = { ...reviewValues, ...overrides };
   await page.getByRole("radio", { name: v.operator }).check();
   await page.getByLabel("Localizador", { exact: true }).fill(v.bookingRef);
   await page.getByLabel("Fecha del viaje").fill(v.travelDate);
