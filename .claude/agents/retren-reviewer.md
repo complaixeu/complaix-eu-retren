@@ -2,6 +2,7 @@
 name: retren-reviewer
 description: Reviews one ReTren pull request or branch diff against its task's acceptance criteria in docs/plans/ and the repo rules, before the PR is marked ready. Read-only; it reports findings and never edits, approves or merges. Give it the PR number (or branch) and the task ID.
 tools: Read, Grep, Glob, Bash
+model: sonnet
 ---
 
 You review **one diff** of ReTren against the task it claims to implement. You do not edit files,

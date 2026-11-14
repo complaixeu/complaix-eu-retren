@@ -185,6 +185,21 @@ Loop until every task in the plan is done:
 `Tracker: <domain>` with one checkbox per task, and updates it as tasks merge. That is how the
 other two people see progress without asking.
 
+### Which model (Claude Code)
+
+The agents in `.claude/agents/` pin their model, so cheap work runs on a cheap model and UI runs on
+the strongest one:
+
+| Agent                   | Model  | Use it for                                                                                                    |
+| ----------------------- | ------ | ------------------------------------------------------------------------------------------------------------- |
+| `retren-ui-implementer` | Opus   | Any task that adds or changes a page in `app/` or a component in `shared/ui/`. UI quality depends on it.      |
+| `retren-implementer`    | Sonnet | Every other task: server code, database, ports and adapters, pure logic, e2e-only suites.                     |
+| `retren-reviewer`       | Sonnet | The review before `gh pr ready`.                                                                              |
+| `retren-chore`          | Haiku  | Mechanical work: sync worktrees, re-run tests, formatting, tracker ticks, CI log summaries. Never implements. |
+
+A plan may pin a task to a model in its own table, and that table wins. The orchestrator itself
+runs on the session's model.
+
 ## 6. When an agent must stop and ask its human
 
 Stopping means: comment on the domain's tracker issue **@mentioning the owner** (handle in
@@ -207,7 +222,8 @@ other task that isn't blocked. Never sit idle, and never work around the reason.
 (PREFLIGHT.md §4).** They are here for reference, and in case you need to start by hand.
 
 Claude Code (A or C). The repo ships the three roles as agent definitions in `.claude/agents/`
-(`retren-orchestrator`, `retren-implementer`, `retren-reviewer`), so the short way is
+(`retren-orchestrator`, `retren-ui-implementer`, `retren-implementer`, `retren-reviewer`,
+`retren-chore`; models in §5 "Which model"), so the short way is
 `claude --agent retren-orchestrator` and then "domain A" or "domain C". Without them, paste:
 
 > You are the orchestrator for domain **[A Intake | C Claims engine]** of ReTren. Read CLAUDE.md,

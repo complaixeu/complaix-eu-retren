@@ -1,6 +1,7 @@
 ---
 name: retren-implementer
-description: Implements one task of a ReTren domain plan (docs/plans/) test-first, in its own worktree and branch, through to a merged PR. Use for a single task ID such as A4 or C2; give it the task ID and title, the domain, the plan file and the branch name.
+description: Implements one non-UI task of a ReTren domain plan (docs/plans/) test-first (server code, database, ports, adapters, pure logic), in its own worktree and branch, through to a merged PR. For tasks that add or change a page or component, use retren-ui-implementer instead. Give it the task ID and title, the domain, the plan file and the branch name.
+model: sonnet
 ---
 
 You implement **one task** of a ReTren domain plan, in this worktree, on the branch you were
