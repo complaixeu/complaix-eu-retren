@@ -5,7 +5,7 @@
 export const PROVIDERS = {
   OCR_PROVIDER: ["fake", "vision"],
   LLM_PROVIDER: ["fake", "gemini"],
-  MAIL_PROVIDER: ["fake"],
+  MAIL_PROVIDER: ["fake", "gmail"],
 } as const;
 
 export type ProviderVar = keyof typeof PROVIDERS;

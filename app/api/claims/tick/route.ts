@@ -3,6 +3,7 @@
 // In DEMO_MODE=1 the body may carry `{ "now": "<ISO date-time>" }` to move the clock forward.
 import { ZodError } from "zod";
 // Relative on purpose: same domain (C owns app/api/claims/), and the tick stays off claims' public API.
+import { runOutbound } from "../../../../features/claims/outbound-tick";
 import { isTickAuthorized, resolveTickNow, runTick } from "../../../../features/claims/tick";
 import { createServiceClient } from "@/shared/supabase/server";
 
@@ -29,6 +30,9 @@ export async function POST(request: Request): Promise<Response> {
     throw e;
   }
 
-  const result = await runTick(createServiceClient(), now);
-  return Response.json(result);
+  const db = createServiceClient();
+  const result = await runTick(db, now);
+  // Then what is due goes out (C3): initial claims past earliest_send_at, then every queued row.
+  const outbound = await runOutbound(db, now);
+  return Response.json({ ...result, outbound });
 }

@@ -184,9 +184,10 @@ describe("POST /api/claims/tick: processing", () => {
     // No personal data in the event: only the action, the day and when it fired.
     expect(d12.events[0].data).toEqual({ action: "reminder_d12", day: 12, at: T.toISOString() });
     expect(d12.messages).toHaveLength(1);
+    // Queued by the timer step, then sent by the tick's outbound step (C3, fake transport).
     expect(d12.messages[0]).toMatchObject({
       direction: "outbound",
-      status: "queued",
+      status: "sent",
       to_address: operatorAddress,
     });
     expect(d12.messages[0].subject).toContain(`[${d12.case.public_ref}]`);
@@ -203,7 +204,8 @@ describe("POST /api/claims/tick: processing", () => {
     expect(closed.case.send_count).toBe(5);
     expect(closed.case.next_action_at).toBeNull();
     expect(closed.messages).toHaveLength(1);
-    expect(closed.messages[0]).toMatchObject({ status: "queued", to_address: USER_EMAIL });
+    // Queued by the close, then sent to the case's own user by the outbound step (C3).
+    expect(closed.messages[0]).toMatchObject({ status: "sent", to_address: USER_EMAIL });
     expect(closed.events.find((e) => actionOf(e) === "close_3m")).toMatchObject({
       from_status: "escalated",
       to_status: "closed",
