@@ -97,8 +97,8 @@ That's all. `pnpm empezar`:
 2. Refuses to start if you have uncommitted changes. Otherwise it switches to `develop` and pulls.
 3. Runs `pnpm preflight <domain> --gate`, and stops if it isn't READY.
 4. Starts your harness inside `caffeinate`:
-   - **A / C:** Claude Code with your domain's kickoff prompt already filled in. C's prompt adds the
-     Codex review step.
+   - **A / C:** `claude --agent retren-orchestrator` (`.claude/agents/`), told your domain. It
+     starts the implementer and reviewer subagents, and for C the Codex review.
    - **B:** `scripts/agents/run-codex-lanes.sh` (tracker issue, three Codex lanes).
 
 `DRY_RUN=1 pnpm empezar` shows what it would start, without starting anything. On Claude Code,
