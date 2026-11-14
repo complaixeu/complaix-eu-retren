@@ -1,6 +1,6 @@
 -- Timer actions (migration *_claims_timer_actions.sql, docs/plans/C-claims.md C7).
 begin;
-select plan(26);
+select plan(28);
 
 -- One timer action per case: the index.
 select has_index('public', 'case_events', 'case_events_timer_action_once', 'the once-only index exists');
@@ -90,6 +90,19 @@ select is(public.claims_apply_timer_action(
   '{"action":"reminder_d12","day":12}',
   '{"recipient":"operator","template":"reminder_d12","from":"r@example.test","to":"op@example.test","subject":"[RTN-X] s","body_text":"t"}'),
   null, 'a stale paused flag writes nothing');
+select is(public.claims_apply_timer_action(
+  '00000000-0000-4000-8000-0000000007c7', 'reply_received', 1, false, 'closed', 0, null,
+  '{"action":"close_3m","day":89}',
+  '{"recipient":"user","template":"user_final_result","from":"r@example.test","to":"viajero@example.test","subject":"[RTN-X] f","body_text":"t"}'),
+  null, 'a stale status (reply_received on a sent case) writes nothing');
+select results_eq(
+  $$select status::text, send_count, next_action_at,
+      (select count(*) from public.case_events e where e.case_id = c.id),
+      (select count(*) from public.messages m where m.case_id = c.id)
+    from public.cases c where id = '00000000-0000-4000-8000-0000000007c7'$$,
+  $$values ('sent', 1, null::timestamptz, 0::bigint, 0::bigint)$$,
+  'after the stale guards the case, its events and the outbox are unchanged'
+);
 
 -- Happy path: a reminder.
 select isnt(public.claims_apply_timer_action(
