@@ -23,7 +23,10 @@ const INSTRUCTION_LIKE: RegExp[] = [
 ];
 
 function normalize(s: string): string {
-  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 }
 
 export function senderDomain(from: string): string | undefined {

@@ -50,7 +50,10 @@ const ACKNOWLEDGEMENT: RegExp[] = [
 ];
 
 function normalize(s: string): string {
-  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 }
 
 export function fakeCategory(text: string): ReplyCategory {
