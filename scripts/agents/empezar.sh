@@ -20,7 +20,7 @@ if [ -z "$role" ]; then
   esac
 fi
 case "$role" in A|B|C) ;; *) echo "usage: pnpm empezar [A|B|C]" >&2; exit 2 ;; esac
-echo "GitHub: ${login:-?} → domain $role"
+if [ -n "${EMPEZAR_SYNCED:-}" ]; then echo "GitHub: ${login:-?} → domain $role"; fi
 
 wake=(); [ "$(uname -s)" = Darwin ] && wake=(caffeinate -dimsu)
 
