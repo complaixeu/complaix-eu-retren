@@ -396,7 +396,7 @@ describe("sendQueued (local Supabase)", () => {
   });
 
   it("a non-operator recipient is refused and the row marked failed", async () => {
-    const { queuedId } = await sentCaseWithQueued({ to: "x@evil.com" });
+    const { queuedId } = await sentCaseWithQueued({ to: "intruso@evil.example" });
     const transport = createFakeTransport();
     expect(await sendQueued(queuedId, { db, transport })).toEqual({
       status: "failed",
@@ -550,14 +550,14 @@ describe("sendQueued (local Supabase)", () => {
       },
     };
     await sendQueued(bad.queuedId, { db, transport: broken, purgeForwardedDocuments });
-    const refused = await sentCaseWithQueued({ to: "x@evil.com" });
+    const refused = await sentCaseWithQueued({ to: "intruso@evil.example" });
     await sendQueued(refused.queuedId, { db, purgeForwardedDocuments });
     expect(calls).toHaveLength(1);
   });
 
   it("sendPending sends every queued row once", async () => {
     const a = await sentCaseWithQueued();
-    const b = await sentCaseWithQueued({ to: "x@evil.com" });
+    const b = await sentCaseWithQueued({ to: "intruso@evil.example" });
     const transport = createFakeTransport();
     const first = await sendPending({ db, transport });
     expect(first.find((r) => r.messageId === a.queuedId)?.result.status).toBe("sent");
