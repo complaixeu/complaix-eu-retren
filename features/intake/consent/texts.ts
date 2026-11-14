@@ -7,7 +7,7 @@
  * restates what ARCHITECTURE decides and what the mandate PDF ([B5]) already says; it adds no
  * legal claims of its own.
  */
-export const CONSENT_TEXT_VERSION = "mandato-2026-11-14-borrador";
+export const CONSENT_TEXT_VERSION = "mandato-2026-11-14-borrador-2";
 
 export const CONSENT_DRAFT_NOTICE = {
   title: "Borrador pendiente de revisión jurídica",
@@ -71,7 +71,7 @@ export const PRIVACY_NOTICE: PrivacyNotice = {
     },
     {
       term: "Cuánto tiempo",
-      text: "Pedimos lo mínimo y lo borramos en cuanto deja de hacer falta. Una reclamación sin terminar caduca a las 24 horas.",
+      text: "Pedimos lo mínimo y lo borramos en cuanto deja de hacer falta. Una reclamación sin terminar caduca a las 24 horas. El registro de tu aceptación (fecha y hora, versión del texto, IP y datos del viaje) se guarda como prueba del mandato mientras dure la reclamación y su posible defensa.",
     },
     {
       term: "Tus derechos",

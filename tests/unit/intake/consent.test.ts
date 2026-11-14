@@ -17,6 +17,30 @@ import { ANSWERS, REVIEW, REVIEWED_TICKET } from "../../fixtures/intake/review";
 const headers = (values: Record<string, string>) => new Headers(values);
 
 describe("clientIp", () => {
+  it("prefers x-vercel-forwarded-for, set by Vercel's proxy", () => {
+    expect(
+      clientIp(
+        headers({
+          "x-vercel-forwarded-for": "192.0.2.10",
+          "x-forwarded-for": "203.0.113.7, 10.0.0.1",
+          "x-real-ip": "198.51.100.1",
+        }),
+      ),
+    ).toBe("192.0.2.10");
+  });
+
+  it("takes the first hop of x-vercel-forwarded-for if it holds a list", () => {
+    expect(clientIp(headers({ "x-vercel-forwarded-for": "192.0.2.10, 10.0.0.1" }))).toBe(
+      "192.0.2.10",
+    );
+  });
+
+  it("falls back to x-forwarded-for when x-vercel-forwarded-for is not an address", () => {
+    expect(
+      clientIp(headers({ "x-vercel-forwarded-for": "garbage", "x-forwarded-for": "203.0.113.7" })),
+    ).toBe("203.0.113.7");
+  });
+
   it("takes the first hop of x-forwarded-for", () => {
     expect(clientIp(headers({ "x-forwarded-for": "203.0.113.7, 10.0.0.1, 10.0.0.2" }))).toBe(
       "203.0.113.7",
@@ -45,7 +69,7 @@ describe("clientIp", () => {
     );
   });
 
-  it("is null without either header", () => {
+  it("is null without any of the headers", () => {
     expect(clientIp(headers({}))).toBeNull();
   });
 
@@ -72,11 +96,39 @@ describe("buildTripSnapshot", () => {
     });
   });
 
-  it("adds the answers when they are there", () => {
+  it("adds only the answers that define the claim", () => {
     expect(buildTripSnapshot({ review: REVIEW, answers: ANSWERS })).toEqual({
       ok: true,
-      snapshot: { ticket: REVIEWED_TICKET, answers: ANSWERS },
+      snapshot: {
+        ticket: REVIEWED_TICKET,
+        answers: {
+          actualArrival: ANSWERS.actualArrival,
+          previousClaim: ANSWERS.previousClaim,
+          paymentPreference: ANSWERS.paymentPreference,
+        },
+      },
     });
+  });
+
+  it("never keeps the identity answers: the evidence can't be erased", () => {
+    const result = buildTripSnapshot({
+      review: REVIEW,
+      answers: { ...ANSWERS, documentType: "passport", documentNumber: "X1234567", extra: "y" },
+    });
+    expect(result.ok).toBe(true);
+    const text = JSON.stringify(result);
+    expect(text).not.toContain("documentNumber");
+    expect(text).not.toContain("X1234567");
+    expect(text).not.toContain("documentType");
+    expect(text).not.toContain("email");
+    expect(text).not.toContain(ANSWERS.email);
+    expect(text).not.toContain("extra");
+  });
+
+  it("keeps the details of an earlier claim, which are part of the claim", () => {
+    const previousClaim = { made: true, date: "2026-03-11", recipient: "Iryo", means: "correo" };
+    const result = buildTripSnapshot({ review: REVIEW, answers: { ...ANSWERS, previousClaim } });
+    expect(result).toMatchObject({ ok: true, snapshot: { answers: { previousClaim } } });
   });
 
   it("keeps only the ticket fields of the contract", () => {
@@ -130,7 +182,7 @@ describe("tripSummary", () => {
 
 describe("consent texts", () => {
   it("have a version marked as a draft", () => {
-    expect(CONSENT_TEXT_VERSION).toBe("mandato-2026-11-14-borrador");
+    expect(CONSENT_TEXT_VERSION).toBe("mandato-2026-11-14-borrador-2");
     expect(CONSENT_DRAFT_NOTICE.title).toBe("Borrador pendiente de revisión jurídica");
   });
 
@@ -149,6 +201,11 @@ describe("consent texts", () => {
       "Cuánto tiempo",
       "Tus derechos",
     ]);
+    // The evidence itself is kept, and the notice says so (and for how long).
+    const retention = PRIVACY_NOTICE.items.find((i) => i.term === "Cuánto tiempo")!.text;
+    expect(retention).toContain(
+      "El registro de tu aceptación (fecha y hora, versión del texto, IP y datos del viaje) se guarda como prueba del mandato mientras dure la reclamación y su posible defensa.",
+    );
   });
 });
 
@@ -166,7 +223,7 @@ describe("toConsentRef", () => {
       consentId: "5a4f3f8e-1d7b-4c43-9a59-2b8f2b6f9e01",
       mandateAccepted: true,
       gdprAccepted: true,
-      textVersion: "mandato-2026-11-14-borrador",
+      textVersion: "mandato-2026-11-14-borrador-2",
       acceptedAt: "2026-03-12T10:00:00.000Z",
     });
   });

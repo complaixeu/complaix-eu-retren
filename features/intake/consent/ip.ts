@@ -6,14 +6,24 @@ export interface HeaderReader {
 }
 
 /**
- * The client's IP for the consent evidence: the first hop of `x-forwarded-for` (set by the proxy
- * in front of the app), else `x-real-ip`, else null. A value that is not an address is skipped,
- * so nothing but an IP is ever stored. Personal data: never log it.
+ * The client's IP for the consent evidence, from the first header that holds an address:
+ * `x-vercel-forwarded-for` (set by Vercel's proxy), the first hop of `x-forwarded-for`, then
+ * `x-real-ip`; null if none does. A value that is not an address is skipped, so nothing but an
+ * IP is ever stored. Personal data: never log it.
+ *
+ * Only trustworthy behind Vercel's proxy, which overwrites these headers with what it saw. A
+ * request that reaches the app any other way (locally, or another proxy) can put any address in
+ * them, so the value is evidence of what the request claimed, not proof of where it came from.
  */
 export function clientIp(headers: HeaderReader): string | null {
-  const firstHop = headers.get("x-forwarded-for")?.split(",")[0];
-  return address(firstHop) ?? address(headers.get("x-real-ip"));
+  return (
+    address(firstHop(headers.get("x-vercel-forwarded-for"))) ??
+    address(firstHop(headers.get("x-forwarded-for"))) ??
+    address(headers.get("x-real-ip"))
+  );
 }
+
+const firstHop = (value: string | null) => value?.split(",")[0];
 
 function address(raw: string | null | undefined): string | null {
   let value = raw?.trim() ?? "";

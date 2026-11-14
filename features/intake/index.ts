@@ -92,6 +92,7 @@ export {
 } from "./consent/accept";
 export { clientIp, type HeaderReader } from "./consent/ip";
 export {
+  ClaimAnswers,
   TripSnapshot,
   buildTripSnapshot,
   tripSummary,

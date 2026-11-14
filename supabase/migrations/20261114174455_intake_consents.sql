@@ -1,7 +1,9 @@
 -- Consent evidence (docs/plans/A-intake.md A6, ARCHITECTURE "Aspectos legales y privacidad":
 -- "se guarda evidencia de la aceptación: fecha y hora, versión del texto, IP y datos del viaje").
 --
--- consents: one row each time a user accepts the mandate and the privacy notice. Insert-only:
+-- consents: one row each time a user accepts the mandate and the privacy notice. Several rows for
+-- one draft (accepting again after going back) are intentional: each is evidence of an acceptance,
+-- and A7 uses the newest. Insert-only:
 -- a trigger refuses UPDATE, DELETE and TRUNCATE for everyone, the owner included. RLS on, no
 -- policies, no grants for anon or authenticated; the service role may only insert and read.
 --
@@ -23,6 +25,9 @@ create table public.consents (
   ip inet,
   -- The trip as the user confirmed it (data.review.ticket, plus data.answers if present).
   trip_snapshot jsonb not null,
+  -- Set by the database at insert; orders consents that share accepted_at (the newest wins).
+  -- clock_timestamp(), not now(): two inserts in one transaction still get different values.
+  created_at timestamptz not null default clock_timestamp(),
   constraint consents_text_version_not_empty check (char_length(text_version) between 1 and 100),
   constraint consents_trip_snapshot_is_object check (jsonb_typeof(trip_snapshot) = 'object')
 );
@@ -31,7 +36,7 @@ comment on table public.consents is
   'Evidence of the mandate and GDPR acceptance (intake, A6). Insert-only; server-only: RLS on, no policies.';
 
 -- A7 reads the latest consent of a draft.
-create index consents_draft_id_accepted_at on public.consents (draft_id, accepted_at desc);
+create index consents_draft_id_latest on public.consents (draft_id, accepted_at desc, created_at desc);
 
 alter table public.consents enable row level security;
 revoke all on table public.consents from anon, authenticated, service_role;
@@ -47,8 +52,9 @@ begin
     -- The foreign key's ON DELETE SET NULL, after the draft is gone: allowed, nothing else is.
     if old.draft_id is not null
       and new.draft_id is null
-      and (new.id, new.accepted_at, new.text_version, new.ip, new.trip_snapshot)
-        is not distinct from (old.id, old.accepted_at, old.text_version, old.ip, old.trip_snapshot)
+      and (new.id, new.accepted_at, new.text_version, new.ip, new.trip_snapshot, new.created_at)
+        is not distinct from
+          (old.id, old.accepted_at, old.text_version, old.ip, old.trip_snapshot, old.created_at)
       and not exists (select 1 from public.intake_drafts d where d.id = old.draft_id)
     then
       return new;

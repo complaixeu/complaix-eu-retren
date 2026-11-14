@@ -92,13 +92,33 @@ describe("acceptConsent (local Supabase)", () => {
     expect((await consentRows(draft.id))[0].ip).toBe("2001:db8::42");
   });
 
-  it("adds the answers to the snapshot when the draft has them", async () => {
+  it("adds the claim's answers to the snapshot, never the identity ones", async () => {
     const draft = await draftWith({ review: REVIEW, answers: ANSWERS });
     await acceptConsent(draft, BOTH, { db, clock, headers: new Headers() });
-    expect((await consentRows(draft.id))[0].trip_snapshot).toEqual({
+    const snapshot = (await consentRows(draft.id))[0].trip_snapshot;
+    expect(snapshot).toEqual({
       ticket: REVIEWED_TICKET,
-      answers: ANSWERS,
+      answers: {
+        actualArrival: ANSWERS.actualArrival,
+        previousClaim: ANSWERS.previousClaim,
+        paymentPreference: ANSWERS.paymentPreference,
+      },
     });
+    expect(JSON.stringify(snapshot)).not.toContain(ANSWERS.documentNumber);
+    expect(JSON.stringify(snapshot)).not.toContain(ANSWERS.email);
+  });
+
+  it("prefers x-vercel-forwarded-for", async () => {
+    const draft = await draftWith({ review: REVIEW });
+    await acceptConsent(draft, BOTH, {
+      db,
+      clock,
+      headers: new Headers({
+        "x-vercel-forwarded-for": "192.0.2.10",
+        "x-forwarded-for": "203.0.113.7",
+      }),
+    });
+    expect((await consentRows(draft.id))[0].ip).toBe("192.0.2.10");
   });
 
   it.each([
@@ -134,6 +154,22 @@ describe("acceptConsent (local Supabase)", () => {
     const ref = ConsentRef.parse(toConsentRef(latest!));
     expect(ref).toMatchObject({ mandateAccepted: true, gdprAccepted: true });
     expect(await latestConsent("00000000-0000-0000-0000-000000000000", { db })).toBeNull();
+  });
+
+  it("breaks a tie on accepted_at by insertion order: the newest row wins", async () => {
+    const draft = await draftWith({ review: REVIEW });
+    // Same fixed clock, so both rows have the same accepted_at.
+    const first = await acceptConsent(draft, BOTH, { db, clock, headers: new Headers() });
+    const second = await acceptConsent(draft, BOTH, { db, clock, headers: new Headers() });
+    if (!first.ok || !second.ok) throw new Error("not stored");
+    expect(first.consent.acceptedAt).toBe(second.consent.acceptedAt);
+
+    for (let i = 0; i < 3; i++) {
+      expect((await latestConsent(draft.id, { db }))?.id).toBe(second.consent.id);
+    }
+    const rows = await consentRows(draft.id);
+    const created = Object.fromEntries(rows.map((r) => [r.id, Date.parse(r.created_at as string)]));
+    expect(created[second.consent.id]).toBeGreaterThan(created[first.consent.id]);
   });
 
   it("keeps the evidence when the draft is deleted", async () => {

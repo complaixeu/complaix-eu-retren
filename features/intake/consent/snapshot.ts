@@ -3,14 +3,27 @@ import { TicketData, UserAnswers, type OperatorId } from "@/shared/contracts";
 import type { IntakeDraftData } from "../draft/store";
 
 /**
+ * The answers that define the claim itself (when the train really arrived, whether it was
+ * already claimed, money or voucher). An allowlist: a consent row can never be erased, so the
+ * identity answers (document type and number, email) and anything A5 adds later stay out unless
+ * they are added here on purpose.
+ */
+export const ClaimAnswers = UserAnswers.pick({
+  actualArrival: true,
+  previousClaim: true,
+  paymentPreference: true,
+});
+export type ClaimAnswers = z.infer<typeof ClaimAnswers>;
+
+/**
  * The trip as the user confirmed it, copied into the consent row as evidence: the reviewed
  * ticket (`data.review.ticket`, [A4]) and, once the questions step ([A5]) stores them, the
- * answers (`data.answers`). Only contract fields are kept: anything else in the draft (the raw
- * extraction, unknown keys) stays out.
+ * claim's answers (`ClaimAnswers` of `data.answers`). Only those contract fields are kept:
+ * anything else in the draft (identity answers, the raw extraction, unknown keys) stays out.
  */
 export const TripSnapshot = z.object({
   ticket: TicketData,
-  answers: UserAnswers.optional(),
+  answers: ClaimAnswers.optional(),
 });
 export type TripSnapshot = z.infer<typeof TripSnapshot>;
 
@@ -28,7 +41,8 @@ export function buildTripSnapshot(data: IntakeDraftData): TripSnapshotResult {
   if (data.answers !== undefined) {
     const answers = UserAnswers.safeParse(data.answers);
     if (!answers.success) return { ok: false, reason: "answers_invalid" };
-    snapshot.answers = answers.data;
+    // zod objects strip unknown keys: only the allowlisted answers are copied.
+    snapshot.answers = ClaimAnswers.parse(answers.data);
   }
   return { ok: true, snapshot };
 }

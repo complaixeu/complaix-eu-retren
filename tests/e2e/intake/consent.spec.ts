@@ -6,7 +6,7 @@ import { consentsOf, startDraftWith } from "./support/draft";
 // continue without both checkboxes; with both, the evidence is stored and you land on "enviado".
 // Roles and labels only.
 
-const VERSION = "mandato-2026-11-14-borrador";
+const VERSION = "mandato-2026-11-14-borrador-2";
 const mandateBox = (page: Page) => page.getByRole("checkbox", { name: /^Autorizo a ReTren/ });
 const privacyBox = (page: Page) => page.getByRole("checkbox", { name: /aviso de privacidad/ });
 const accept = (page: Page) => page.getByRole("button", { name: "Aceptar y enviar" });

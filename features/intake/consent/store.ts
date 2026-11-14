@@ -19,6 +19,7 @@ type ConsentRow = {
   text_version: string;
   ip: string | null;
   trip_snapshot: Json;
+  created_at: string;
 };
 
 type ConsentsDatabase = {
@@ -26,7 +27,7 @@ type ConsentsDatabase = {
     Tables: {
       consents: {
         Row: ConsentRow;
-        Insert: Omit<ConsentRow, "id"> & { id?: string };
+        Insert: Omit<ConsentRow, "id" | "created_at"> & { id?: string };
         Update: never;
         Relationships: [];
       };
@@ -89,7 +90,14 @@ export async function insertConsent(
   return toRecord(data);
 }
 
-/** The draft's most recent consent, or null. For A7, to build the submission's `ConsentRef`. */
+/**
+ * The draft's most recent consent, or null. For A7, to build the submission's `ConsentRef`.
+ *
+ * A draft may have several consents on purpose: accepting again (after going back to fix
+ * something) adds a row instead of replacing one, because each is evidence of an acceptance.
+ * The newest one wins: latest `accepted_at`, and on a tie the latest `created_at` (set by the
+ * database at insert), so the answer never depends on the physical row order.
+ */
 export async function latestConsent(
   draftId: string,
   deps: Pick<ConsentDeps, "db"> = {},
@@ -101,6 +109,7 @@ export async function latestConsent(
     .select()
     .eq("draft_id", id)
     .order("accepted_at", { ascending: false })
+    .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error) throw new ConsentStoreError(error.code);
