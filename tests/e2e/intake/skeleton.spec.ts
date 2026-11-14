@@ -58,8 +58,10 @@ async function tabTo(page: Page, target: ReturnType<Page["getByRole"]>, max = 15
 
 test("the landing page has a Reclamar button that starts the flow", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1, name: "ReTren" })).toBeVisible();
-  await page.getByRole("link", { name: "Reclamar" }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Reclama el retraso de tu tren" }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Empezar reclamación" }).first().click();
   await expect(page).toHaveURL(/\/reclamar\/foto$/);
   await expect(
     page.getByRole("heading", { level: 1, name: "Sube la foto de tu billete" }),
@@ -156,7 +158,7 @@ test.describe("keyboard", () => {
 
   test("the flow can be walked with Tab and Enter, with a visible focus ring", async ({ page }) => {
     await page.goto("/");
-    const start = page.getByRole("link", { name: "Reclamar" });
+    const start = page.getByRole("link", { name: "Empezar reclamación" }).last();
     await tabTo(page, start);
     const outline = await start.evaluate((el) => getComputedStyle(el).outlineStyle);
     expect(outline).not.toBe("none");
@@ -199,7 +201,7 @@ test.describe("mobile, 375 px wide", () => {
       // The first step's primary action is its upload button ([A1]), the review's its submit
       // button ([A4]) and the authorization step's its accept button ([A6]); the others are links.
       const primary = page
-        .getByRole("link", { name: /^(Reclamar|Continuar|Volver al inicio)$/ })
+        .getByRole("link", { name: /^(Reclamar|Empezar reclamación|Continuar|Volver al inicio)$/ })
         .or(page.getByRole("button", { name: /^(Subir billete|Continuar|Aceptar y enviar)$/ }));
       await expect(primary).toBeVisible();
       const box = await primary.boundingBox();
@@ -220,14 +222,13 @@ test.describe("mobile, 375 px wide", () => {
   });
 });
 
-test("dark mode uses its own surface colours", async ({ page }) => {
-  await page.goto("/reclamar/foto");
+test("the public site stays white when the device prefers dark mode", async ({ page }) => {
+  await page.goto("/");
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   await page.emulateMedia({ colorScheme: "light" });
   const light = await bg();
   await page.emulateMedia({ colorScheme: "dark" });
   const dark = await bg();
-  expect(light).not.toBe("rgba(0, 0, 0, 0)");
-  expect(dark).not.toBe("rgba(0, 0, 0, 0)");
-  expect(dark).not.toBe(light);
+  expect(light).toBe("rgb(250, 250, 250)");
+  expect(dark).toBe(light);
 });
