@@ -43,16 +43,22 @@ beforeAll(async () => {
 afterEach(() => vi.restoreAllMocks());
 
 // The database is shared by every integration file, and the tick sends the oldest 100 queued rows
-// (OUTBOUND_TICK_LIMIT). The mail these tests queue must not crowd out a later file's rows.
+// (OUTBOUND_TICK_LIMIT). Neither the mail these tests queue nor the notices a later tick would
+// queue for their cases may crowd out a later file's rows.
 const seededCases: string[] = [];
 afterAll(async () => {
   if (!seededCases.length) return;
-  await db
+  const { error } = await db
     .from("messages")
     .update({ status: "failed", failure_reason: "test_cleanup" })
     .in("case_id", seededCases)
     .eq("direction", "outbound")
     .eq("status", "queued");
+  if (error) throw error;
+  // …and the cases must not be due for a later file's tick (the 3-month close applies even to a
+  // paused case, and would queue a notice for each): a closed case is never looked at again.
+  const closed = await db.from("cases").update({ status: "closed" }).in("id", seededCases);
+  if (closed.error) throw closed.error;
 });
 
 type Seeded = { id: string; ref: string; claimMessageId: string; noticeMessageId: string };
