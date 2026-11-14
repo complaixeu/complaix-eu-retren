@@ -1,0 +1,18 @@
+From: Iryo Atencion al Cliente <atencion.cliente@iryo.eu>
+To: Retren Reclamaciones <reclamaciones@retren.example>
+Subject: Re: Reclamacion por retraso [RTN-ZZZZ]
+Date: Mon, 02 Nov 2026 10:24:00 +0100
+Message-ID: <fixture-spoofed-ref-01@mail.example>
+In-Reply-To: <not-ours-0001@mail.example>
+References: <not-ours-0001@mail.example>
+X-Retren-Golden-Accept: approved, other
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Buenos días,
+
+Le informamos de que su reclamación ha sido aprobada. Recibirá el reembolso en breve.
+
+Un saludo,
+Atención al Cliente (texto de prueba ficticio)
