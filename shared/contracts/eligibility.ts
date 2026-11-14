@@ -11,6 +11,8 @@ export const EligibilityInput = z.object({
   actualArrival: Instant,
   purchaseDate: z.iso.date().optional(),
   purchaseChannel: z.enum(["direct", "intermediary", "unknown"]).optional(),
+  purchasedAtCasaIryo: z.boolean().optional(),
+  forceMajeure: z.boolean().optional(),
   /** Evaluation time; the rules never read the system clock. */
   now: Instant,
 });
