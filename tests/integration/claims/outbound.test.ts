@@ -352,6 +352,21 @@ describe("sendQueued (local Supabase)", () => {
     expect(transport.outbox).toHaveLength(1);
   });
 
+  it("with MAIL_REDIRECT_ALL_TO the stored to_address stays the operator's, delivered_to is the redirect", async () => {
+    const { caseId, initialId, queuedId } = await sentCaseWithQueued();
+    const transport = createFakeTransport();
+    const env = { MAIL_REDIRECT_ALL_TO: "equipo@retren.example" };
+    expect((await sendQueued(queuedId, { db, transport, env })).status).toBe("sent");
+    expect(await message(queuedId)).toMatchObject({
+      to_address: OPERATOR,
+      delivered_to: ["equipo@retren.example"],
+    });
+    expect(transport.outbox[0].to).toEqual(["equipo@retren.example"]);
+    // The initial claim's to_address (C6 checks its recipients against it, RT403) is real too.
+    expect((await message(initialId)).to_address).toBe(OPERATOR);
+    expect((await stored(caseId)).row.status).toBe("sent");
+  });
+
   it("a reply that arrived after the row was queued: failed, reason stale", async () => {
     const { caseId, queuedId } = await sentCaseWithQueued();
     const inbound = await db.from("messages").insert({
