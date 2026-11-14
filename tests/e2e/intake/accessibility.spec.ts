@@ -5,6 +5,8 @@ import { DELAYS, tripData } from "../../fixtures/intake/submit";
 import { startDraftWith, startSubmittableDraft, uploadPlaceholderTicket } from "./support/draft";
 
 async function check(page: Page) {
+  // Next streams metadata for the dynamic photo step; wait for its title before axe inspects it.
+  await expect(page).toHaveTitle(/\S/);
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();
