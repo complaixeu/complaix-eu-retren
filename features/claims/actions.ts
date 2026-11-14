@@ -194,6 +194,22 @@ export function planReplyAction(ctx: ReplyActionContext): ReplyPlan {
   }
 }
 
+/**
+ * The plan when a reply can't be acted on as the table says (a template fails to render): the
+ * team queue. A denial still moves the case to `denied`, so the d45 escalation still comes; any
+ * other reply leaves the case as it is.
+ */
+export function fallbackPlan(ctx: ReplyActionContext, reason: TeamQueueReason): ReplyPlan {
+  if (ctx.category === "denied" && chain(ctx.status, ["rejected"])) {
+    const lookAt = escalationLookAt(ctx);
+    return planned(ctx, "team_queue", ["rejected"], {
+      teamQueue: reason,
+      ...(lookAt && { nextActionAt: lookAt }),
+    });
+  }
+  return teamQueue(ctx.status, reason);
+}
+
 /** Mail to anyone but the operator's verified address. */
 export class RecipientRefusedError extends Error {
   constructor(reason: string) {
@@ -320,6 +336,19 @@ function caseVars(
   };
 }
 
+/**
+ * What a notice to the user may carry: the reference, the passenger, the operator (and the
+ * result, added per notice). Never the document number or the booking reference.
+ */
+function noticeVars(vars: ReturnType<typeof caseVars>): Record<string, string> & { ref: string } {
+  const { ref, passengerName, operatorName } = vars;
+  return {
+    ref,
+    ...(passengerName && { passengerName }),
+    ...(operatorName && { operatorName }),
+  };
+}
+
 const NOTICE_VARS: Record<
   NonNullable<ReplyPlan["notice"]>,
   (a: ReplyActionKind) => Record<string, string>
@@ -377,7 +406,7 @@ export async function applyReplyCategory(
       if (!(e instanceof RecipientRefusedError)) throw e;
     }
 
-    let plan = planReplyAction({
+    const ctx: ReplyActionContext = {
       status: row.status,
       category: input.category,
       insistences: has("reply_action", "event", "insistence_sent"),
@@ -386,7 +415,8 @@ export async function applyReplyCategory(
       escalationFired: has("timer_action", "action", "escalation_d45") > 0,
       operatorReachable: operatorAddress !== null && !recipientRefused,
       now,
-    });
+    };
+    let plan = planReplyAction(ctx);
 
     const outbox: Record<string, unknown>[] = [];
     try {
@@ -394,7 +424,7 @@ export async function applyReplyCategory(
       const operator = OperatorId.parse(row.operator);
       if (plan.notice) {
         const r = render(plan.notice, operator, {
-          ...vars,
+          ...noticeVars(vars),
           ...NOTICE_VARS[plan.notice](plan.action),
         });
         outbox.push({
@@ -419,8 +449,9 @@ export async function applyReplyCategory(
         });
       }
     } catch {
-      // A template that can't be rendered (B6 throws on a missing variable) changes nothing.
-      plan = teamQueue(row.status, "render_failed");
+      // A template that can't be rendered (B6 throws on a missing variable): the team queue;
+      // a denial is still recorded.
+      plan = fallbackPlan(ctx, "render_failed");
       outbox.length = 0;
     }
 
@@ -503,15 +534,15 @@ export async function forwardUserDocument(
     const to = operatorRecipient(config);
     const status = transition(row.status, "user_document_forwarded");
 
-    // Thread under the operator's own request: its latest mail from the verified address, or one
-    // classified as asking for data. Never under a mail from anyone else.
+    // Thread under the operator's own request: its latest mail from the verified address. Never
+    // under a mail from anyone else, whatever it was classified as.
     const { data: parent, error: parentError } = await db
       .from("messages")
       .select("message_id")
       .eq("case_id", row.id)
       .eq("direction", "inbound")
       .not("message_id", "is", null)
-      .or(`from_address.eq."${to}",category.eq.asks_for_data`)
+      .eq("from_address", to)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -546,25 +577,31 @@ export async function forwardUserDocument(
 
 /**
  * Deletes from storage the user documents a forwarded mail carried, once that mail is `sent`
- * (C3's sender calls this after a successful send), and marks them deleted with one
- * `user_document_deleted` event. Returns false, keeping the files, while the mail is queued or
- * failed. Idempotent: purging again removes nothing more and records nothing more.
+ * (C3's sender calls this after a successful send). The database decides first:
+ * claims_mark_forwarded_documents_deleted refuses a mail that is queued or failed (then this
+ * returns false and the files are kept), and otherwise marks the documents deleted with one
+ * `user_document_deleted` event. Only then are the files removed. Idempotent: a re-run marks
+ * nothing more and removes any file a crashed run left behind.
  */
 export async function purgeForwardedDocuments(
   messageId: string,
   deps: Pick<ActionDeps, "db"> = {},
 ): Promise<boolean> {
   const db = deps.db ?? createServiceClient();
-  const msg = await db.from("messages").select("status, direction").eq("id", messageId).single();
-  if (msg.error) throw dbError("read message", msg.error);
-  if (msg.data.direction !== "outbound" || msg.data.status !== "sent") return false;
+  const marked = await db.rpc("claims_mark_forwarded_documents_deleted", {
+    p_message_id: messageId,
+  });
+  if (marked.error) {
+    if (marked.error.code === "22023") return false;
+    throw dbError("claims_mark_forwarded_documents_deleted", marked.error);
+  }
 
+  // Every document the mail carried, the ones marked by an earlier run included.
   const docs = await db
     .from("attachments")
     .select("storage_path")
     .eq("message_id", messageId)
-    .eq("kind", "user_document")
-    .is("deleted_at", null);
+    .eq("kind", "user_document");
   if (docs.error) throw dbError("read documents", docs.error);
   if (docs.data.length) {
     const removed = await db.storage
@@ -572,9 +609,5 @@ export async function purgeForwardedDocuments(
       .remove(docs.data.map((d) => d.storage_path));
     if (removed.error) throw dbError("delete user documents", removed.error);
   }
-  const marked = await db.rpc("claims_mark_forwarded_documents_deleted", {
-    p_message_id: messageId,
-  });
-  if (marked.error) throw dbError("claims_mark_forwarded_documents_deleted", marked.error);
   return true;
 }

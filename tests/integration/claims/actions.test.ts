@@ -218,19 +218,27 @@ describe("applyReplyCategory (local Supabase)", () => {
   });
 
   it("templates get the case's own data, never the operator's text", async () => {
-    const seen: Record<string, string>[] = [];
+    const seen = new Map<string, Record<string, string>>();
     const render: typeof renderTemplate = (kind, operator, vars) => {
-      seen.push(vars);
+      seen.set(kind, vars);
       return renderTemplate(kind, operator, vars);
     };
     await reply({ status: "reply_received" }, "denied", { render });
     await reply({ status: "reply_received" }, "approved", { render });
-    expect(seen).toHaveLength(2);
-    for (const vars of seen) {
-      expect(vars).toMatchObject({
-        documentNumber: PII.documentNumber,
-        passengerName: `${PII.firstName} ${PII.lastName}`,
-      });
+    expect([...seen.keys()].sort()).toEqual(["insistence_after_denial", "user_final_result"]);
+
+    // Operator mail: everything the claim needs, the document number included.
+    expect(seen.get("insistence_after_denial")).toMatchObject({
+      documentNumber: PII.documentNumber,
+      bookingRef: PII.bookingRef,
+      passengerName: `${PII.firstName} ${PII.lastName}`,
+    });
+    // User notices: only the reference, the passenger, the operator and the result.
+    const notice = seen.get("user_final_result")!;
+    expect(Object.keys(notice).sort()).toEqual(
+      ["confirmReceipt", "operatorName", "passengerName", "ref", "result"].sort(),
+    );
+    for (const vars of seen.values()) {
       for (const v of Object.values(OPERATOR_TEXT)) {
         expect(JSON.stringify(vars)).not.toContain(v);
       }
@@ -351,6 +359,21 @@ describe("applyReplyCategory (local Supabase)", () => {
     expect(kinds(r.events)).toEqual([["team_queue", "render_failed"]]);
   });
 
+  it("a first denial whose insistence fails to render: still denied, plus the team queue", async () => {
+    const render: typeof renderTemplate = (kind, operator, vars) => {
+      if (kind === "insistence_after_denial") throw new Error("missing variable");
+      return renderTemplate(kind, operator, vars);
+    };
+    const r = await reply({ status: "reply_received" }, "denied", { render });
+    expect(r.out).toMatchObject({ action: "team_queue", teamQueue: "render_failed" });
+    expect(r.row).toMatchObject({ status: "denied", send_count: 1 });
+    expect(r.outbox).toEqual([]);
+    expect(kinds(r.events)).toEqual([
+      ["reply_action", "rejected"],
+      ["team_queue", "render_failed"],
+    ]);
+  });
+
   it("retries run out: the team queue (retry_exhausted), never a failure", async () => {
     const busy = new Proxy(db, {
       get(target, prop, receiver) {
@@ -466,8 +489,9 @@ describe("forwardUserDocument and purgeForwardedDocuments (local Supabase)", () 
   it("queues the document to the operator only and keeps it until the mail is sent", async () => {
     const c = await seedCase({ status: "waiting_user" });
     const ask = await seedReply(c.id, c.ref, { category: "asks_for_data" });
-    // A later inbound mail from someone else must not become the thread parent.
-    await seedReply(c.id, c.ref, { from: "otro@remitente.example" });
+    // A later inbound mail from someone else must not become the thread parent, even one
+    // classified as asking for data.
+    await seedReply(c.id, c.ref, { from: "otro@remitente.example", category: "asks_for_data" });
     const doc = await seedDocument(c.id);
 
     const out = await forwardUserDocument({ caseId: c.id, attachmentId: doc.id }, { db, clock });
@@ -518,6 +542,26 @@ describe("forwardUserDocument and purgeForwardedDocuments (local Supabase)", () 
     const deletions = (await stored(c.id)).events.filter((e) => e.kind === "user_document_deleted");
     expect(deletions).toHaveLength(1);
     expect(deletions[0].data).toEqual({ message_id: out.messageId, attachment_ids: [doc.id] });
+  });
+
+  it("a re-run of the purge removes a file left behind after the mark", async () => {
+    const c = await seedCase({ status: "waiting_user" });
+    const doc = await seedDocument(c.id);
+    const out = await forwardUserDocument({ caseId: c.id, attachmentId: doc.id }, { db, clock });
+    if (!("messageId" in out)) throw new Error("expected the document to be forwarded");
+    await setMessageStatus(out.messageId, "sent");
+
+    // A purge that marked the document and then died before deleting the file.
+    const marked = await db.rpc("claims_mark_forwarded_documents_deleted", {
+      p_message_id: out.messageId,
+    });
+    expect(marked.error).toBeNull();
+    expect(await inStorage(doc.path)).toBe(true);
+
+    expect(await purgeForwardedDocuments(out.messageId, { db })).toBe(true);
+    expect(await inStorage(doc.path)).toBe(false);
+    const deletions = (await stored(c.id)).events.filter((e) => e.kind === "user_document_deleted");
+    expect(deletions).toHaveLength(1);
   });
 
   it("refuses a config that belongs to another operator: nothing written", async () => {

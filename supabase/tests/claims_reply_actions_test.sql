@@ -1,7 +1,7 @@
 -- Actions per reply category (migration *_claims_reply_actions.sql, docs/plans/C-claims.md C6).
 -- Nothing here is real data. op@operator.example is the operator, user@example.test the user.
 begin;
-select plan(81);
+select plan(84);
 
 -- Server only: the API roles can't call any of the functions; the service role can.
 create function pg_temp.sigs() returns setof text language sql as $$
@@ -249,6 +249,9 @@ select ok(not public.claims_queue_for_team('00000000-0000-4000-8000-0000000000c6
   '00000000-0000-4000-8000-00000000a001', 'denied', 'retry_exhausted'), 'the same item is not recorded twice');
 select is((select count(*) from public.case_events where case_id = '00000000-0000-4000-8000-0000000000c6'
   and kind = 'team_queue' and data ->> 'reason' = 'retry_exhausted'), 1::bigint, 'one retry_exhausted item');
+select throws_ok($$select public.claims_queue_for_team('00000000-0000-4000-8000-0000000000c6',
+  '00000000-0000-4000-8000-00000000a001', 'denied', 'Call me at 900 123 456')$$, '22023', null,
+  'a team queue reason is a code, never free text');
 
 -- Forwarding a user document.
 update public.cases set send_count = 6 where id = '00000000-0000-4000-8000-0000000000c6';
@@ -310,11 +313,22 @@ select is((select count(*) from public.case_events where case_id = '00000000-000
 -- No claim went out yet: there is no operator address to forward to.
 insert into public.cases (id, operator, submission, user_email, status, send_count)
 values ('00000000-0000-4000-8000-0000000000c9', 'iryo', '{}', 'user@example.test', 'waiting_user', 1);
+-- A notice to the user (spelled with other capitals) is not an operator mail.
+insert into public.messages (case_id, direction, from_address, to_address, subject, status, created_at)
+values ('00000000-0000-4000-8000-0000000000c9', 'outbound', 'retren@example.test', 'User@Example.TEST',
+  '[RTN-W] notice', 'queued', now() - interval '2 days');
+select is(public.claims_case_operator_address('00000000-0000-4000-8000-0000000000c9'), null,
+  'a user notice is never taken for the operator address');
 insert into public.attachments (id, case_id, kind, storage_path, filename, content_type)
 values ('00000000-0000-4000-8000-00000000d004', '00000000-0000-4000-8000-0000000000c9', 'user_document',
   'case/doc3.pdf', 'doc3.pdf', 'application/pdf');
 select throws_ok($$select pg_temp.forward('00000000-0000-4000-8000-0000000000c9',
   '00000000-0000-4000-8000-00000000d004', 1)$$, 'RT403', null, 'no forward before the claim went out');
+insert into public.messages (case_id, direction, from_address, to_address, subject, status, created_at)
+values ('00000000-0000-4000-8000-0000000000c9', 'outbound', 'retren@example.test', 'op@operator.example',
+  '[RTN-W] claim', 'sent', now() - interval '1 day');
+select is(public.claims_case_operator_address('00000000-0000-4000-8000-0000000000c9'),
+  'op@operator.example', 'the operator address is the claim''s, past an earlier user notice');
 
 -- Marking the documents of a sent mail deleted: never while it is queued or failed.
 select throws_ok($$select public.claims_mark_forwarded_documents_deleted(current_setting('test.fwd')::uuid)$$,

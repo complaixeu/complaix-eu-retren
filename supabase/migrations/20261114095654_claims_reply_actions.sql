@@ -40,7 +40,8 @@ set search_path = ''
 as $$ select 6 $$;
 
 -- The operator address of a case: where its first operator mail (the initial claim, C3) went.
--- Null until that mail exists. Any later operator mail must go to this same address.
+-- Null until that mail exists. Any later operator mail must go to this same address. Mail to the
+-- case user (in any capitalisation) is a notice, never the operator's.
 create function public.claims_case_operator_address(p_case_id uuid)
 returns text
 language sql
@@ -50,7 +51,8 @@ as $$
   select m.to_address
   from public.messages m
   join public.cases c on c.id = m.case_id
-  where m.case_id = p_case_id and m.direction = 'outbound' and m.to_address <> c.user_email
+  where m.case_id = p_case_id and m.direction = 'outbound'
+    and lower(m.to_address) <> lower(c.user_email)
   order by m.created_at, m.id
   limit 1
 $$;
@@ -221,7 +223,8 @@ $$;
 
 -- Puts a reply in the team queue without touching the case (the fallback when an action can't be
 -- applied: retries ran out). Idempotent: the same reason for the same reply is recorded once.
--- Returns true when it recorded the item.
+-- The reason is a code (lower case and underscores), never free text. Returns true when it
+-- recorded the item.
 create function public.claims_queue_for_team(
   p_case_id uuid,
   p_message_id uuid,
@@ -246,8 +249,8 @@ begin
     raise exception 'message % is not an inbound message of the case', p_message_id
       using errcode = '22023';
   end if;
-  if p_reason is null or length(p_reason) = 0 then
-    raise exception 'a team queue item needs a reason' using errcode = '22023';
+  if p_reason is null or p_reason !~ '^[a-z_]+$' then
+    raise exception 'a team queue reason must be a code' using errcode = '22023';
   end if;
 
   v_data := jsonb_build_object('reason', p_reason, 'category', p_category, 'message_id', p_message_id);

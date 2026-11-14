@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ESCALATION_DAY,
+  fallbackPlan,
   operatorRecipient,
   planReplyAction,
   RecipientRefusedError,
@@ -284,6 +285,38 @@ describe("planReplyAction: only one insistence ever", () => {
     expect(planReplyAction(ctx({ ...second, escalationFired: true })).action).toBe("close");
     expect(planReplyAction(ctx({ ...second, sendCount: MAX_SENDS_PER_CASE })).action).toBe("close");
     expect(planReplyAction(ctx({ ...second, sentAt: null })).action).toBe("close");
+  });
+});
+
+describe("fallbackPlan: a reply that can't be acted on still records a denial", () => {
+  it("a first denial still moves to denied, with d45 to come", () => {
+    expect(fallbackPlan(ctx({ category: "denied" }), "render_failed")).toEqual({
+      action: "team_queue",
+      status: "denied",
+      steps: [{ event: "rejected", from: "reply_received", to: "denied" }],
+      teamQueue: "render_failed",
+      nextActionAt: D45,
+    });
+  });
+
+  it("any other reply changes nothing", () => {
+    for (const category of ["approved", "asks_for_data", "acknowledgement"] as const) {
+      expect(fallbackPlan(ctx({ category }), "render_failed")).toEqual({
+        action: "team_queue",
+        status: "reply_received",
+        steps: [],
+        teamQueue: "render_failed",
+      });
+    }
+  });
+
+  it("a denial transition() refuses changes nothing either", () => {
+    expect(fallbackPlan(ctx({ category: "denied", status: "closed" }), "render_failed")).toEqual({
+      action: "team_queue",
+      status: "closed",
+      steps: [],
+      teamQueue: "render_failed",
+    });
   });
 });
 
