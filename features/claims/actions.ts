@@ -20,6 +20,7 @@ import {
 import type { Json } from "@/shared/supabase";
 import { createServiceClient, type ServiceClient } from "@/shared/supabase/server";
 import { DEFAULT_NOTICE_FROM } from "./create-case";
+import { effectiveOperator } from "./operator-inboxes";
 import { InvalidTransitionError, transition, type CaseTransitionEvent } from "./state-machine";
 import { MAX_SENDS_PER_CASE, madridDate, stageWindow } from "./timers";
 
@@ -245,6 +246,15 @@ export interface ActionDeps {
   render?: typeof renderTemplate;
   /** From address of user notices; defaults to MAIL_FROM, then DEFAULT_NOTICE_FROM. */
   noticeFrom?: string;
+  /** For MAIL_OPERATOR_INBOXES (effectiveOperator); process.env when left out. */
+  env?: Record<string, string | undefined>;
+}
+
+/** The operator config C6 acts on: B's (or the injected one), as this environment may mail it. */
+function operatorConfigOf(deps: ActionDeps): (id: OperatorId) => OperatorPublicConfig {
+  const base = deps.getOperatorConfig ?? rulesOperatorConfig;
+  const env = deps.env ?? process.env;
+  return (id) => effectiveOperator(base(id), env);
 }
 
 export interface ApplyReplyResult {
@@ -370,7 +380,7 @@ export async function applyReplyCategory(
 ): Promise<ApplyReplyResult> {
   const db = deps.db ?? createServiceClient();
   const now = (deps.clock ?? systemClock).now();
-  const configOf = deps.getOperatorConfig ?? rulesOperatorConfig;
+  const configOf = operatorConfigOf(deps);
   const render = deps.render ?? renderTemplate;
   const noticeFrom = deps.noticeFrom ?? process.env.MAIL_FROM ?? DEFAULT_NOTICE_FROM;
 
@@ -521,7 +531,7 @@ export async function forwardUserDocument(
 ): Promise<ForwardResult> {
   const db = deps.db ?? createServiceClient();
   const now = (deps.clock ?? systemClock).now();
-  const configOf = deps.getOperatorConfig ?? rulesOperatorConfig;
+  const configOf = operatorConfigOf(deps);
   const render = deps.render ?? renderTemplate;
 
   for (let attempt = 1; ; attempt++) {

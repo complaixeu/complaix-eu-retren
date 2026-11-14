@@ -35,6 +35,7 @@ import {
 } from "./actions";
 import { createClassifier, type ReplyClassifier } from "./classifier";
 import { DEFAULT_NOTICE_FROM } from "./create-case";
+import { operatorInboxes, type OperatorInboxes } from "./operator-inboxes";
 import { InvalidTransitionError, transition } from "./state-machine";
 
 type Env = Record<string, string | undefined>;
@@ -238,6 +239,13 @@ export interface RouteInput {
   operatorDomain: string | null;
   /** The same for the case the subject's reference names (refCases[0]). */
   refOperatorDomain: string | null;
+  /**
+   * The operator's test inbox (MAIL_OPERATOR_INBOXES, outside production) for the thread case, and
+   * for refCases[0]: a mail from it counts as the operator's only with an aligned DKIM pass for
+   * the inbox's own domain (inboxVouched). Never on the From header alone.
+   */
+  operatorInbox?: string | null;
+  refOperatorInbox?: string | null;
   /** The domains with an aligned dkim=pass in the receiving server's own Authentication-Results. */
   dkimPassDomains: string[];
 }
@@ -288,6 +296,21 @@ function aligned(signing: string, domain: string): boolean {
 }
 
 /**
+ * Whether `from` is the operator's test inbox (MAIL_OPERATOR_INBOXES, for that operator only) AND
+ * the receiving server vouched for the inbox's own domain: an aligned DKIM pass. The From header
+ * alone proves nothing (anyone can write it), so a forged From without that pass is not the inbox.
+ */
+function inboxVouched(
+  from: string,
+  inbox: string | null | undefined,
+  dkimPassDomains: readonly string[],
+): boolean {
+  if (!inbox || lower(from) !== lower(inbox)) return false;
+  const inboxDomain = lower(inbox.split("@")[1] ?? "");
+  return dkimPassDomains.some((d) => aligned(lower(d), inboxDomain));
+}
+
+/**
  * Where a mail goes. The From header alone is never trusted: anyone can write any From. A mail is
  * linked to a case only
  * - by threading onto our own sent mail (In-Reply-To / References onto our Message-IDs), or
@@ -303,12 +326,14 @@ export function decideRoute(r: RouteInput): Route {
     if (r.refCases.length === 0) return { kind: "queue", case: null, reason: "unknown_reference" };
     const c = r.refCases[0];
     const opDomain = r.refOperatorDomain ? lower(r.refOperatorDomain) : null;
-    const trusted =
-      r.refs.length === 1 &&
-      r.refCases.length === 1 &&
+    const viaDkim =
       opDomain !== null &&
       lower(r.from).split("@")[1] === opDomain &&
       r.dkimPassDomains.some((d) => aligned(lower(d), opDomain));
+    const trusted =
+      r.refs.length === 1 &&
+      r.refCases.length === 1 &&
+      (viaDkim || inboxVouched(r.from, r.refOperatorInbox, r.dkimPassDomains));
     if (!trusted) return { kind: "queue", case: c, reason: "spoofed_reference" };
     return { kind: "operator", case: c };
   }
@@ -321,7 +346,8 @@ export function decideRoute(r: RouteInput): Route {
     return { kind: "queue", case: c, reason: "user_reply" };
   }
   const domain = lower(r.from).split("@")[1];
-  if (!r.operatorDomain || domain !== lower(r.operatorDomain)) {
+  const fromDomain = !!r.operatorDomain && domain === lower(r.operatorDomain);
+  if (!fromDomain && !inboxVouched(r.from, r.operatorInbox, r.dkimPassDomains)) {
     return { kind: "queue", case: c, reason: "wrong_sender" };
   }
   return { kind: "operator", case: c };
@@ -355,9 +381,11 @@ export function rawMailKey(messageId: string): string {
 }
 
 /**
- * Ingests one raw inbound mail. Never throws: bad mail is skipped, anything ours that can't be
- * acted on goes to the team queue, and a failure on our side answers `error` (nothing is lost:
- * the caller reads the mail again later, and a stored Message-ID is never acted on twice).
+ * Ingests one raw inbound mail. Bad mail is skipped, anything ours that can't be acted on goes to
+ * the team queue, and a failure on our side answers `error` (nothing is lost: the caller reads the
+ * mail again later, and a stored Message-ID is never acted on twice). It throws only on a
+ * malformed MAIL_OPERATOR_INBOXES, before anything is stored: a configuration error, like the
+ * redirect's.
  */
 export async function ingestMessage(
   raw: Buffer | Uint8Array | string,
@@ -368,10 +396,11 @@ export async function ingestMessage(
   const env = deps.env ?? process.env;
   const own = isOwnMail(mail, env);
   if (own) return { outcome: "skipped", reason: own };
+  const inboxes = operatorInboxes(env);
 
   try {
     const db = deps.db ?? createServiceClient();
-    return await ingest(db, raw, mail, { ...deps, env });
+    return await ingest(db, raw, mail, { ...deps, env, inboxes });
   } catch (e) {
     return { outcome: "error", reason: e instanceof InboundStorageError ? "storage" : "database" };
   }
@@ -381,7 +410,7 @@ async function ingest(
   db: ServiceClient,
   raw: Buffer | Uint8Array | string,
   mail: ParsedInbound,
-  deps: IngestDeps & { env: Env },
+  deps: IngestDeps & { env: Env; inboxes: OperatorInboxes },
 ): Promise<IngestResult> {
   const configOf = deps.getOperatorConfig ?? rulesOperatorConfig;
 
@@ -433,6 +462,8 @@ async function ingest(
     hasAttachment: mail.attachments.length > 0,
     operatorDomain: threadCase ? operatorDomainOf(configOf(threadCase.operator)) : null,
     refOperatorDomain: refCases[0] ? operatorDomainOf(configOf(refCases[0].operator)) : null,
+    operatorInbox: threadCase ? (deps.inboxes.get(threadCase.operator) ?? null) : null,
+    refOperatorInbox: refCases[0] ? (deps.inboxes.get(refCases[0].operator) ?? null) : null,
     dkimPassDomains: dkimPassDomains(
       mail.authResults,
       deps.env.MAIL_AUTHSERV_ID?.trim() || DEFAULT_AUTHSERV_ID,

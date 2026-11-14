@@ -10,6 +10,7 @@ import { createServiceClient, type ServiceClient } from "@/shared/supabase/serve
 import { purgeForwardedDocuments, USER_DOCUMENTS_BUCKET } from "./actions";
 import { DOCUMENTS_BUCKET, TICKET_BUCKET } from "./buckets";
 import { DEFAULT_SENDING_DOMAIN } from "./classifier";
+import { effectiveOperator, operatorInboxes } from "./operator-inboxes";
 import {
   buildMailMessage,
   checkAttachments,
@@ -74,6 +75,8 @@ export function sendingDomain(env: Env = process.env): string {
  */
 export function assertSendConfig(providerName: string, env: Env): void {
   redirectRecipients([], env, providerName);
+  // A malformed MAIL_OPERATOR_INBOXES throws here too, before any row is touched.
+  operatorInboxes(env);
 }
 
 /** Who writes to the team queue: ids and reason codes only, never an address or a body. */
@@ -182,7 +185,7 @@ async function deliver(
   const c = kase.data!;
   progress.kind = row.template ?? (await messageKind(db, caseId, row));
 
-  const operator = getOperatorConfig(OperatorId.parse(c.operator));
+  const operator = effectiveOperator(getOperatorConfig(OperatorId.parse(c.operator)), env);
   const text = m.body_text ?? "";
   const recipient = checkRecipient({
     to: m.to_address,
@@ -204,10 +207,12 @@ async function deliver(
   const norm = (a: string) => a.trim().toLowerCase();
   const user = norm(c.user_email);
   const operatorAddress = operator.channel.type === "email" ? norm(operator.channel.address) : null;
+  // The operator's test inbox (DEV) counts as the operator here too: its replies are in the thread.
+  const testInbox = operatorInboxes(env).get(OperatorId.parse(c.operator));
   const fromOperator = (x: { direction: string; from_address: string }) =>
     x.direction === "inbound" &&
-    operatorAddress !== null &&
-    norm(x.from_address) === operatorAddress;
+    ((operatorAddress !== null && norm(x.from_address) === operatorAddress) ||
+      (testInbox !== undefined && norm(x.from_address) === testInbox));
   const sentTo = (
     x: { direction: string; status: string; to_address: string },
     to: string | null,
@@ -248,6 +253,8 @@ async function deliver(
       inReplyTo: m.in_reply_to,
       attachments: attachments.data as AttachmentRow[],
       providerName,
+      // Only operator mail may take the operator's test inbox; user notices always the redirect.
+      operator: toUser ? undefined : OperatorId.parse(c.operator),
     },
     env,
   );

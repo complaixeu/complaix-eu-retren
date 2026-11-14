@@ -4,12 +4,14 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
+  OperatorId,
   TemplateKind,
   type CaseStatus,
   type MailMessage,
   type OperatorPublicConfig,
 } from "@/shared/contracts";
 import { provider } from "@/shared/providers";
+import { operatorInboxes } from "./operator-inboxes";
 import { MAX_SENDS_PER_CASE } from "./timers";
 
 type Env = Record<string, string | undefined>;
@@ -141,13 +143,23 @@ export function isProduction(env: Env = process.env): boolean {
   return env.RETREN_ENV === "production";
 }
 
-/** Outside production every recipient is replaced by MAIL_REDIRECT_ALL_TO when it is set. */
+/**
+ * Outside production every recipient is replaced by MAIL_REDIRECT_ALL_TO when it is set. The one
+ * exception: mail to an operator (`operator` given, and only then) goes to that operator's test
+ * inbox when MAIL_OPERATOR_INBOXES maps one. A user notice never passes `operator`, so it always
+ * takes the redirect.
+ */
 export function redirectRecipients(
   to: readonly string[],
   env: Env = process.env,
   providerName: string = provider("MAIL_PROVIDER", env),
+  operator?: OperatorId,
 ): string[] {
   if (isProduction(env)) return [...to];
+  if (operator) {
+    const inbox = operatorInboxes(env).get(operator);
+    if (inbox) return [inbox];
+  }
   const redirect = env.MAIL_REDIRECT_ALL_TO?.trim();
   if (!redirect) {
     // Fail safe: outside production a real provider never sends without the redirect.
@@ -304,6 +316,8 @@ export function buildMailMessage(
     /** An In-Reply-To the row already has (kept as is; the thread only fills a missing one). */
     inReplyTo?: string | null;
     providerName?: string;
+    /** Set only for mail to an operator: its test inbox (MAIL_OPERATOR_INBOXES) may take it. */
+    operator?: OperatorId;
   },
   env: Env = process.env,
 ): MailMessage {
@@ -311,7 +325,7 @@ export function buildMailMessage(
   const inReplyTo = input.inReplyTo || thread.inReplyTo;
   return {
     from: input.from,
-    to: redirectRecipients([input.to], env, input.providerName),
+    to: redirectRecipients([input.to], env, input.providerName, input.operator),
     subject: subjectWithRef(input.subject, input.publicRef),
     text: input.text,
     messageId: input.messageId,

@@ -102,7 +102,7 @@ Mínimos europeos de referencia (Reglamento 2021/782, art. 19): 25% del billete 
 - **Renfe**: reglas completas, pero **no hay correo de reclamaciones confirmado**: su web solo muestra formulario y Portal de Reclamaciones. Hay que pedirlo por teléfono o preguntarlo (ver Pendiente).
 - **Ouigo**: reglas completas, pero **su canal es un formulario web o una carta, no un correo**. No lo automatizamos (el formulario está tras una protección anti-bot). Hasta confirmar un correo con ellos, Ouigo queda fuera del envío automático: en la demo se simula, y en producción se les pregunta qué dirección aceptan.
 
-Un operador no se activa hasta tener su canal confirmado.
+Un operador no se activa hasta tener su canal confirmado. Solo en DEV, un operador puede enrutarse a un buzón de pruebas del equipo mediante `MAIL_OPERATOR_INBOXES` para probar a mano; en producción sigue haciendo falta una dirección confirmada.
 
 ### 4. Generación de documentos
 
