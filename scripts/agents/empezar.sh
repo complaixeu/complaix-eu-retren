@@ -24,11 +24,16 @@ echo "GitHub: ${login:-?} → domain $role"
 
 wake=(); [ "$(uname -s)" = Darwin ] && wake=(caffeinate -dimsu)
 
-if [ -n "$(git status --porcelain)" ]; then
-  echo "You have uncommitted changes. Commit or stash them first: agents start from a clean develop." >&2
-  [ -n "${DRY_RUN:-}" ] || exit 1
-else
-  git checkout -q develop && git pull -q --ff-only
+# Sync first, then re-run this script from the freshly pulled file: bash reads a script as it
+# goes, so switching branches under a running script would mix two versions of it.
+if [ -z "${EMPEZAR_SYNCED:-}" ]; then
+  if [ -n "$(git status --porcelain)" ]; then
+    echo "You have uncommitted changes. Commit or stash them first: agents start from a clean develop." >&2
+    [ -n "${DRY_RUN:-}" ] || exit 1
+  elif [ -z "${DRY_RUN:-}" ]; then
+    git checkout -q develop && git pull -q --ff-only
+  fi
+  exec env EMPEZAR_SYNCED=1 bash scripts/agents/empezar.sh "$role"
 fi
 
 if [ -n "${DRY_RUN:-}" ]; then bash scripts/preflight.sh "$role" || true
