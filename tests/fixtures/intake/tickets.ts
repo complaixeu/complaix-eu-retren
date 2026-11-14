@@ -66,3 +66,14 @@ export function placeholderPngOfSize(size: number): Uint8Array {
   out.set(PLACEHOLDER_PNG.subarray(0, Math.min(size, PLACEHOLDER_PNG.length)));
   return out;
 }
+
+/**
+ * [A3] A JPEG that the fake OCR reads as unreadable (see `uploadTextsByHash` in ./ocr.ts): what a
+ * blurry photo looks like to the app. A different marker from `PLACEHOLDER_JPEG`, so its hash
+ * differs.
+ */
+export const PLACEHOLDER_JPEG_UNREADABLE = bytes(
+  [0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10],
+  "JFIF\0",
+  "placeholder-ticket:unreadable",
+);

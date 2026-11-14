@@ -81,3 +81,19 @@ export {
   uploadContentType,
   type DeclaredTicket,
 } from "./upload/direct";
+
+// Server-side only: reading the ticket after the upload ([A3]). Writes `data.extraction` (a
+// `TicketExtraction`, read by A4) and `data.ocrAttempts` (see extraction/decision.ts).
+export { createExtractor } from "./extraction";
+export {
+  MAX_PHOTO_ATTEMPTS,
+  photoReading,
+  type PhotoReading,
+  type PhotoReadingState,
+} from "./extraction/decision";
+export {
+  finishUploadAndRead,
+  readCurrentTicket,
+  readUploadedTicket,
+  type FinishAndReadResult,
+} from "./extraction/read-ticket";
