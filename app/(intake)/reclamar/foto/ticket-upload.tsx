@@ -1,36 +1,77 @@
 "use client";
 
-import { useActionState, useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, useTransition, type FormEvent } from "react";
 import { flushSync } from "react-dom";
 import { Alert, Button, ButtonLink, Field, FileInput } from "@/shared/ui";
 import intake from "../_components/intake.module.css";
 import styles from "./foto.module.css";
 import {
   formatFileSize,
+  sendTicket,
   ticketChoiceError,
+  type BeginUpload,
+  type FinishUpload,
+  type ReadTicket,
   type TicketChoiceError,
   type TicketPreviewData,
+  type TicketReadingData,
   type TicketUploadRules,
   type TicketUploadState,
 } from "./ticket-choice";
 
 export interface TicketUploadProps {
-  action: (state: TicketUploadState, formData: FormData) => Promise<TicketUploadState>;
+  /** Server action: a signed upload URL for the chosen file. */
+  begin: BeginUpload;
+  /** Server action: checks the uploaded file, makes it the current draft and reads it. */
+  finish: FinishUpload;
+  /** Server action: reads the stored ticket again after a failure on our side. */
+  read: ReadTicket;
   rules: TicketUploadRules;
   /** The current draft's ticket, or null before the first upload. */
   ticket: TicketPreviewData | null;
+  /** What reading the stored ticket gave, or null before the first upload. */
+  reading: TicketReadingData | null;
   continueHref: string;
 }
 
 const IDLE: TicketUploadState = { status: "idle" };
 
+/** "Otra foto": what happened and what to do next. Stays in view while the next file is chosen. */
+function RetryAlert({ heic }: { heic: boolean }) {
+  return heic ? (
+    <Alert tone="warning" title="No podemos leer fotos HEIC">
+      Tu móvil ha guardado la foto en formato HEIC, que todavía no sabemos leer. Haz una captura de
+      pantalla del billete, o súbelo como JPG, PNG o PDF. Si tampoco se lee, escribirás los datos a
+      mano.
+    </Alert>
+  ) : (
+    <Alert tone="warning" title="No hemos podido leer el billete">
+      Puede que la foto esté borrosa, oscura o cortada. Haz otra con el billete entero, plano y con
+      buena luz, o sube el PDF que te envió la compañía. Si tampoco se lee, escribirás los datos a
+      mano.
+    </Alert>
+  );
+}
+
 /**
  * The upload step: the file field and its "Subir billete" button, and once a ticket is stored,
- * its preview with "Continuar". It gets everything from the server page as props and imports no
- * domain code (see tests/unit/intake/client-boundary.test.ts).
+ * its preview with what reading it gave: "Continuar" if it was read, "Subir otra foto" if not.
+ * It gets everything from the server page as props and imports no domain code (see
+ * tests/unit/intake/client-boundary.test.ts).
  */
-export function TicketUpload({ action, rules, ticket, continueHref }: TicketUploadProps) {
-  const [state, formAction, pending] = useActionState(action, IDLE);
+export function TicketUpload({
+  begin,
+  finish,
+  read,
+  rules,
+  ticket,
+  reading,
+  continueHref,
+}: TicketUploadProps) {
+  const [state, setState] = useState<TicketUploadState>(IDLE);
+  const [pending, startTransition] = useTransition();
+  const [reReading, startReRead] = useTransition();
+  const [readFailed, setReadFailed] = useState(false);
   const [choiceError, setChoiceError] = useState<TicketChoiceError | null>(null);
   // A server error stays until the user picks another file.
   const [dismissed, setDismissed] = useState<TicketUploadState | null>(null);
@@ -64,14 +105,22 @@ export function TicketUpload({ action, rules, ticket, continueHref }: TicketUplo
   }
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
-    const error = ticketChoiceError(inputRef.current?.files?.[0], rules);
-    if (!error) return;
     event.preventDefault();
-    flushSync(() => {
-      setDismissed(state);
-      setChoiceError(error);
+    const file = inputRef.current?.files?.[0];
+    const error = ticketChoiceError(file, rules);
+    if (error || !file) {
+      flushSync(() => {
+        setDismissed(state);
+        setChoiceError(error ?? "missing");
+      });
+      inputRef.current?.focus();
+      return;
+    }
+    // The file goes straight to Storage; our server only gets two small requests around it.
+    startTransition(async () => {
+      const next = await sendTicket(file, { begin, finish });
+      startTransition(() => setState(next));
     });
-    inputRef.current?.focus();
   }
 
   function startReplacing() {
@@ -88,6 +137,15 @@ export function TicketUpload({ action, rules, ticket, continueHref }: TicketUplo
     flushSync(() => setReplacing(null));
     headingRef.current?.focus();
   }
+
+  function readAgain() {
+    startReRead(async () => {
+      const result = await read();
+      startReRead(() => setReadFailed(result.status === "error"));
+    });
+  }
+
+  const readingState = reading?.state ?? "read";
 
   if (!showForm) {
     return (
@@ -123,24 +181,51 @@ export function TicketUpload({ action, rules, ticket, continueHref }: TicketUplo
               </div>
             </div>
           </div>
-          <p className={styles.note}>
-            En el siguiente paso leemos los datos del billete y los revisas antes de seguir.
-          </p>
-          <div>
-            <Button variant="quiet" onClick={startReplacing} className={styles.replace}>
-              Cambiar archivo
-            </Button>
-          </div>
+          {readingState === "read" && (
+            <p className={styles.note}>
+              Ya hemos leído el billete. En el siguiente paso revisas los datos antes de seguir.
+            </p>
+          )}
+          {readingState === "manual" && (
+            <p className={styles.note}>
+              No hemos podido leer el billete, así que en el siguiente paso escribes los datos a
+              mano.
+            </p>
+          )}
+          {readingState === "retry" && <RetryAlert heic={reading?.heic ?? false} />}
+          {readingState === "pending" && (
+            <Alert tone="error" title="Todavía no hemos leído el billete">
+              {readFailed
+                ? "Sigue fallando por nuestra parte. Vuelve a intentarlo dentro de unos minutos."
+                : "El billete se ha subido, pero ha fallado algo por nuestra parte al leerlo. Vuelve a intentarlo: no hace falta subirlo otra vez."}
+            </Alert>
+          )}
+          {readingState !== "retry" && (
+            <div>
+              <Button variant="quiet" onClick={startReplacing} className={styles.replace}>
+                Cambiar archivo
+              </Button>
+            </div>
+          )}
         </section>
         <div className={intake.actions}>
-          <ButtonLink href={continueHref}>Continuar</ButtonLink>
+          {readingState === "retry" ? (
+            <Button onClick={startReplacing}>Subir otra foto</Button>
+          ) : readingState === "pending" ? (
+            <Button onClick={readAgain} pending={reReading}>
+              Leer el billete
+            </Button>
+          ) : (
+            <ButtonLink href={continueHref}>Continuar</ButtonLink>
+          )}
         </div>
       </>
     );
   }
 
   return (
-    <form action={formAction} onSubmit={onSubmit} noValidate className={styles.form}>
+    <form onSubmit={onSubmit} noValidate className={styles.form}>
+      {reading?.state === "retry" && <RetryAlert heic={reading.heic} />}
       {serverError === "failed" && (
         <Alert tone="error" title="No se ha subido el billete">
           {rules.messages.failed}
@@ -148,7 +233,7 @@ export function TicketUpload({ action, rules, ticket, continueHref }: TicketUplo
       )}
       <Field
         label="Foto o PDF del billete"
-        help="JPG, PNG, HEIC o PDF, hasta 10 MB. Que se vea el billete entero y sin reflejos."
+        help="JPG, PNG o PDF, hasta 10 MB. Que se vea el billete entero y sin reflejos."
         error={fieldError ? rules.messages[fieldError] : undefined}
       >
         {(control) => (
@@ -163,7 +248,9 @@ export function TicketUpload({ action, rules, ticket, continueHref }: TicketUplo
         )}
       </Field>
       <p role="status" className={styles.progress}>
-        {pending ? "Subiendo el billete. Con una conexión lenta puede tardar un poco." : ""}
+        {pending
+          ? "Subiendo el billete y leyendo sus datos. Con una conexión lenta puede tardar un poco."
+          : ""}
       </p>
       <div className={intake.actions}>
         <Button type="submit" pending={pending}>

@@ -1,0 +1,23 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "{\"operator\":\"iryo\",\"travelDate\":\"2026-03-12\",\"origin\":\"Madrid Puerta de Atocha\",\"destination\":\"Barcelona Sants\",\"bookingRef\":\"ABC123\",\"ticketNumber\":null,\"firstName\":\"Maria\",\"lastName\":\"Ejemplo Prueba\",\"scheduledDeparture\":\"09:10\",\"scheduledArrival\":\"11:55\",\"trainNumber\":\"IRYO 6201\",\"price\":\"54,90 EUR\",\"purchaseDate\":\"2026-03-10\",\"purchaseChannel\":null}"
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 612,
+    "candidatesTokenCount": 118,
+    "totalTokenCount": 730
+  },
+  "modelVersion": "gemini-3.5-flash-lite",
+  "responseId": "fixture-extraction-0001"
+}
