@@ -17,8 +17,10 @@
   align-items: center;
   min-height: var(--tap-target);
   color: var(--color-text);
+  font-family: var(--font-heading);
   font-size: var(--text-lg);
-  font-weight: var(--weight-semibold);
+  font-weight: 700;
+  letter-spacing: var(--heading-tracking);
   text-decoration: none;
 }
 
@@ -47,15 +49,14 @@
   .shell {
     padding-top: var(--space-6);
   }
-
-  .card {
-    padding: var(--space-6);
-  }
 }
 
+/* Headings are Montserrat, a little tighter, and modest in size */
 .title {
+  font-family: var(--font-heading);
   font-size: var(--text-xl);
-  font-weight: var(--weight-semibold);
+  font-weight: 600;
+  letter-spacing: var(--heading-tracking);
   line-height: var(--leading-tight);
 }
 

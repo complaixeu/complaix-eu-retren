@@ -15,7 +15,7 @@
 
 .input {
   width: 100%;
-  min-height: var(--tap-target);
+  min-height: var(--control-height);
   padding: var(--space-3);
   border: var(--border-width) solid var(--color-border-strong);
   border-radius: var(--radius-md);
@@ -25,9 +25,13 @@
   transition: border-color var(--duration-fast) var(--ease);
 }
 
+.input::placeholder {
+  color: var(--color-placeholder);
+}
+
 .input:focus-visible {
-  outline-offset: 0;
-  border-color: var(--color-focus);
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .input[aria-invalid="true"] {
@@ -51,16 +55,28 @@
   cursor: pointer;
 }
 
+.file {
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.file:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 .file::file-selector-button {
-  min-height: calc(var(--tap-target) - 2 * var(--space-2) - 2 * var(--border-width));
+  min-height: calc(var(--control-height) - 2 * var(--space-2) - 2 * var(--border-width));
   margin-right: var(--space-3);
   padding: var(--space-2) var(--space-4);
   border: var(--border-width) solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-sunken);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
   color: var(--color-text);
   font: inherit;
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-semibold);
   cursor: pointer;
 }
 
@@ -95,7 +111,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  min-height: var(--tap-target);
+  min-height: var(--control-height);
 }
 
 .choiceInput {
@@ -103,7 +119,7 @@
   width: var(--choice-size);
   height: var(--choice-size);
   margin: 0;
-  accent-color: var(--color-primary);
+  accent-color: var(--color-accent);
   cursor: pointer;
 }
 

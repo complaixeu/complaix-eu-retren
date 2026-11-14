@@ -1,10 +1,10 @@
+/* A soft tinted box with a hairline in the same hue. The status is in the title's colour. */
 .alert {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
   padding: var(--space-3) var(--space-4);
   border: var(--border-width) solid var(--color-border);
-  border-left-width: var(--alert-stripe);
   border-radius: var(--radius-md);
   background: var(--color-surface-sunken);
   color: var(--color-text);
@@ -12,26 +12,26 @@
 }
 
 .title {
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-semibold);
 }
 
 .info {
-  border-left-color: var(--color-border-strong);
+  border-color: var(--color-border);
 }
 
 .success {
   background: var(--color-success-soft);
-  border-color: var(--color-success);
+  border-color: var(--color-success-line);
 }
 
 .warning {
   background: var(--color-warning-soft);
-  border-color: var(--color-warning);
+  border-color: var(--color-warning-line);
 }
 
 .error {
   background: var(--color-danger-soft);
-  border-color: var(--color-danger);
+  border-color: var(--color-danger-line);
 }
 
 .success .title {
