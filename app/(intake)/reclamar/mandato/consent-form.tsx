@@ -2,7 +2,15 @@
 
 import { useActionState, useEffect, useRef, useState, type FormEvent } from "react";
 import { flushSync } from "react-dom";
-import { Alert, Button, ButtonLink, Checkbox, Fieldset, focusFirstInvalid } from "@/shared/ui";
+import {
+  Alert,
+  Button,
+  ButtonLink,
+  Checkbox,
+  Fieldset,
+  FormCompletion,
+  focusFirstInvalid,
+} from "@/shared/ui";
 import intake from "../_components/intake.module.css";
 import {
   CONSENT_BOXES,
@@ -78,6 +86,7 @@ export function ConsentForm({ action, boxes, backHref }: ConsentFormProps) {
           Ha fallado algo por nuestra parte. Vuelve a intentarlo en unos minutos.
         </Alert>
       )}
+      <FormCompletion formRef={formRef} label="Autorizaciones" />
       <Fieldset legend="Tu aceptación">
         {CONSENT_BOXES.map((box) => (
           <Checkbox
@@ -103,6 +112,9 @@ export function ConsentForm({ action, boxes, backHref }: ConsentFormProps) {
           Atrás
         </ButtonLink>
       </div>
+      <p role="status" aria-live="polite" className={styles.pending}>
+        {pending ? "Guardando tu autorización…" : ""}
+      </p>
     </form>
   );
 }

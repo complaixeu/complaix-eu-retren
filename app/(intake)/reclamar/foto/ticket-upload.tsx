@@ -13,8 +13,10 @@ import {
   type FinishUpload,
   type ReadTicket,
   type TicketChoiceError,
+  type TicketTransferProgress,
   type TicketPreviewData,
   type TicketReadingData,
+  type TicketUploadStage,
   type TicketUploadRules,
   type TicketUploadState,
 } from "./ticket-choice";
@@ -70,6 +72,8 @@ export function TicketUpload({
 }: TicketUploadProps) {
   const [state, setState] = useState<TicketUploadState>(IDLE);
   const [pending, startTransition] = useTransition();
+  const [uploadStage, setUploadStage] = useState<TicketUploadStage | null>(null);
+  const [transferProgress, setTransferProgress] = useState<TicketTransferProgress | null>(null);
   const [reReading, startReRead] = useTransition();
   const [readFailed, setReadFailed] = useState(false);
   const [choiceError, setChoiceError] = useState<TicketChoiceError | null>(null);
@@ -118,8 +122,22 @@ export function TicketUpload({
     }
     // The file goes straight to Storage; our server only gets two small requests around it.
     startTransition(async () => {
-      const next = await sendTicket(file, { begin, finish });
-      startTransition(() => setState(next));
+      const next = await sendTicket(
+        file,
+        { begin, finish },
+        {
+          onStage: (stage) => {
+            setUploadStage(stage);
+            if (stage === "uploading") setTransferProgress({ percent: 0, secondsRemaining: null });
+          },
+          onProgress: setTransferProgress,
+        },
+      );
+      startTransition(() => {
+        setState(next);
+        setUploadStage(null);
+        setTransferProgress(null);
+      });
     });
   }
 
@@ -242,16 +260,36 @@ export function TicketUpload({
             ref={inputRef}
             name="ticket"
             accept={rules.accept}
+            disabled={pending}
             aria-required="true"
             onChange={onChange}
           />
         )}
       </Field>
-      <p role="status" className={styles.progress}>
-        {pending
-          ? "Subiendo el billete y leyendo sus datos. Con una conexión lenta puede tardar un poco."
-          : ""}
-      </p>
+      {pending && uploadStage === "uploading" && (
+        <div className={styles.uploadFeedback}>
+          <div className={styles.progressLabel}>
+            <span>Subida del billete</span>
+            <strong>{transferProgress?.percent ?? 0} %</strong>
+          </div>
+          <progress
+            className={styles.progressBar}
+            value={transferProgress?.percent ?? 0}
+            max={100}
+            aria-label="Subida del billete"
+          />
+          <p className={styles.progressNote}>
+            {remainingMessage(transferProgress?.secondsRemaining ?? null)}
+          </p>
+        </div>
+      )}
+      {pending && uploadStage !== "uploading" && (
+        <p role="status" aria-live="polite" className={styles.progress}>
+          {uploadStage === "checking"
+            ? "Archivo subido. Comprobando y leyendo el billete…"
+            : "Preparando la subida…"}
+        </p>
+      )}
       <div className={intake.actions}>
         <Button type="submit" pending={pending}>
           Subir billete
@@ -264,4 +302,10 @@ export function TicketUpload({
       </div>
     </form>
   );
+}
+
+function remainingMessage(seconds: number | null): string {
+  if (seconds === 0) return "Archivo enviado. Terminando la subida…";
+  if (seconds === null) return "Calculando el tiempo restante…";
+  return `Quedan unos ${seconds} s.`;
 }

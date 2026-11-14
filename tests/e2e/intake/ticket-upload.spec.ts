@@ -107,7 +107,17 @@ test("a 6 MB file goes straight to Storage: no request to the app carries it", a
   const put = page.waitForRequest(
     (r) => r.method() === "PUT" && r.url().includes("/storage/v1/object/upload/sign/tickets/"),
   );
+  await page.route("**/storage/v1/object/upload/sign/tickets/**", async (route) => {
+    if (route.request().method() === "PUT") {
+      // Hold the response briefly so the in-flight progress feedback can be observed.
+      await new Promise((resolve) => setTimeout(resolve, 750));
+    }
+    await route.continue();
+  });
   await upload(page, "billete-grande.png", "image/png", big);
+  const progress = page.getByRole("progressbar", { name: "Subida del billete" });
+  await expect(progress).toBeVisible();
+  await expect(page.getByText(/\d+ %/)).toBeVisible();
   // Playwright does not expose a File body; the stored size shows up in the preview below.
   expect((await (await put).response())?.status()).toBe(200);
 

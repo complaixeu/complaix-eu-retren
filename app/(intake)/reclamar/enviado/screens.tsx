@@ -16,6 +16,9 @@ export function ResultScreen({ view }: { view: ResultView }) {
 
   return (
     <>
+      <Alert tone="success" title="Hemos recibido tu solicitud">
+        Está registrada. Consulta aquí el resultado y los siguientes pasos.
+      </Alert>
       {view.kind === "eligible" && (
         <Alert tone="success" title="Tu viaje da derecho a reclamar">
           {view.reason}

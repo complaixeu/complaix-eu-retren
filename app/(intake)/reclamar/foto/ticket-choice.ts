@@ -89,6 +89,16 @@ export type BeginUploadState =
 export type BeginUpload = (declared: DeclaredTicketInput) => Promise<BeginUploadState>;
 export type FinishUpload = () => Promise<TicketUploadState>;
 
+export type TicketUploadStage = "preparing" | "uploading" | "checking";
+export interface TicketTransferProgress {
+  percent: number;
+  secondsRemaining: number | null;
+}
+export interface TicketUploadFeedback {
+  onStage?: (stage: TicketUploadStage) => void;
+  onProgress?: (progress: TicketTransferProgress) => void;
+}
+
 async function storageRefusedSize(res: Response): Promise<boolean> {
   if (res.status === 413) return true;
   try {
@@ -109,18 +119,23 @@ async function storageRefusedSize(res: Response): Promise<boolean> {
 export async function sendTicket(
   file: File,
   steps: { begin: BeginUpload; finish: FinishUpload; put?: typeof fetch },
+  feedback: TicketUploadFeedback = {},
 ): Promise<TicketUploadState> {
   const put = steps.put ?? fetch;
+  feedback.onStage?.("preparing");
   const begun = await steps.begin({ name: file.name, type: file.type, size: file.size });
   if (begun.status === "error") return begun;
 
   let res: Response;
+  feedback.onStage?.("uploading");
   try {
-    res = await put(begun.uploadUrl, {
-      method: "PUT",
-      headers: { "content-type": begun.contentType, "x-upsert": "false" },
-      body: file,
-    });
+    res = steps.put
+      ? await put(begun.uploadUrl, {
+          method: "PUT",
+          headers: { "content-type": begun.contentType, "x-upsert": "false" },
+          body: file,
+        })
+      : await putWithProgress(begun.uploadUrl, file, begun.contentType, feedback.onProgress);
   } catch {
     return { status: "error", error: "not_received" };
   }
@@ -128,5 +143,55 @@ export async function sendTicket(
     const tooLarge = await storageRefusedSize(res);
     return { status: "error", error: tooLarge ? "too_large" : "not_received" };
   }
+  feedback.onStage?.("checking");
   return steps.finish();
+}
+
+/** XHR exposes the browser's real upload byte count; fetch only resolves after the PUT completes. */
+function putWithProgress(
+  url: string,
+  file: File,
+  contentType: string,
+  onProgress?: TicketUploadFeedback["onProgress"],
+): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    const startedAt = performance.now();
+    request.open("PUT", url);
+    request.setRequestHeader("content-type", contentType);
+    request.setRequestHeader("x-upsert", "false");
+    request.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable || event.total <= 0) return;
+      const elapsed = (performance.now() - startedAt) / 1000;
+      const rate = elapsed > 0 ? event.loaded / elapsed : 0;
+      const secondsRemaining =
+        event.loaded >= event.total
+          ? 0
+          : elapsed >= 1 && event.loaded >= 1024 && rate > 0
+            ? Math.ceil((event.total - event.loaded) / rate)
+            : null;
+      onProgress?.({
+        percent: Math.min(100, Math.floor((event.loaded / event.total) * 100)),
+        secondsRemaining,
+      });
+    });
+    request.addEventListener("load", () => {
+      const body = request.responseText;
+      const contentType = request.getResponseHeader("content-type");
+      if (request.status >= 200 && request.status <= 599) {
+        if (request.status >= 200 && request.status < 300) {
+          onProgress?.({ percent: 100, secondsRemaining: 0 });
+        }
+        resolve(
+          new Response(body || null, {
+            status: request.status,
+            headers: contentType ? { "content-type": contentType } : undefined,
+          }),
+        );
+      } else reject(new TypeError("Ticket upload did not receive a response"));
+    });
+    request.addEventListener("error", () => reject(new TypeError("Ticket upload failed")));
+    request.addEventListener("abort", () => reject(new TypeError("Ticket upload was interrupted")));
+    request.send(file);
+  });
 }

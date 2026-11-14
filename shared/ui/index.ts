@@ -3,6 +3,7 @@
 export { Alert, type AlertProps, type AlertTone } from "./alert";
 export { Button, ButtonLink, type ButtonProps, type ButtonVariant } from "./button";
 export { Checkbox, Fieldset, Radio, type ChoiceProps, type FieldsetProps } from "./choice";
+export { FormCompletion } from "./form-completion";
 export {
   Field,
   FieldMessages,
