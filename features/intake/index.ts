@@ -64,6 +64,37 @@ export {
   type IntakeStepperItem,
 } from "./steps";
 
+// Server-side only: the review step ([A4]). Reads `data.extraction` / `data.review` from the
+// draft and stores the reviewed ticket as `data.review`.
+export {
+  REVIEW_FIELDS,
+  REVIEW_REQUIRED_FIELDS,
+  REVIEW_SECTIONS,
+  reviewErrorMessage,
+  reviewErrorMessages,
+  reviewWarningMessage,
+  REVIEW_WARNING_MESSAGES,
+  LONG_TRIP_MINUTES,
+  type ReviewErrorCode,
+  type ReviewErrors,
+  type ReviewField,
+  type ReviewInputName,
+  type ReviewSection,
+  type ReviewWarningCode,
+  type ReviewWarnings,
+} from "./review/fields";
+export { StoredReview, readReview, type ReviewStart } from "./review/read";
+export { submitReview, type ReviewSubmitResult } from "./review/submit";
+export {
+  BOOKING_REF_CONFIRMED,
+  parseReviewDate,
+  parseReviewTime,
+  reviewWarnings,
+  validateReview,
+  type ReviewValidation,
+  type ReviewValues,
+} from "./review/validate";
+
 // Server-side only: the direct upload to Storage and the draft purge ([A1] follow-up). Kept in
 // its own block so other tasks can add exports above without touching it.
 export {
@@ -97,3 +128,38 @@ export {
   readUploadedTicket,
   type FinishAndReadResult,
 } from "./extraction/read-ticket";
+
+// Server-side only: the mandate and GDPR consent evidence ([A6]). A7 builds the submission's
+// `consent` with `toConsentRef(await latestConsent(draft.id))`.
+export {
+  acceptConsent,
+  readConsentChoices,
+  type AcceptConsentResult,
+  type ConsentChoices,
+} from "./consent/accept";
+export { clientIp, type HeaderReader } from "./consent/ip";
+export {
+  ClaimAnswers,
+  TripSnapshot,
+  buildTripSnapshot,
+  tripSummary,
+  type TripSnapshotResult,
+} from "./consent/snapshot";
+export {
+  ConsentStoreError,
+  insertConsent,
+  latestConsent,
+  toConsentRef,
+  type ConsentDeps,
+  type ConsentRecord,
+} from "./consent/store";
+export {
+  CONSENT_CHOICES,
+  CONSENT_DRAFT_NOTICE,
+  CONSENT_TEXT_VERSION,
+  MANDATE_TEXT,
+  PRIVACY_NOTICE,
+  type ConsentChoice,
+  type MandateText,
+  type PrivacyNotice,
+} from "./consent/texts";

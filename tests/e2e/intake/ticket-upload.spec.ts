@@ -92,11 +92,15 @@ test("the file can be changed after uploading", async ({ page }) => {
   await expect(preview(page)).not.toContainText("primero.pdf");
 });
 
-test("a 6 MB file goes straight to Storage: no request to the app carries it", async ({ page }) => {
+test("a 6 MB file goes straight to Storage: no request to the app carries it", async ({
+  page,
+  baseURL,
+}) => {
   const big = placeholderPngOfSize(6 * 1024 * 1024);
   const appBodies: number[] = [];
   page.on("request", (request) => {
-    if (request.url().startsWith("http://127.0.0.1:3200") && request.method() === "POST") {
+    // The app under test, at whatever port E2E_PORT gave it (playwright.config.ts).
+    if (request.url().startsWith(baseURL!) && request.method() === "POST") {
       appBodies.push(request.postDataBuffer()?.byteLength ?? 0);
     }
   });

@@ -1,8 +1,22 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PLACEHOLDER_PDF } from "../../fixtures/intake/tickets";
+import { completeReview, startDraftWith } from "./support/draft";
 
 // [A0] Flow skeleton: landing → every step renders its heading, the stepper marks the current
 // step, and the flow works from the keyboard. Roles and labels only (docs/plans/README.md §3).
+// Since [A4] the review step needs a draft (without one it redirects to the upload) and has its
+// own form instead of a "Continuar" link, so these specs give it a draft before visiting it and
+// fill the review in to get past it. Since [A6] the authorization step needs a reviewed draft.
+
+/** Steps that redirect to the upload without a current draft. */
+const needsDraft = (path: string) => path === "/reclamar/revision";
+
+/** Opens a step with the draft it needs: a plain one for the review, a reviewed one after it. */
+async function visit(page: Page, baseURL: string | undefined, path: string) {
+  if (needsDraft(path)) await startDraftWith(page.context(), baseURL!, {});
+  if (needsReviewedDraft(path)) await startDraftWith(page.context(), baseURL!);
+  await page.goto(path);
+}
 
 const steps = [
   { path: "/reclamar/foto", heading: "Sube la foto de tu billete", label: "Billete" },
@@ -28,6 +42,9 @@ async function chooseTicket(page: Page) {
   });
 }
 
+/** Since [A6] the authorization step needs a reviewed trip in the draft, or it redirects. */
+const needsReviewedDraft = (path: string) => path === "/reclamar/mandato";
+
 /** Presses Tab until `target` has focus, failing after `max` presses. */
 async function tabTo(page: Page, target: ReturnType<Page["getByRole"]>, max = 15) {
   for (let i = 0; i < max; i++) {
@@ -50,8 +67,9 @@ test("the landing page has a Reclamar button that starts the flow", async ({ pag
 for (const [index, step] of steps.entries()) {
   test(`step ${index + 1} (${step.path}) renders its heading and is the current step`, async ({
     page,
+    baseURL,
   }) => {
-    await page.goto(step.path);
+    await visit(page, baseURL, step.path);
     await expect(page.getByRole("heading", { level: 1, name: step.heading })).toBeVisible();
     await expect(page).toHaveTitle(new RegExp(step.heading));
 
@@ -89,8 +107,19 @@ test("continuar and atrás move through every step in order", async ({ page }) =
   await page.goto(steps[0].path);
   await chooseTicket(page);
   await page.getByRole("button", { name: "Subir billete" }).click();
+  await expect(page.getByRole("link", { name: "Continuar" })).toBeVisible();
   for (const next of steps.slice(1)) {
-    await page.getByRole("link", { name: "Continuar" }).click();
+    if (next.path === "/reclamar/preguntas") {
+      // Since [A4] the review step is a form, and it stores the reviewed trip A6 needs.
+      await completeReview(page);
+    } else if (next.path === "/reclamar/enviado") {
+      // Since [A6] the authorization step is a form: accept both texts to go on.
+      await page.getByRole("checkbox", { name: /^Autorizo a ReTren/ }).check();
+      await page.getByRole("checkbox", { name: /aviso de privacidad/ }).check();
+      await page.getByRole("button", { name: "Aceptar y enviar" }).click();
+    } else {
+      await page.getByRole("link", { name: "Continuar" }).click();
+    }
     await expect(page.getByRole("heading", { level: 1, name: next.heading })).toBeVisible();
   }
   await expect(page.getByRole("link", { name: "Continuar" })).toHaveCount(0);
@@ -102,8 +131,9 @@ test("continuar and atrás move through every step in order", async ({ page }) =
 test.describe("keyboard", () => {
   test("the first Tab reaches the skip link, which moves focus to the content", async ({
     page,
+    baseURL,
   }) => {
-    await page.goto("/reclamar/revision");
+    await visit(page, baseURL, "/reclamar/revision");
     await page.keyboard.press("Tab");
     const skip = page.getByRole("link", { name: "Saltar al contenido" });
     await expect(skip).toBeFocused();
@@ -147,24 +177,27 @@ test.describe("mobile, 375 px wide", () => {
   for (const path of ["/", ...steps.map((s) => s.path)]) {
     test(`${path} fits without horizontal scrolling and has large tap targets`, async ({
       page,
+      baseURL,
     }) => {
-      await page.goto(path);
+      await visit(page, baseURL, path);
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
       expect(overflow).toBeLessThanOrEqual(0);
 
-      // The first step's primary action is its upload button ([A1]); the others are links.
+      // The first step's primary action is its upload button ([A1]), the review's its submit
+      // button ([A4]) and the authorization step's its accept button ([A6]); the others are links.
       const primary = page
         .getByRole("link", { name: /^(Reclamar|Continuar|Volver al inicio)$/ })
-        .or(page.getByRole("button", { name: "Subir billete" }));
+        .or(page.getByRole("button", { name: /^(Subir billete|Continuar|Aceptar y enviar)$/ }));
       await expect(primary).toBeVisible();
       const box = await primary.boundingBox();
       expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
     });
   }
 
-  test("the stepper's links back are large enough to tap", async ({ page }) => {
+  test("the stepper's links back are large enough to tap", async ({ page, context, baseURL }) => {
+    await startDraftWith(context, baseURL!);
     await page.goto("/reclamar/mandato");
     const links = stepper(page).getByRole("link");
     await expect(links).toHaveCount(3);
