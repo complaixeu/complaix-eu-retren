@@ -11,11 +11,11 @@ harness acts as the **orchestrator** of its domain:
 Nothing in this loop is manual. Humans step in only when an agent **stops** for one of the reasons
 in section 6.
 
-| Domain           | Plan                               | Harness                    | Suggested owner                 |
-| ---------------- | ---------------------------------- | -------------------------- | ------------------------------- |
-| A. Intake        | [A-intake.md](A-intake.md)         | Claude Code                | the other Claude Code developer |
-| B. Rules & docs  | [B-rules-docs.md](B-rules-docs.md) | Codex                      | the Codex developer             |
-| C. Claims engine | [C-claims.md](C-claims.md)         | Claude Code + Codex review | the developer with Codex review |
+| Domain           | Plan                               | Harness                    | Owner                   |
+| ---------------- | ---------------------------------- | -------------------------- | ----------------------- |
+| A. Intake        | [A-intake.md](A-intake.md)         | Claude Code                | `@complaix-eu` (Nestor) |
+| B. Rules & docs  | [B-rules-docs.md](B-rules-docs.md) | Codex                      | `@micah-earl`           |
+| C. Claims engine | [C-claims.md](C-claims.md)         | Claude Code + Codex review | `@vinimp2003`           |
 
 **Before you start, do [PREFLIGHT.md](PREFLIGHT.md)** (`pnpm preflight <A|B|C> --gate` must say
 READY). Read with: [../ARCHITECTURE.md](../ARCHITECTURE.md) (what we build),

@@ -1,6 +1,6 @@
 # Plan B: Rules & documents (pure functions, no DB, no network)
 
-Owner: _person B_ · Harness: Codex · Architecture: §3 (configs, rules), §4 (documents), "Mapeo del
+Owner: `@micah-earl` · Harness: Codex · Architecture: §3 (configs, rules), §4 (documents), "Mapeo del
 formulario"
 Folders: `features/rules/`, `features/documents/`, `templates/`, `tests/unit/{rules,documents}/`,
 `tests/fixtures/{rules,documents}/`.

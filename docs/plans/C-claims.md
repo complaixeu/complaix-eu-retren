@@ -1,6 +1,6 @@
 # Plan C: Claims engine (cases, email loop, AI classification, timers, notices, team view)
 
-Owner: _person C_ · Harness: Claude Code, with Codex reviewing every PR · Architecture: §5, §6, §7
+Owner: `@vinimp2003` · Harness: Claude Code, with Codex reviewing every PR · Architecture: §5, §6, §7
 Folders: `features/claims/`, `app/api/claims/`, `app/(team)/`, `shared/supabase/`,
 `tests/{unit,integration,e2e}/claims/`, `tests/fixtures/mail/`, `supabase/tests/claims_*.sql`,
 migrations `*_claims_*.sql`.
