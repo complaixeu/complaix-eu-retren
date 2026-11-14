@@ -30,8 +30,9 @@ async function chooseTicket(page: Page) {
   });
 }
 
-/** Since [A6] the authorization step needs a reviewed trip in the draft, or it redirects. */
-const needsReviewedDraft = (path: string) => path === "/reclamar/mandato";
+/** The authorization step ([A6]) and the last step ([A7]) need a draft, or they redirect. */
+const needsReviewedDraft = (path: string) =>
+  path === "/reclamar/mandato" || path === "/reclamar/enviado";
 
 /** Presses Tab until `target` has focus, failing after `max` presses. */
 async function tabTo(page: Page, target: ReturnType<Page["getByRole"]>, max = 15) {
