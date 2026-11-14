@@ -101,7 +101,7 @@ app_pid=$!
 step "[deploy_dev] Smoke check /api/health (same loop as CI)"
 status_code=000
 for attempt in 1 2 3 4 5 6 7 8 9 10; do
-  status_code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:$APP_PORT/api/health" || echo 000)
+  status_code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:$APP_PORT/api/health" || true)
   echo "Attempt $attempt: $status_code"
   [ "$status_code" = 200 ] && break
   sleep 3
@@ -109,9 +109,9 @@ done
 [ "$status_code" = 200 ] || fail "/api/health returned $status_code (log: ${TMPDIR:-/tmp}/retren-local-ci-app.log)"
 
 step "[deploy_dev] Supabase REST reachable with the anon key"
-rest_code=$(curl -s -o /dev/null -w '%{http_code}' -H "apikey: $anon_key" "$api_url/rest/v1/" || echo 000)
+rest_code=$(curl -s -o /dev/null -w '%{http_code}' -H "apikey: $anon_key" "$api_url/rest/v1/" || true)
 echo "REST: $rest_code"
 [ "$rest_code" = 200 ] || fail "Supabase REST returned $rest_code"
 
 step "All green: verify + migrate (local) + deploy (localhost)"
-[ "$keep" = 1 ] && echo "Local Supabase left running. Stop it with: pnpm db:stop"
+if [ "$keep" = 1 ]; then echo "Local Supabase left running. Stop it with: pnpm db:stop"; fi
