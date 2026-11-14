@@ -9,7 +9,7 @@ import {
 } from "@/features/intake";
 import { StepPage, stepTitle } from "../_components/step-page";
 import styles from "../_components/intake.module.css";
-import { uploadTicket } from "./actions";
+import { beginUpload, finishUpload } from "./actions";
 import { TicketUpload } from "./ticket-upload";
 
 export const metadata: Metadata = stepTitle("foto");
@@ -37,7 +37,8 @@ async function TicketStep() {
   const next = intakeStepNeighbours("foto").next!;
   return (
     <TicketUpload
-      action={uploadTicket}
+      begin={beginUpload}
+      finish={finishUpload}
       rules={ticketUploadRules}
       ticket={ticket}
       continueHref={intakeStepHref(next)}

@@ -44,3 +44,41 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function parseDraftId(value: string | null | undefined): string | null {
   return value && UUID.test(value) ? value.toLowerCase() : null;
 }
+
+/**
+ * The cookie that ties a begun direct upload to this browser: the staged object's id and the
+ * user's file name. The finishing step reads the object from here, never from the request, so a
+ * browser can only finish its own upload.
+ */
+export const UPLOAD_COOKIE = "retren_upload";
+
+/** How long a begun upload may take before it has to start again. */
+export const UPLOAD_WINDOW_SECONDS = 30 * 60;
+
+export function uploadCookieOptions(host: string | null | undefined): DraftCookieOptions {
+  return { ...draftCookieOptions(host), maxAge: UPLOAD_WINDOW_SECONDS };
+}
+
+/** Options that remove a cookie set with `draftCookieOptions` or `uploadCookieOptions`. */
+export function clearedCookieOptions(host: string | null | undefined): DraftCookieOptions {
+  return { ...draftCookieOptions(host), maxAge: 0 };
+}
+
+export function encodeUploadCookie(id: string, filename: string): string {
+  return `${id}:${encodeURIComponent(filename)}`;
+}
+
+/** The staged upload's id and file name, or null if the value is not one we wrote. */
+export function parseUploadCookie(
+  value: string | null | undefined,
+): { id: string; filename: string } | null {
+  if (!value) return null;
+  const at = value.indexOf(":");
+  const id = parseDraftId(at < 0 ? value : value.slice(0, at));
+  if (!id) return null;
+  try {
+    return { id, filename: decodeURIComponent(value.slice(at + 1)) };
+  } catch {
+    return null;
+  }
+}

@@ -88,10 +88,17 @@ type TickBody = {
   failed: { caseId: string; action: string }[];
 };
 
-const saved = { TICK_SECRET: process.env.TICK_SECRET, DEMO_MODE: process.env.DEMO_MODE };
+// The database is shared by every integration file: raise the tick's 100-row outbound limit so rows
+// left by other files can never crowd out this file's own (the production default is unchanged).
+const saved = {
+  TICK_SECRET: process.env.TICK_SECRET,
+  DEMO_MODE: process.env.DEMO_MODE,
+  OUTBOUND_TICK_LIMIT: process.env.OUTBOUND_TICK_LIMIT,
+};
 beforeAll(() => {
   process.env.TICK_SECRET = SECRET;
   process.env.DEMO_MODE = "1";
+  process.env.OUTBOUND_TICK_LIMIT = "100000";
 });
 afterAll(() => {
   for (const [k, v] of Object.entries(saved)) {

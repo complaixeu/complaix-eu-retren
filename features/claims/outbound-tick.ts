@@ -16,6 +16,18 @@ export interface OutboundTickResult {
 export const OUTBOUND_TICK_LIMIT = 100;
 
 /**
+ * The limit a tick uses: OUTBOUND_TICK_LIMIT, unless the env var of the same name holds a
+ * positive whole number. Only the integration tests set it (they share one database, so older
+ * rows from other files would otherwise crowd out a test's own); anything invalid keeps the default.
+ */
+export function outboundLimitFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): number {
+  const raw = env.OUTBOUND_TICK_LIMIT?.trim();
+  return raw && /^[1-9]\d{0,6}$/.test(raw) ? Number(raw) : OUTBOUND_TICK_LIMIT;
+}
+
+/**
  * 1. The initial claim of every waiting_period case whose earliest_send_at has passed at `now`.
  *    Idempotent: a sent case is no longer in waiting_period, and claims_send_initial_claim
  *    re-checks under a row lock, so a second or concurrent tick sends nothing again. A refused
@@ -29,11 +41,13 @@ export async function runOutbound(
   now: Date,
   deps: Omit<OutboundDeps, "db" | "clock"> = {},
   limit = OUTBOUND_TICK_LIMIT,
+  /** Only this case's initial claim and queued mail (the team view's demo clock). */
+  scope: { caseId?: string } = {},
 ): Promise<OutboundTickResult> {
   const result: OutboundTickResult = { initialClaims: [], sent: [] };
   const opts: OutboundDeps = { ...deps, db, clock: fixedClock(now) };
 
-  const due = await db
+  let dueQuery = db
     .from("cases")
     .select("id")
     .eq("status", "waiting_period")
@@ -43,6 +57,8 @@ export async function runOutbound(
     .or(`next_action_at.is.null,next_action_at.lte.${now.toISOString()}`)
     .order("earliest_send_at", { ascending: true })
     .limit(limit);
+  if (scope.caseId) dueQuery = dueQuery.eq("id", scope.caseId);
+  const due = await dueQuery;
   if (due.error) throw due.error;
 
   for (const { id } of due.data) {
@@ -57,7 +73,10 @@ export async function runOutbound(
   }
 
   try {
-    for (const r of await sendPending(opts, { limit })) {
+    for (const r of await sendPending(opts, {
+      limit,
+      ...(scope.caseId && { caseIds: [scope.caseId] }),
+    })) {
       result.sent.push({
         messageId: r.messageId,
         status: r.result.status,

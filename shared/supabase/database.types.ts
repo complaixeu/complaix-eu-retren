@@ -166,6 +166,77 @@ export type Database = {
         };
         Relationships: [];
       };
+      claims_mail_poll_state: {
+        Row: {
+          failed_attempts: number | null;
+          failed_since: string | null;
+          failed_uid: number | null;
+          last_uid: number;
+          mailbox: string;
+          uid_validity: number;
+          updated_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          failed_attempts?: number | null;
+          failed_since?: string | null;
+          failed_uid?: number | null;
+          last_uid: number;
+          mailbox: string;
+          uid_validity: number;
+          updated_at?: string;
+        };
+        Update: {
+          failed_attempts?: number | null;
+          failed_since?: string | null;
+          failed_uid?: number | null;
+          last_uid?: number;
+          mailbox?: string;
+          uid_validity?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      intake_drafts: {
+        Row: {
+          created_at: string;
+          data: NonNullable<Json>;
+          expires_at: string;
+          id: string;
+          status: Database["public"]["Enums"]["intake_draft_status"];
+          ticket_content_type: string | null;
+          ticket_filename: string | null;
+          ticket_path: string | null;
+          ticket_size_bytes: number | null;
+          updated_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          data?: NonNullable<Json>;
+          expires_at: string;
+          id?: string;
+          status?: Database["public"]["Enums"]["intake_draft_status"];
+          ticket_content_type?: string | null;
+          ticket_filename?: string | null;
+          ticket_path?: string | null;
+          ticket_size_bytes?: number | null;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          data?: NonNullable<Json>;
+          expires_at?: string;
+          id?: string;
+          status?: Database["public"]["Enums"]["intake_draft_status"];
+          ticket_content_type?: string | null;
+          ticket_filename?: string | null;
+          ticket_path?: string | null;
+          ticket_size_bytes?: number | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       messages: {
         Row: {
           body_text: string | null;
@@ -178,6 +249,7 @@ export type Database = {
           from_address: string;
           id: string;
           in_reply_to: string | null;
+          inbound_queue_reason: string | null;
           message_id: string | null;
           provider_id: string | null;
           raw_path: string | null;
@@ -185,6 +257,7 @@ export type Database = {
           sent_at: string | null;
           status: Database["public"]["Enums"]["message_status"];
           subject: string;
+          team_resolved_at: string | null;
           template: string | null;
           thread_references: string[] | null;
           to_address: string;
@@ -201,6 +274,7 @@ export type Database = {
           from_address: string;
           id?: string;
           in_reply_to?: string | null;
+          inbound_queue_reason?: string | null;
           message_id?: string | null;
           provider_id?: string | null;
           raw_path?: string | null;
@@ -208,6 +282,7 @@ export type Database = {
           sent_at?: string | null;
           status: Database["public"]["Enums"]["message_status"];
           subject: string;
+          team_resolved_at?: string | null;
           template?: string | null;
           thread_references?: string[] | null;
           to_address: string;
@@ -223,6 +298,7 @@ export type Database = {
           from_address?: string;
           id?: string;
           in_reply_to?: string | null;
+          inbound_queue_reason?: string | null;
           message_id?: string | null;
           provider_id?: string | null;
           raw_path?: string | null;
@@ -230,6 +306,7 @@ export type Database = {
           sent_at?: string | null;
           status?: Database["public"]["Enums"]["message_status"];
           subject?: string;
+          team_resolved_at?: string | null;
           template?: string | null;
           thread_references?: string[] | null;
           to_address?: string;
@@ -243,6 +320,22 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      team_members: {
+        Row: {
+          created_at: string;
+          email: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          email: string;
+        };
+        Update: {
+          created_at?: string;
+          email?: string;
+        };
+        Relationships: [];
       };
     };
     Views: {
@@ -313,6 +406,16 @@ export type Database = {
         };
         Returns: boolean;
       };
+      claims_record_inbound: {
+        Args: {
+          p_case_id: string;
+          p_expected_status: Database["public"]["Enums"]["case_status"];
+          p_message: Json;
+          p_queue_reason: string;
+          p_to_status: Database["public"]["Enums"]["case_status"];
+        };
+        Returns: Json;
+      };
       claims_send_initial_claim: {
         Args: {
           p_attachments: Json;
@@ -324,6 +427,33 @@ export type Database = {
         };
         Returns: Json;
       };
+      intake_merge_draft_data: {
+        Args: {
+          p_id: string;
+          p_now?: string;
+          p_patch: Json;
+          p_status?: Database["public"]["Enums"]["intake_draft_status"];
+        };
+        Returns: {
+          created_at: string;
+          data: NonNullable<Json>;
+          expires_at: string;
+          id: string;
+          status: Database["public"]["Enums"]["intake_draft_status"];
+          ticket_content_type: string | null;
+          ticket_filename: string | null;
+          ticket_path: string | null;
+          ticket_size_bytes: number | null;
+          updated_at: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "intake_drafts";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      is_team_member: { Args: Record<PropertyKey, never>; Returns: boolean };
     };
     Enums: {
       attachment_kind: "eu_form" | "mandate" | "ticket" | "user_document";
@@ -337,6 +467,7 @@ export type Database = {
         | "resolved"
         | "denied"
         | "closed";
+      intake_draft_status: "uploaded";
       message_direction: "outbound" | "inbound";
       message_status: "queued" | "sent" | "failed" | "received";
       reply_category:
@@ -467,6 +598,7 @@ export const Constants = {
         "denied",
         "closed",
       ],
+      intake_draft_status: ["uploaded"],
       message_direction: ["outbound", "inbound"],
       message_status: ["queued", "sent", "failed", "received"],
       reply_category: [

@@ -88,3 +88,21 @@ export {
   type ReviewValidation,
   type ReviewValues,
 } from "./review/validate";
+
+// Server-side only: the direct upload to Storage and the draft purge ([A1] follow-up). Kept in
+// its own block so other tasks can add exports above without touching it.
+export {
+  beginTicketUpload,
+  finishTicketUpload,
+  type BeginTicketUploadResult,
+  type FinishTicketUploadResult,
+} from "./draft/session";
+export { createDraftFromUpload, type DraftFromUploadResult } from "./draft/store";
+export { purgeExpiredDrafts, type PurgeResult } from "./draft/purge";
+export {
+  UPLOAD_PREFIX,
+  checkStoredTicket,
+  declaredTicketError,
+  uploadContentType,
+  type DeclaredTicket,
+} from "./upload/direct";
