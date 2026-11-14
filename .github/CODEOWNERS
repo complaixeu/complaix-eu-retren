@@ -11,8 +11,10 @@
 /scripts/local-ci.sh      @complaix-eu
 /scripts/local-env.sh     @complaix-eu
 /scripts/supabase-local.sh @complaix-eu
+/scripts/check-migration-order.sh @complaix-eu
 /CLAUDE.md                @complaix-eu
 /AGENTS.md                @complaix-eu
 /.claude/                 @complaix-eu
 /docs/LOCAL_CI.md         @complaix-eu
 /docs/ONBOARDING.md       @complaix-eu
+/docs/ONBOARDING_MAC.md   @complaix-eu

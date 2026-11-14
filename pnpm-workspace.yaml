@@ -1,3 +1,7 @@
+# Same Node as CI and Vercel (22.x) when pnpm resolves packages. Note: pnpm skips this when the
+# lockfile is already up to date; scripts/local-ci.sh checks the Node version explicitly.
+engineStrict: true
+
 # Single-package repo. allowBuilds: packages permitted to run install scripts.
 allowBuilds:
   sharp: false

@@ -10,8 +10,8 @@ without explicit prior approval from Nestor Gomez Artiles (GitHub `@complaix-eu`
 
 - Protected in the repo: `.github/` (workflows, CODEOWNERS, Dependabot, PR template),
   `vercel.json`, `supabase/config.toml`, `pnpm-workspace.yaml`, `scripts/local-ci.sh`,
-  `scripts/local-env.sh`, `scripts/supabase-local.sh`, `CLAUDE.md`, `AGENTS.md`, `.claude/`, `docs/LOCAL_CI.md`,
-  `docs/ONBOARDING.md`.
+  `scripts/local-env.sh`, `scripts/supabase-local.sh`, `scripts/check-migration-order.sh`, `CLAUDE.md`, `AGENTS.md`, `.claude/`, `docs/LOCAL_CI.md`,
+  `docs/ONBOARDING.md`, `docs/ONBOARDING_MAC.md`.
 - Protected outside the repo: GitHub settings, branch protection, environments and secrets;
   the Vercel project (settings, env vars, domains, protection, deployments); the Supabase
   project and org (settings, keys, billing, add-ons); anything that costs money or creates a

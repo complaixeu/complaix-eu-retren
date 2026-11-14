@@ -13,9 +13,12 @@ nothing remote touched. Run it before every push; a branch should only reach Git
 | smoke check      | Same `/api/health` retry loop, plus Supabase REST reachable with the anon key                                                              |
 
 The script runs in a clean environment (`env -i`) like a GitHub runner and temporarily parks your
-`.env*.local` files, so local secrets can't change the result. Keys are never printed.
+`.env*.local` files, so local secrets can't change the result. No DEV or remote secrets are ever printed (`supabase start`
+prints the CLI's fixed local-development keys, which are not secrets).
 
 ## Prerequisites (one-time)
+
+On **macOS**, follow [ONBOARDING_MAC.md](ONBOARDING_MAC.md) instead: `apt-get` and `usermod` below are Linux-only.
 
 1. **Node 22 and pnpm 12** — `nvm use` (reads `.nvmrc`), then enable pnpm:
 
@@ -46,7 +49,9 @@ interfaces (and its rules bypass `ufw`), which on a server with a public IP woul
 Postgres with the CLI's default password. `scripts/supabase-local.sh` (used by `pnpm db:start`
 and `ci:local:full`) starts Supabase on a Docker network `retren_local` whose host binding is
 `127.0.0.1`, and stops it again if anything is published beyond localhost. Never start the local
-stack with a bare `supabase start`. The app is also always started on `127.0.0.1`. To view it from
+stack with a bare `supabase start`, and never run a bare `supabase db reset` either: use
+`pnpm db:reset` (a bare reset recreates Postgres on Supabase's default network, published on
+`0.0.0.0`, and then fails with `ENOTFOUND supabase_db_retren`). The app is also always started on `127.0.0.1`. To view it from
 your laptop, use an SSH tunnel ([ONBOARDING.md §8](ONBOARDING.md)).
 
 ## Commands
@@ -107,5 +112,5 @@ way it would fail `migrate_dev` on DEV, but before anything reaches DEV.
 | `Docker is not usable by <user>`        | Prerequisite 2, then log in again                                                                                                                  |
 | `Cannot find matching keyid` (corepack) | `npm install -g corepack@latest`                                                                                                                   |
 | Port 54321/54322 already in use         | Another Supabase stack is running: `pnpm exec supabase stop --all` (check it isn't someone else's first) or change ports in `supabase/config.toml` |
-| `/api/health returned 000`              | Port taken or app crashed: see `/tmp/retren-local-ci-app.log`, try `APP_PORT=3200`                                                                 |
+| `/api/health returned 000`              | Port taken or app crashed: see `${TMPDIR:-/tmp}/retren-local-ci-app.log`, try `APP_PORT=3200`                                                      |
 | Format check fails                      | `pnpm format` and commit                                                                                                                           |
