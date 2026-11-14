@@ -43,6 +43,33 @@ export function createFakeTransport(): FakeTransport {
 }
 
 // ---------------------------------------------------------------------------------------------
+// What a transport failure means
+
+/** Raised by a transport for a mail it never handed to the provider (checked before connecting). */
+export class NotSentError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NotSentError";
+  }
+}
+
+/** nodemailer error codes that guarantee the mail was not accepted. */
+const NOT_SENT_CODES: readonly string[] = ["EAUTH", "ECONNECTION", "EENVELOPE"];
+
+/**
+ * `transport_error` only when nothing can have been sent: a NotSentError, or nodemailer's EAUTH,
+ * ECONNECTION or EENVELOPE. Anything else (a timeout after DATA, a dropped socket, an unknown
+ * error) may have been delivered: `delivery_unknown`, never resent automatically.
+ */
+export function transportFailure(error: unknown): "transport_error" | "delivery_unknown" {
+  if (error instanceof NotSentError) return "transport_error";
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" && NOT_SENT_CODES.includes(code)
+    ? "transport_error"
+    : "delivery_unknown";
+}
+
+// ---------------------------------------------------------------------------------------------
 // gmail
 
 export interface SmtpConfig {
@@ -137,7 +164,7 @@ export function createGmailTransport(
     async send(mail) {
       const attachments = mail.attachments.map((a) => {
         if (!(a.content instanceof Uint8Array)) {
-          throw new Error(`attachment ${a.kind} has no content`);
+          throw new NotSentError(`attachment ${a.kind} has no content`);
         }
         return {
           filename: a.filename,

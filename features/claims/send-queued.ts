@@ -22,7 +22,12 @@ import {
   type AttachmentRow,
   type OutboundRefusal,
 } from "./outbound";
-import { createMailTransport, type ClaimsTransport, type OutboundAttachment } from "./transport";
+import {
+  createMailTransport,
+  transportFailure,
+  type ClaimsTransport,
+  type OutboundAttachment,
+} from "./transport";
 
 type Env = Record<string, string | undefined>;
 
@@ -215,8 +220,12 @@ async function deliver(
   );
 
   // The status re-check applies to timer reminders only (#26): C6's forwards and insistences
-  // are reactions to a reply and never go stale because of one.
-  if (!toUser && progress.kind !== null && REMINDER_TEMPLATES.includes(progress.kind)) {
+  // are reactions to a reply and never go stale because of one. Fail-closed: operator mail whose
+  // kind can't be derived is checked like a reminder, and the team is told.
+  if (!toUser && progress.kind === null) {
+    await queueForTeam(db, caseId, { reason: "unknown_kind", message_id: row.id });
+  }
+  if (!toUser && (progress.kind === null || REMINDER_TEMPLATES.includes(progress.kind))) {
     const replies = thread.data!.filter(fromOperator).map((x) => x.created_at);
     replies.sort((a, b) => Date.parse(a) - Date.parse(b));
     const stale = isStale({
@@ -255,10 +264,12 @@ async function deliver(
   try {
     progress.handedToTransport = true;
     ({ providerId } = await transport.send({ ...mail, attachments: withContent }));
-  } catch {
-    // The transport refused or failed to deliver: nothing went out.
-    progress.handedToTransport = false;
-    return fail(db, row, progress.kind, "transport_error");
+  } catch (error) {
+    // transport_error only when nothing can have gone out (EAUTH, ECONNECTION, EENVELOPE, or
+    // before connecting); otherwise the mail may have been delivered: delivery_unknown.
+    const reason = transportFailure(error);
+    if (reason === "transport_error") progress.handedToTransport = false;
+    return fail(db, row, progress.kind, reason);
   }
 
   const done = await db
@@ -275,8 +286,19 @@ async function deliver(
       template: progress.kind,
     })
     .eq("id", row.id)
-    .eq("status", "queued");
+    .eq("status", "queued")
+    .select("id");
   if (done.error) throw done.error; // delivery_unknown
+  if (done.data.length === 0) {
+    // The sweep failed the row meanwhile (its claim looked stuck): it stays failed /
+    // delivery_unknown. No message_sent, no purge: the team decides (C9).
+    await queueForTeam(db, caseId, {
+      reason: "delivery_unknown",
+      message_id: row.id,
+      template: progress.kind,
+    });
+    return { status: "failed", reason: "delivery_unknown" };
+  }
 
   // The row is `sent`: from here on nothing may turn it into a failure.
   try {

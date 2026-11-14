@@ -73,6 +73,10 @@ async function stored(caseId: string) {
   };
 }
 
+/** An SMTP failure that guarantees nothing was sent (nodemailer's ECONNECTION). */
+const connectionRefused = () =>
+  Object.assign(new Error("connect ECONNREFUSED (test)"), { code: "ECONNECTION" });
+
 const noPersonalData = (data: unknown) => {
   const text = JSON.stringify(data);
   for (const value of Object.values(PII)) expect(text).not.toContain(value);
@@ -471,7 +475,7 @@ describe("sendQueued (local Supabase)", () => {
     const { queuedId } = await sentCaseWithQueued();
     const broken = {
       send: async () => {
-        throw new Error("boom");
+        throw connectionRefused();
       },
     };
     expect(await sendQueued(queuedId, { db, transport: broken })).toEqual({
@@ -533,7 +537,7 @@ describe("sendQueued (local Supabase)", () => {
     const f = await forwarded();
     const broken = {
       send: async () => {
-        throw new Error("boom");
+        throw connectionRefused();
       },
     };
     expect(await sendQueued(f.queuedId, { db, transport: broken })).toEqual({
@@ -561,7 +565,7 @@ describe("sendQueued (local Supabase)", () => {
     const bad = await forwarded();
     const broken = {
       send: async () => {
-        throw new Error("boom");
+        throw connectionRefused();
       },
     };
     await sendQueued(bad.queuedId, { db, transport: broken, purgeForwardedDocuments });
@@ -685,7 +689,7 @@ describe("sendQueued (local Supabase)", () => {
     const { caseId } = await readyCase();
     const broken = {
       send: async () => {
-        throw new Error("boom");
+        throw connectionRefused();
       },
     };
     const out = await sendInitialClaim(caseId, { db, clock: fixedClock(READY), transport: broken });
@@ -854,6 +858,88 @@ describe("sendQueued (local Supabase)", () => {
     expect(raw[0]).toMatch(/^To: equipo@retren\.example$/m);
     expect(raw[0]).toContain(Buffer.from("%PDF-1.7\n% placeholder\n%%EOF\n").toString("base64"));
     expect(raw[0]).not.toContain(f.key);
+  });
+
+  it("a transport error that doesn't prove nothing was sent: delivery_unknown", async () => {
+    const { caseId, queuedId } = await sentCaseWithQueued();
+    const timeout = {
+      send: async () => {
+        throw Object.assign(new Error("timeout after DATA (test)"), { code: "ETIMEDOUT" });
+      },
+    };
+    expect(await sendQueued(queuedId, { db, transport: timeout })).toEqual({
+      status: "failed",
+      reason: "delivery_unknown",
+    });
+    expect(await teamQueue(caseId)).toContainEqual(
+      expect.objectContaining({ reason: "delivery_unknown", message_id: queuedId }),
+    );
+  });
+
+  it("the sweep failed the row while it was being sent: no message_sent, no purge, team queue", async () => {
+    const f = await forwarded();
+    const purged: string[] = [];
+    const fake = createFakeTransport();
+    const transport = {
+      async send(m: Parameters<typeof fake.send>[0]) {
+        // What the expiry sweep does to a row it thinks is stuck.
+        await db
+          .from("messages")
+          .update({ status: "failed", failure_reason: "delivery_unknown" })
+          .eq("id", f.queuedId);
+        return fake.send(m);
+      },
+    };
+    const out = await sendQueued(f.queuedId, {
+      db,
+      transport,
+      purgeForwardedDocuments: async (id) => void purged.push(id),
+    });
+    expect(out).toEqual({ status: "failed", reason: "delivery_unknown" });
+    expect(purged).toEqual([]);
+    expect(await message(f.queuedId)).toMatchObject({
+      status: "failed",
+      failure_reason: "delivery_unknown",
+    });
+    const { events } = await stored(f.caseId);
+    expect(events.filter((e) => e.kind === "message_sent").map((e) => e.data)).not.toContainEqual(
+      expect.objectContaining({ message_id: f.queuedId }),
+    );
+    expect(await teamQueue(f.caseId)).toContainEqual(
+      expect.objectContaining({ reason: "delivery_unknown", message_id: f.queuedId }),
+    );
+  });
+
+  it("an operator row of unknown kind is fail-closed: stale-checked, and the team is told", async () => {
+    const stale = await sentCaseWithQueued({ template: null });
+    await db.from("messages").insert({
+      case_id: stale.caseId,
+      direction: "inbound",
+      from_address: OPERATOR,
+      to_address: "reclamaciones@retren.example",
+      subject: "Respuesta",
+      status: "received",
+      message_id: `<${randomUUID()}@iryo.eu>`,
+    });
+    expect(await sendQueued(stale.queuedId, { db, transport: createFakeTransport() })).toEqual({
+      status: "failed",
+      reason: "stale",
+    });
+    expect(await teamQueue(stale.caseId)).toContainEqual({
+      source: "outbound",
+      reason: "unknown_kind",
+      message_id: stale.queuedId,
+    });
+
+    const fresh = await sentCaseWithQueued({ template: null });
+    expect(
+      (await sendQueued(fresh.queuedId, { db, transport: createFakeTransport() })).status,
+    ).toBe("sent");
+    expect(await teamQueue(fresh.caseId)).toContainEqual({
+      source: "outbound",
+      reason: "unknown_kind",
+      message_id: fresh.queuedId,
+    });
   });
 
   it("sendPending sends every queued row once", async () => {

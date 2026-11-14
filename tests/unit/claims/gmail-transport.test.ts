@@ -5,8 +5,10 @@ import { sendingDomain } from "@/features/claims/send-queued";
 import {
   createGmailTransport,
   createMailTransport,
+  NotSentError,
   smtpConfigFromEnv,
   smtpOptions,
+  transportFailure,
   type OutboundMail,
 } from "@/features/claims/transport";
 import { PROVIDERS } from "@/shared/providers";
@@ -173,5 +175,35 @@ describe("the message nodemailer builds", () => {
     (broken.attachments[0] as { content?: Uint8Array }).content = undefined;
     await expect(t.send(broken)).rejects.toThrow(/content/);
     expect(m.raw).toEqual([]);
+  });
+});
+
+describe("which transport errors guarantee nothing was sent", () => {
+  const err = (code?: string) => Object.assign(new Error("x"), code ? { code } : {});
+
+  it("EAUTH, ECONNECTION and EENVELOPE: transport_error (safe to resend by hand)", () => {
+    for (const code of ["EAUTH", "ECONNECTION", "EENVELOPE"]) {
+      expect(transportFailure(err(code))).toBe("transport_error");
+    }
+  });
+
+  it("an error raised before the connection: transport_error", () => {
+    expect(transportFailure(new NotSentError("attachment eu_form has no content"))).toBe(
+      "transport_error",
+    );
+  });
+
+  it("anything else, e.g. a timeout after DATA: delivery_unknown", () => {
+    for (const e of [err("ETIMEDOUT"), err("ESOCKET"), err("EMESSAGE"), err(), "boom", null]) {
+      expect(transportFailure(e)).toBe("delivery_unknown");
+    }
+  });
+
+  it("the gmail transport raises NotSentError for a mail it never handed to SMTP", async () => {
+    const m = inMemory();
+    const t = createGmailTransport(ENV, { transporter: m.transporter });
+    const broken = mail();
+    (broken.attachments[0] as { content?: Uint8Array }).content = undefined;
+    await expect(t.send(broken)).rejects.toBeInstanceOf(NotSentError);
   });
 });
