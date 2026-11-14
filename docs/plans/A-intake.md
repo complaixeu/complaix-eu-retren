@@ -5,6 +5,55 @@ Folders: `app/(intake)/`, `features/intake/`, `shared/ui/`, `app/layout.tsx`, `a
 `tests/{unit,integration,e2e}/intake/`, `supabase/tests/intake_*.sql`, migrations `*_intake_*.sql`.
 Uses: `@/features/claims` (`createCase`, mock until C2). Never imports B directly.
 
+## Design direction (every UI task: A0, A1, A3, A4, A5, A6, A7)
+
+Decided by Nestor, 2026-11-14.
+
+- **Visual reference: [Vuestic Admin](https://github.com/epicmaxco/vuestic-admin)** (MIT,
+  live demo admin.vuestic.dev). Take its look, not its code: it is Vue 3 + Vuestic UI, and we are
+  Next.js 16 + React 19. Copy no components, assets, logo or brand colours. What to take from it:
+  - calm neutral surfaces with content in white cards (subtle border, small radius, light shadow)
+    on a slightly tinted page background;
+  - **one** primary colour for actions and the current step; everything else neutral grey;
+  - a consistent 4/8 px spacing scale, generous padding inside cards, aligned edges;
+  - forms: label above the field, help text below, the error in red under the field, one column;
+  - clear type hierarchy with a single system font stack, no decorative fonts;
+  - a real dark theme from the same tokens (`prefers-color-scheme`), not an afterthought.
+- **This is a public, mobile-first flow, not a dashboard.** No sidebar, no data tables, no
+  charts. One task per screen, a narrow centred column (~ 36rem), large tap targets (≥ 44 px), the
+  stepper at the top, the primary button at the bottom. Most users arrive on a phone with the
+  ticket photo already on it.
+- **Tokens first.** A0 defines the design tokens as CSS custom properties in `app/globals.css`
+  (colour, spacing, radius, shadow, type scale, light + dark) and `shared/ui/` uses only those.
+  Later tasks add no one-off colours or spacing.
+- **Run the `unslop` skill on every screen before the PR** (Claude Code: `/unslop`, or the Skill
+  tool with `skill: "unslop"`). It removes the tells of AI-generated UI: purple gradients, glows,
+  gradient text, emoji labels, "New ✨" badges, uppercase tracked labels, pulsing elements, uneven
+  spacing. Fix what it finds in the same PR and say so in the PR body. If the skill is not
+  installed in your harness, apply the same checklist by hand.
+- **Copy:** plain Spanish (tuteo), short, concrete, no marketing tone, no exclamation marks, no
+  emoji. Errors say what happened and what to do next.
+- Accessibility does not change for looks: visible focus ring, contrast AA, labels on every input,
+  and the e2e specs keep using roles and labels (A8 runs axe on every step).
+
+## Model per task
+
+Follows `docs/plans/README.md` §5 "Which model"; this table wins for domain A.
+
+| Task | Agent                   | Model  | Why                                                       |
+| ---- | ----------------------- | ------ | --------------------------------------------------------- |
+| A0   | `retren-ui-implementer` | Opus   | Design tokens, layout and `shared/ui/`: sets the look     |
+| A1   | `retren-ui-implementer` | Opus   | Upload screen with preview and errors (plus bucket/table) |
+| A2   | `retren-implementer`    | Sonnet | OCR port and adapter, no UI                               |
+| A3   | `retren-ui-implementer` | Opus   | Extraction plus the "otra foto" / manual-entry screens    |
+| A4   | `retren-ui-implementer` | Opus   | Review screen                                             |
+| A5   | `retren-ui-implementer` | Opus   | Questions screen                                          |
+| A6   | `retren-ui-implementer` | Opus   | Mandate and consent screen (plus the `consents` table)    |
+| A7   | `retren-ui-implementer` | Opus   | Result screens                                            |
+| A8   | `retren-implementer`    | Sonnet | E2E and accessibility suite, no new UI                    |
+
+Syncing worktrees, re-running tests, formatting and tracker updates go to `retren-chore` (Haiku).
+
 ## Lanes
 
 | Lane | Tasks        | Theme                                |

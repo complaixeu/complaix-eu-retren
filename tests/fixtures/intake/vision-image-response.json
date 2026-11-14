@@ -1,0 +1,16 @@
+{
+  "responses": [
+    {
+      "fullTextAnnotation": {
+        "text": "BILLETE DE EJEMPLO\nLocalizador: ABC123\nOrigen: Madrid\nDestino: Barcelona\nFecha: 12/03/2026\n",
+        "pages": [{ "width": 800, "height": 1200 }]
+      },
+      "textAnnotations": [
+        {
+          "description": "BILLETE DE EJEMPLO\nLocalizador: ABC123\nOrigen: Madrid\nDestino: Barcelona\nFecha: 12/03/2026\n"
+        },
+        { "description": "BILLETE" }
+      ]
+    }
+  ]
+}
