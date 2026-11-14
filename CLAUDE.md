@@ -1,6 +1,7 @@
 # ReTren — working rules (humans and AI agents)
 
-Also read `AGENTS.md` (Next.js 16 notes). Stack: Next.js 16 (App Router), TypeScript,
+Also read `AGENTS.md` (Next.js 16 notes). Team workflow and the domain plans:
+`docs/TEAM_WORKFLOW.md` and `docs/plans/`. Stack: Next.js 16 (App Router), TypeScript,
 pnpm, Node 22, Vitest, Supabase (Postgres + Auth), Vercel.
 
 ## 0. Protected areas: Nestor Gomez Artiles approves (absolute rule)

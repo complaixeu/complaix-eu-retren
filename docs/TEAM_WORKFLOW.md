@@ -94,17 +94,18 @@ All worktrees share **one** local Supabase (`project_id = "retren"`), and both t
 so there is one machine-wide lock, `${TMPDIR:-/tmp}/retren-supabase.lock` (a directory holding
 the owner's PID).
 
-- **`pnpm test:all` takes the lock itself.** It waits while someone else holds it and removes a
-  stale lock whose PID is gone. Never wrap it in the snippet below: that would deadlock.
-- **Everything else that uses local Supabase** (`pnpm ci:local:full`, `db:start`, `db:reset`, a dev
-  server against the local DB) is wrapped in the same lock. Until it's built into
-  `scripts/local-ci.sh` (#17), use:
+- **`pnpm test:all` and `pnpm ci:local:full` take the lock themselves.** They wait while someone
+  else holds it and remove a stale lock whose PID is gone. Never wrap `pnpm test:all` in the
+  snippet below: that would deadlock. (`pnpm ci:local:full` recognises a caller that already
+  holds the lock, so an old wrapper around it still works.)
+- **Everything else that uses local Supabase** (`db:start`, `db:reset`, a dev server against the
+  local DB) is wrapped in the same lock:
 
 ```bash
 lock="${TMPDIR:-/tmp}/retren-supabase.lock"
 until mkdir "$lock" 2>/dev/null; do echo "local Supabase busy, waiting…"; sleep 30; done
 echo $$ >"$lock/pid"
-pnpm ci:local:full; rc=$?
+pnpm db:reset; rc=$?
 rm -rf "$lock"; (exit $rc)
 ```
 
@@ -165,7 +166,6 @@ These touch protected areas or cost money, so raise them during Phase 0:
   view stands in for days passing.
 - **An email provider for real sending.** For the demo, use the simulated mailbox with scripted
   operator replies (architecture "Pendiente").
-- **A lock in `scripts/local-ci.sh`** so the manual lock in section 3 is no longer needed.
 
 ## 7. Prompt for every agent session
 
