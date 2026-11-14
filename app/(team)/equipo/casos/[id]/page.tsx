@@ -4,7 +4,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { createServiceClient } from "@/shared/supabase/server";
-import { Button } from "@/shared/ui";
 import {
   DEMO_CLOCK_COOKIE,
   demoNow,
@@ -16,6 +15,7 @@ import { isDemo, requireTeam } from "../../_lib/session";
 import { ClockPanel } from "../../_components/clock-panel";
 import { dateTime, reasonLabel, statusLabel } from "../../_components/labels";
 import { Notice } from "../../_components/notice";
+import { ActionSubmit } from "../../_components/action-submit";
 import { ResolveForm } from "../../_components/resolve-form";
 import styles from "../../team.module.css";
 
@@ -198,7 +198,7 @@ async function CaseDetail({
                     ))}
                   </select>
                 </label>
-                <Button type="submit">Simulate reply</Button>
+                <ActionSubmit pendingLabel="Processing reply…">Simulate reply</ActionSubmit>
               </form>
             )}
             <p className={styles.muted}>
