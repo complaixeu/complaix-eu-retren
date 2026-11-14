@@ -1,6 +1,6 @@
 -- Claims schema (migration *_claims_create_cases.sql, docs/plans/C-claims.md C1).
 begin;
-select plan(80);
+select plan(100);
 
 -- Tables exist, with RLS on.
 select has_table('public', t, 'table ' || t || ' exists')
@@ -187,10 +187,54 @@ from unnest(array['anon', 'authenticated']) as r,
        $$insert into public.messages (direction, from_address, to_address, subject, status) values ('inbound', 'a@x.test', 'b@x.test', 's', 'received')$$,
        $$update public.messages set subject = 'x'$$,
        $$delete from public.messages$$,
+       $$update public.case_events set kind = 'x'$$,
+       $$delete from public.case_events$$,
        'select * from public.attachments',
+       $$insert into public.attachments (case_id, kind, storage_path, filename, content_type) values ('00000000-0000-0000-0000-0000000000c1', 'ticket', 'p', 'f', 'application/pdf')$$,
+       $$update public.attachments set filename = 'x'$$,
        $$delete from public.attachments$$
      ]) as s
 ;
+
+-- The service role (the server) can insert into and read every claims table.
+create function pg_temp.rows_as(p_role text, p_sql text) returns bigint language plpgsql as $$
+declare
+  n bigint;
+begin
+  execute format('set local role %I', p_role);
+  execute p_sql;
+  get diagnostics n = row_count;
+  reset role;
+  return n;
+end;
+$$;
+
+select is(pg_temp.rows_as('service_role', s), 1::bigint, 'service_role: ' || s)
+from unnest(array[
+  $$insert into public.cases (id, operator, submission, user_email) values ('00000000-0000-0000-0000-0000000000c2', 'renfe', '{}', 's@example.test')$$,
+  $$select * from public.cases where id = '00000000-0000-0000-0000-0000000000c2'$$,
+  $$insert into public.case_events (id, case_id, kind, to_status) values ('00000000-0000-0000-0000-0000000000e2', '00000000-0000-0000-0000-0000000000c2', 'created', 'draft')$$,
+  $$select * from public.case_events where id = '00000000-0000-0000-0000-0000000000e2'$$,
+  $$insert into public.messages (id, case_id, direction, from_address, to_address, subject, status) values ('00000000-0000-0000-0000-0000000000a2', '00000000-0000-0000-0000-0000000000c2', 'outbound', 'a@example.test', 'b@example.test', 's', 'queued')$$,
+  $$select * from public.messages where id = '00000000-0000-0000-0000-0000000000a2'$$,
+  $$insert into public.attachments (id, case_id, kind, storage_path, filename, content_type) values ('00000000-0000-0000-0000-0000000000f2', '00000000-0000-0000-0000-0000000000c2', 'mandate', 'p', 'm.pdf', 'application/pdf')$$,
+  $$select * from public.attachments where id = '00000000-0000-0000-0000-0000000000f2'$$
+]) with ordinality as t (s, n)
+order by n;
+
+-- cases.operator accepts exactly OperatorId (shared/contracts/operator.ts). Keep this literal
+-- list in step with OperatorId: the generated types expose the column only as `string`.
+select lives_ok(
+  format($$insert into public.cases (operator, submission, user_email) values (%L, '{}', 'o@example.test')$$, op),
+  'operator ' || op || ' is accepted'
+)
+from unnest(array['iryo', 'renfe', 'ouigo']) as op;
+select is(
+  (select pg_get_constraintdef(oid) from pg_constraint
+   where conrelid = 'public.cases'::regclass and conname = 'cases_operator_check'),
+  $$CHECK ((operator = ANY (ARRAY['iryo'::text, 'renfe'::text, 'ouigo'::text])))$$,
+  'the operator CHECK is exactly OperatorId: iryo, renfe, ouigo'
+);
 
 select * from finish();
 rollback;

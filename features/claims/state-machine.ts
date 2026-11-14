@@ -9,8 +9,8 @@ export const CaseTransitionEvent = z.enum([
   "not_eligible", // createCase: not eligible → closed, the user is told
   "claim_sent", // the initial claim went out (C3)
   "reminder_sent", // a timer reminder went out (C7); the case stays sent
-  "operator_replied", // an operator reply arrived and matched the case (C4)
-  "acknowledged", // the reply only acknowledges receipt → keep waiting, timers run (C6)
+  "operator_replied", // an operator reply arrived and matched the case (C4); stops the schedule
+  "acknowledged", // the reply only acknowledges receipt: the state is kept (C6)
   "data_requested", // the operator asks for something only the user has (C6)
   "user_document_forwarded", // the user's document went to the operator (C6)
   "approved", // C6
@@ -37,18 +37,31 @@ export const ALLOWED_TRANSITIONS: Table = Object.freeze({
   },
   reply_received: {
     operator_replied: "reply_received",
-    acknowledged: "sent",
+    acknowledged: "reply_received",
     data_requested: "waiting_user",
     approved: "resolved",
     rejected: "denied",
     close: "closed",
   },
+  // A reply keeps a pending state: the document request is still open, and the category applies
+  // to this state, not to reply_received.
   waiting_user: {
-    operator_replied: "reply_received",
+    operator_replied: "waiting_user",
+    acknowledged: "waiting_user",
+    data_requested: "waiting_user",
+    approved: "resolved",
+    rejected: "denied",
     user_document_forwarded: "sent",
     close: "closed",
   },
-  escalated: { operator_replied: "reply_received", close: "closed" },
+  // Already escalated: a reply keeps it escalated. A denial or a data request here goes to the
+  // team queue (throws), so there is never a second insistence or escalation.
+  escalated: {
+    operator_replied: "escalated",
+    acknowledged: "escalated",
+    approved: "resolved",
+    close: "closed",
+  },
   resolved: { close: "closed" },
   denied: { insistence_sent: "sent", escalate: "escalated", close: "closed" },
   closed: {},
@@ -64,7 +77,17 @@ export class InvalidTransitionError extends Error {
   }
 }
 
-/** Returns the status a case moves to on `event`, or throws InvalidTransitionError. */
+/**
+ * Returns the status a case moves to on `event`, or throws InvalidTransitionError.
+ *
+ * An operator reply is two steps, both applied to the case's real current state: C4 applies
+ * `operator_replied` (sent → reply_received; waiting_user and escalated keep their state), then
+ * C6 applies the reply's category event to the resulting state.
+ *
+ * Replies to terminal or unsent states throw by design: `draft`, `waiting_period`, `denied`
+ * before the insistence, `resolved` and `closed`. C4/C6 must then record the message and route
+ * it to the team queue without a transition.
+ */
 export function transition(status: CaseStatus, event: CaseTransitionEvent): CaseStatus {
   if (!CaseStatus.safeParse(status).success || !CaseTransitionEvent.safeParse(event).success) {
     throw new InvalidTransitionError(String(status), String(event));

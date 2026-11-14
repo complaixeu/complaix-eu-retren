@@ -18,16 +18,25 @@ const allowed: Move[] = [
   ["sent", "reminder_sent", "sent"],
   ["sent", "operator_replied", "reply_received"],
   ["sent", "escalate", "escalated"],
+  // A reply stops the schedule (ARCHITECTURE §6): an acknowledgement stays in reply_received.
   ["reply_received", "operator_replied", "reply_received"],
-  ["reply_received", "acknowledged", "sent"],
+  ["reply_received", "acknowledged", "reply_received"],
   ["reply_received", "data_requested", "waiting_user"],
   ["reply_received", "approved", "resolved"],
   ["reply_received", "rejected", "denied"],
-  ["waiting_user", "operator_replied", "reply_received"],
+  // A reply never drops a pending state: waiting_user and escalated keep what they mean, and the
+  // category event (C6) applies to the case's real current state.
+  ["waiting_user", "operator_replied", "waiting_user"],
+  ["waiting_user", "acknowledged", "waiting_user"],
+  ["waiting_user", "data_requested", "waiting_user"],
+  ["waiting_user", "approved", "resolved"],
+  ["waiting_user", "rejected", "denied"],
   ["waiting_user", "user_document_forwarded", "sent"],
   ["denied", "insistence_sent", "sent"],
   ["denied", "escalate", "escalated"],
-  ["escalated", "operator_replied", "reply_received"],
+  ["escalated", "operator_replied", "escalated"],
+  ["escalated", "acknowledged", "escalated"],
+  ["escalated", "approved", "resolved"],
   ["draft", "close", "closed"],
   ["waiting_period", "close", "closed"],
   ["sent", "close", "closed"],
@@ -48,6 +57,13 @@ const forbidden: [CaseStatus, CaseTransitionEvent][] = [
   ["resolved", "operator_replied"],
   ["resolved", "escalate"],
   ["escalated", "insistence_sent"],
+  ["escalated", "rejected"], // already escalated: never a second insistence or escalation; team queue
+  ["escalated", "data_requested"], // team queue
+  ["escalated", "escalate"],
+  ["sent", "acknowledged"], // a category applies only after operator_replied recorded the reply
+  ["sent", "rejected"],
+  ["denied", "operator_replied"], // a reply before the insistence: team queue
+  ["draft", "operator_replied"],
   ["closed", "close"], // closed is terminal
   ["closed", "operator_replied"],
   ["closed", "eligible"],
@@ -60,6 +76,31 @@ describe("claims state machine: transition(status, event)", () => {
 
   it.each(forbidden)("%s --%s--> throws", (from, event) => {
     expect(() => transition(from, event)).toThrow(InvalidTransitionError);
+  });
+
+  // A reply (C4: operator_replied) then its category (C6), applied in order to the real state.
+  const run = (from: CaseStatus, events: CaseTransitionEvent[]) =>
+    events.reduce<CaseStatus>((status, event) => transition(status, event), from);
+
+  it.each<[CaseStatus, CaseTransitionEvent[], CaseStatus]>([
+    ["sent", ["operator_replied", "acknowledged"], "reply_received"],
+    ["waiting_user", ["operator_replied", "acknowledged"], "waiting_user"],
+    [
+      "waiting_user",
+      ["operator_replied", "acknowledged", "user_document_forwarded"],
+      "sent", // the pending document request survived the acknowledgement
+    ],
+    ["escalated", ["operator_replied", "acknowledged"], "escalated"],
+    ["escalated", ["operator_replied", "approved"], "resolved"],
+    ["sent", ["operator_replied", "rejected", "insistence_sent"], "sent"],
+  ])("sequence from %s: %j → %s", (from, events, to) => {
+    expect(run(from, events)).toBe(to);
+  });
+
+  it("an acknowledgement never resumes the schedule (no move back to sent)", () => {
+    for (const from of CaseStatus.options) {
+      expect(ALLOWED_TRANSITIONS[from].acknowledged, from).not.toBe("sent");
+    }
   });
 
   it("the exported table is exactly the allowed list", () => {
