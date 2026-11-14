@@ -1,6 +1,9 @@
 // Actions per reply category (docs/plans/C-claims.md C6, ARCHITECTURE §5–§7).
-// Internal to domain C: C4 (inbound) calls applyReplyCategory after recording the operator's
-// message and applying `operator_replied`; the user's document reply calls forwardUserDocument.
+// Internal to domain C:
+// - C4 (inbound) calls applyReplyCategory after recording the operator's message and applying
+//   `operator_replied`;
+// - the user's document reply calls forwardUserDocument;
+// - C3's sender calls purgeForwardedDocuments after it sends a forwarded document.
 // The category → action table is the pure planReplyAction; every write is one plpgsql function
 // (migration *_claims_reply_actions.sql), so the state change, its events and the outbox rows
 // land together or not at all. Mail is only queued; the transport (C3) sends it.
@@ -19,7 +22,7 @@ import type { Json } from "@/shared/supabase";
 import { createServiceClient, type ServiceClient } from "@/shared/supabase/server";
 import { DEFAULT_NOTICE_FROM } from "./create-case";
 import { InvalidTransitionError, transition, type CaseTransitionEvent } from "./state-machine";
-import { MAX_SENDS_PER_CASE, stageWindow } from "./timers";
+import { MAX_SENDS_PER_CASE, madridDate, stageWindow } from "./timers";
 
 /**
  * send_count goes up when an operator mail is queued, and the last slot is reserved for the d45
@@ -34,7 +37,7 @@ export function replyMailFits(sendCount: number): boolean {
 export const ESCALATION_DAY =
   stageWindow("escalation_d45", new Date(0)).start.getTime() / 86_400_000; // 45
 
-/** Private bucket of the documents users send for their case (deleted once forwarded). */
+/** Private bucket of the documents users send for their case (deleted once their mail is sent). */
 export const USER_DOCUMENTS_BUCKET = "claims-user-documents";
 
 /** Sender of the operator mails until the real mailbox exists (C3 rewrites it). */
@@ -42,7 +45,13 @@ export const OPERATOR_MAIL_FROM = "reclamaciones@retren.invalid";
 
 /** Why a reply landed in the team queue (C9 lists them). Codes only, no personal data. */
 export type TeamQueueReason =
-  "refers_to_form" | "other" | "invalid_transition" | "send_cap" | "operator_not_emailable";
+  | "refers_to_form"
+  | "other"
+  | "invalid_transition"
+  | "send_cap"
+  | "operator_not_emailable"
+  | "render_failed"
+  | "retry_exhausted";
 
 export type ReplyActionKind =
   "wait" | "request_document" | "resolve" | "insist" | "close" | "await_escalation" | "team_queue";
@@ -63,6 +72,8 @@ export interface ReplyPlan {
   /** The one operator mail a reply can trigger. */
   operatorMail?: "insistence_after_denial";
   teamQueue?: TeamQueueReason;
+  /** When the tick (C7) next looks at the case: an ISO instant, null for never; absent: kept. */
+  nextActionAt?: string | null;
 }
 
 /** What the table needs to know about the case when the reply is applied. */
@@ -108,19 +119,23 @@ function planned(
   ctx: ReplyActionContext,
   action: ReplyActionKind,
   events: CaseTransitionEvent[],
-  extra: Pick<ReplyPlan, "notice" | "operatorMail"> = {},
+  extra: Pick<ReplyPlan, "notice" | "operatorMail" | "teamQueue" | "nextActionAt"> = {},
 ): ReplyPlan {
   const steps = chain(ctx.status, events);
   if (!steps) return teamQueue(ctx.status, "invalid_transition");
   return { action, status: steps[steps.length - 1].to, steps, ...extra };
 }
 
-/** The d45 escalation is due and still to come (the tick sends it, C7). */
-function escalationDue(ctx: ReplyActionContext): boolean {
-  // The escalation may use the last slot (C7: sent while send_count < MAX_SENDS_PER_CASE).
-  if (!ctx.sentAt || ctx.escalationFired || ctx.sendCount >= MAX_SENDS_PER_CASE) return false;
+/**
+ * When the d45 escalation (sent by the tick, C7) can still happen for a denied case: the start
+ * of its window, or now if the window is already open. Null when it can't: no send date, it
+ * already fired, no slot left (it may use the last one), or the 3 months are over.
+ */
+export function escalationLookAt(ctx: ReplyActionContext): string | null {
+  if (!ctx.sentAt || ctx.escalationFired || ctx.sendCount >= MAX_SENDS_PER_CASE) return null;
   const { start, end } = stageWindow("escalation_d45", ctx.sentAt);
-  return ctx.now >= start && ctx.now < end;
+  if (ctx.now >= end) return null;
+  return (ctx.now > start ? ctx.now : start).toISOString();
 }
 
 /**
@@ -131,9 +146,11 @@ function escalationDue(ctx: ReplyActionContext): boolean {
  * - acknowledgement → wait (the state transition() gives);
  * - asks_for_data → waiting_user, and our document request to the user;
  * - approved → resolved, and the final result asking the user to confirm receipt;
- * - denied → the first time, one insistence to the operator (back to `sent`); after it, closed
- *   with the final result to the user, unless the d45 escalation is due: then the case is left
- *   `denied` for the tick to escalate;
+ * - denied, the first time → one insistence to the operator (back to `sent`). When it can't be
+ *   sent (no slot below the one kept for d45, or no verified operator address) the case still
+ *   moves to `denied`, so the d45 escalation still comes, and the reply goes to the team queue;
+ * - denied after the insistence → left `denied` until the d45 window opens (C7 escalates; C10
+ *   path 2). Closed, with the final result to the user, only when the escalation can't happen;
  * - refers_to_form, other → the team queue.
  */
 export function planReplyAction(ctx: ReplyActionContext): ReplyPlan {
@@ -145,18 +162,31 @@ export function planReplyAction(ctx: ReplyActionContext): ReplyPlan {
         notice: "user_request_document",
       });
     case "approved":
-      return planned(ctx, "resolve", ["approved"], { notice: "user_final_result" });
+      return planned(ctx, "resolve", ["approved"], {
+        notice: "user_final_result",
+        nextActionAt: null,
+      });
     case "denied": {
       if (!chain(ctx.status, ["rejected"])) return teamQueue(ctx.status, "invalid_transition");
+      const lookAt = escalationLookAt(ctx);
+      const deniedFor = (reason: TeamQueueReason) =>
+        planned(ctx, "team_queue", ["rejected"], {
+          teamQueue: reason,
+          ...(lookAt && { nextActionAt: lookAt }),
+        });
       if (ctx.insistences === 0) {
-        if (!ctx.operatorReachable) return teamQueue(ctx.status, "operator_not_emailable");
-        if (!replyMailFits(ctx.sendCount)) return teamQueue(ctx.status, "send_cap");
+        if (!ctx.operatorReachable) return deniedFor("operator_not_emailable");
+        if (!replyMailFits(ctx.sendCount)) return deniedFor("send_cap");
         return planned(ctx, "insist", ["rejected", "insistence_sent"], {
           operatorMail: "insistence_after_denial",
+          nextActionAt: ctx.now.toISOString(),
         });
       }
-      if (escalationDue(ctx)) return planned(ctx, "await_escalation", ["rejected"]);
-      return planned(ctx, "close", ["rejected", "close"], { notice: "user_final_result" });
+      if (lookAt) return planned(ctx, "await_escalation", ["rejected"], { nextActionAt: lookAt });
+      return planned(ctx, "close", ["rejected", "close"], {
+        notice: "user_final_result",
+        nextActionAt: null,
+      });
     }
     case "refers_to_form":
       return teamQueue(ctx.status, "refers_to_form");
@@ -175,7 +205,8 @@ export class RecipientRefusedError extends Error {
 
 /**
  * The operator's verified address (README §4, recipient allowlist): an active operator with an
- * email channel. A `to` that isn't exactly that address is refused.
+ * email channel. A `to` that isn't exactly that address is refused. The database also refuses any
+ * address other than the one the case's claim went to (RT403).
  */
 export function operatorRecipient(config: OperatorPublicConfig, to?: string): string {
   if (!config.active) throw new RecipientRefusedError(`operator ${config.id} is not active`);
@@ -195,6 +226,8 @@ export interface ActionDeps {
   clock?: Clock;
   /** B's operator configs; injectable for tests. */
   getOperatorConfig?: (id: OperatorId) => OperatorPublicConfig;
+  /** B's renderTemplate; injectable so tests can see the variables or force a failure. */
+  render?: typeof renderTemplate;
   /** From address of user notices; defaults to MAIL_FROM, then DEFAULT_NOTICE_FROM. */
   noticeFrom?: string;
 }
@@ -223,6 +256,8 @@ const CASE_COLUMNS =
 
 /** The case changed between reading and writing (40001), or a concurrent insistence won (23505). */
 const RETRYABLE = new Set(["40001", "23505"]);
+/** The recipient isn't the address the case's claim went to. */
+const RECIPIENT_REFUSED = "RT403";
 const MAX_ATTEMPTS = 4;
 
 class ActionDbError extends Error {
@@ -245,27 +280,51 @@ async function readCase(db: ServiceClient, caseId: string): Promise<CaseRow> {
   return data as CaseRow;
 }
 
-/** "Nombre Apellido" from the stored submission, for the template signature and greeting. */
-function passengerName(submission: Json): string | undefined {
-  const t = (submission as { ticket?: { firstName?: unknown; lastName?: unknown } } | null)?.ticket;
-  const parts = [t?.firstName, t?.lastName].filter((p): p is string => typeof p === "string");
-  return parts.length ? parts.join(" ") : undefined;
-}
-
 /**
- * Our template, filled only with case data we hold. Nothing from the operator's mail goes in
- * (no text, link or phone number: social-engineering guard, tracker #26).
+ * The template variables the case itself provides: the reference, the passenger, the document
+ * (ARCHITECTURE §5: the body includes the document number), the trip and the operator. Only
+ * values we hold; nothing from the operator's mail (no text, link or phone number: the
+ * social-engineering guard, tracker #26).
  */
-function render(kind: TemplateKind, row: CaseRow, vars: Record<string, string> = {}) {
-  const name = passengerName(row.submission);
-  return renderTemplate(kind, OperatorId.parse(row.operator), {
+function caseVars(
+  row: CaseRow,
+  config: OperatorPublicConfig,
+): Record<string, string> & {
+  ref: string;
+} {
+  const s = (row.submission ?? {}) as {
+    ticket?: Record<string, unknown>;
+    answers?: Record<string, unknown>;
+  };
+  const t = s.ticket ?? {};
+  const a = s.answers ?? {};
+  const str = (v: unknown) => (typeof v === "string" && v.length > 0 ? v : undefined);
+  const name = [str(t.firstName), str(t.lastName)].filter(Boolean).join(" ");
+  const vars: Record<string, string | undefined> = {
+    passengerName: name || undefined,
+    documentType: str(a.documentType),
+    documentNumber: str(a.documentNumber),
+    travelDate: str(t.travelDate),
+    origin: str(t.origin),
+    destination: str(t.destination),
+    bookingRef: str(t.bookingRef),
+    trainNumber: str(t.trainNumber),
+    operatorName: config.displayName,
+    sentDate: row.sent_at ? madridDate(row.sent_at) : undefined,
+  };
+  return {
     ref: row.public_ref,
-    ...(name && { passengerName: name }),
-    ...vars,
-  });
+    ...(Object.fromEntries(Object.entries(vars).filter(([, v]) => v !== undefined)) as Record<
+      string,
+      string
+    >),
+  };
 }
 
-const NOTICE_VARS: Record<NonNullable<ReplyPlan["notice"]>, (a: ReplyActionKind) => object> = {
+const NOTICE_VARS: Record<
+  NonNullable<ReplyPlan["notice"]>,
+  (a: ReplyActionKind) => Record<string, string>
+> = {
   user_request_document: () => ({}),
   user_final_result: (a) =>
     a === "resolve" ? { result: "approved", confirmReceipt: "yes" } : { result: "denied" },
@@ -273,8 +332,9 @@ const NOTICE_VARS: Record<NonNullable<ReplyPlan["notice"]>, (a: ReplyActionKind)
 
 /**
  * Applies an operator reply's category to its case. `messageId` is the inbound message C4
- * recorded (it gets the category). Never fails because of the reply: anything the table can't
- * act on goes to the team queue. Retries when the case changed under it (another reply or a tick).
+ * recorded (it gets the category). Never fails because of the reply: anything the table can't act
+ * on, a template that can't be rendered, or a case that keeps changing under it goes to the team
+ * queue. It re-plans when the case changed (another reply or a tick).
  */
 export async function applyReplyCategory(
   input: { caseId: string; messageId: string; category: ReplyCategory },
@@ -283,6 +343,7 @@ export async function applyReplyCategory(
   const db = deps.db ?? createServiceClient();
   const now = (deps.clock ?? systemClock).now();
   const configOf = deps.getOperatorConfig ?? rulesOperatorConfig;
+  const render = deps.render ?? renderTemplate;
   const noticeFrom = deps.noticeFrom ?? process.env.MAIL_FROM ?? DEFAULT_NOTICE_FROM;
 
   const inbound = await db
@@ -293,7 +354,10 @@ export async function applyReplyCategory(
     .single();
   if (inbound.error) throw dbError("read reply", inbound.error);
 
-  for (let attempt = 1; ; attempt++) {
+  // Set when the database refused the operator address: re-planned as unreachable.
+  let recipientRefused = false;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const row = await readCase(db, input.caseId);
     const { data: events, error } = await db
       .from("case_events")
@@ -309,56 +373,61 @@ export async function applyReplyCategory(
     const config = configOf(OperatorId.parse(row.operator));
     let operatorAddress: string | null = null;
     try {
-      operatorAddress = operatorRecipient(config);
+      if (config.id === row.operator) operatorAddress = operatorRecipient(config);
     } catch (e) {
       if (!(e instanceof RecipientRefusedError)) throw e;
     }
 
-    const plan = planReplyAction({
+    let plan = planReplyAction({
       status: row.status,
       category: input.category,
       insistences: has("reply_action", "event", "insistence_sent"),
       sendCount: row.send_count,
       sentAt: row.sent_at,
       escalationFired: has("timer_action", "action", "escalation_d45") > 0,
-      operatorReachable: operatorAddress !== null,
+      operatorReachable: operatorAddress !== null && !recipientRefused,
       now,
     });
 
     const outbox: Record<string, unknown>[] = [];
-    if (plan.notice) {
-      const r = render(plan.notice, row, NOTICE_VARS[plan.notice](plan.action) as never);
-      outbox.push({
-        audience: "user",
-        template: plan.notice,
-        from: noticeFrom,
-        to: row.user_email,
-        subject: r.subject,
-        body_text: r.text,
-      });
-    }
-    if (plan.operatorMail) {
-      const r = render(plan.operatorMail, row);
-      outbox.push({
-        audience: "operator",
-        template: plan.operatorMail,
-        from: OPERATOR_MAIL_FROM,
-        to: operatorRecipient(config, operatorAddress ?? undefined),
-        subject: r.subject,
-        body_text: r.text,
-        ...(inbound.data.message_id && { in_reply_to: inbound.data.message_id }),
-      });
+    try {
+      const vars = caseVars(row, config);
+      const operator = OperatorId.parse(row.operator);
+      if (plan.notice) {
+        const r = render(plan.notice, operator, {
+          ...vars,
+          ...NOTICE_VARS[plan.notice](plan.action),
+        });
+        outbox.push({
+          audience: "user",
+          template: plan.notice,
+          from: noticeFrom,
+          to: row.user_email,
+          subject: r.subject,
+          body_text: r.text,
+        });
+      }
+      if (plan.operatorMail && operatorAddress) {
+        const r = render(plan.operatorMail, operator, vars);
+        outbox.push({
+          audience: "operator",
+          template: plan.operatorMail,
+          from: OPERATOR_MAIL_FROM,
+          to: operatorAddress,
+          subject: r.subject,
+          body_text: r.text,
+          ...(inbound.data.message_id && { in_reply_to: inbound.data.message_id }),
+        });
+      }
+    } catch {
+      // A template that can't be rendered (B6 throws on a missing variable) changes nothing.
+      plan = teamQueue(row.status, "render_failed");
+      outbox.length = 0;
     }
 
     const payload: Record<string, unknown> = { steps: plan.steps, outbox };
     if (plan.teamQueue) payload.team_queue_reason = plan.teamQueue;
-    // The tick (C7) recomputes the schedule of a case back in `sent` or left for the escalation;
-    // a finished case has nothing more to do.
-    if (plan.action === "insist" || plan.action === "await_escalation") {
-      payload.next_action_at = now.toISOString();
-    } else if (plan.status === "resolved" || plan.status === "closed") {
-      payload.next_action_at = null;
-    }
+    if (plan.nextActionAt !== undefined) payload.next_action_at = plan.nextActionAt;
 
     const applied = await db.rpc("claims_apply_reply_action", {
       p_case_id: row.id,
@@ -369,7 +438,11 @@ export async function applyReplyCategory(
       p_plan: payload as Json,
     });
     if (applied.error) {
-      if (RETRYABLE.has(applied.error.code ?? "") && attempt < MAX_ATTEMPTS) continue;
+      if (applied.error.code === RECIPIENT_REFUSED) {
+        recipientRefused = true;
+        continue;
+      }
+      if (RETRYABLE.has(applied.error.code ?? "")) continue;
       throw dbError("claims_apply_reply_action", applied.error);
     }
     const out = applied.data as { status: CaseStatus; message_ids: string[] };
@@ -380,6 +453,17 @@ export async function applyReplyCategory(
       messageIds: out.message_ids,
     };
   }
+
+  // The case kept changing under us: the team looks at the reply, the case is left as it is.
+  const queued = await db.rpc("claims_queue_for_team", {
+    p_case_id: input.caseId,
+    p_message_id: input.messageId,
+    p_category: input.category,
+    p_reason: "retry_exhausted",
+  });
+  if (queued.error) throw dbError("claims_queue_for_team", queued.error);
+  const row = await readCase(db, input.caseId);
+  return { action: "team_queue", status: row.status, teamQueue: "retry_exhausted", messageIds: [] };
 }
 
 export type ForwardResult =
@@ -393,15 +477,13 @@ export type ForwardResult =
 
 /**
  * Forwards the document the user sent (ARCHITECTURE §7.1) to the operator's verified address
- * only, moving the case waiting_user → sent, then deletes the file from storage and marks the
- * attachment deleted. Throws RecipientRefusedError (nothing written) when the operator has no
- * verified email, and InvalidTransitionError when the case isn't waiting on the user. With no
- * operator slot left (replyMailFits), nothing is sent: a `team_queue` event (`send_cap`) is
- * recorded and the document is kept.
+ * only, moving the case waiting_user → sent, threaded under the operator's request for it. The
+ * document is kept: the sender (C3) attaches it, then calls purgeForwardedDocuments.
  *
- * TODO(C3): the mail is only queued here, so the sender must not need the file afterwards. Until
- * C3 decides how the transport carries it (send synchronously before the delete, or delete after
- * sending), the outbox row links the attachment row, whose file is gone.
+ * Throws RecipientRefusedError (nothing written) when the operator has no verified email, the
+ * address isn't the one the claim went to, or no claim went out yet; InvalidTransitionError when
+ * the case isn't waiting on the user. With no operator slot left (replyMailFits) nothing is
+ * queued: one `team_queue` item (`send_cap`) is recorded, however often this is called.
  */
 export async function forwardUserDocument(
   input: { caseId: string; attachmentId: string },
@@ -410,6 +492,7 @@ export async function forwardUserDocument(
   const db = deps.db ?? createServiceClient();
   const now = (deps.clock ?? systemClock).now();
   const configOf = deps.getOperatorConfig ?? rulesOperatorConfig;
+  const render = deps.render ?? renderTemplate;
 
   for (let attempt = 1; ; attempt++) {
     const row = await readCase(db, input.caseId);
@@ -421,35 +504,21 @@ export async function forwardUserDocument(
     const to = operatorRecipient(config);
     const status = transition(row.status, "user_document_forwarded");
 
-    if (!replyMailFits(row.send_count)) {
-      const { error } = await db.from("case_events").insert({
-        case_id: row.id,
-        kind: "team_queue",
-        data: { reason: "send_cap", attachment_id: input.attachmentId },
-      });
-      if (error) throw dbError("record team queue", error);
-      return { status: row.status, teamQueue: "send_cap" };
-    }
-
-    const att = await db
-      .from("attachments")
-      .select("storage_path")
-      .eq("id", input.attachmentId)
-      .eq("case_id", row.id)
-      .single();
-    if (att.error) throw dbError("read attachment", att.error);
-
-    const { data: lastReply } = await db
+    // Thread under the operator's own request: its latest mail from the verified address, or one
+    // classified as asking for data. Never under a mail from anyone else.
+    const { data: parent, error: parentError } = await db
       .from("messages")
       .select("message_id")
       .eq("case_id", row.id)
       .eq("direction", "inbound")
       .not("message_id", "is", null)
+      .or(`from_address.eq."${to}",category.eq.asks_for_data`)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
+    if (parentError) throw dbError("read the operator request", parentError);
 
-    const r = render("reply_asks_for_data", row);
+    const r = render("reply_asks_for_data", operator, caseVars(row, config));
     const queued = await db.rpc("claims_forward_user_document", {
       p_case_id: row.id,
       p_attachment_id: input.attachmentId,
@@ -459,22 +528,54 @@ export async function forwardUserDocument(
         to,
         subject: r.subject,
         body_text: r.text,
-        ...(lastReply?.message_id && { in_reply_to: lastReply.message_id }),
+        ...(parent?.message_id && { in_reply_to: parent.message_id }),
       },
       p_next_action_at: now.toISOString(),
     });
     if (queued.error) {
       if (queued.error.code === "40001" && attempt < MAX_ATTEMPTS) continue;
+      if (queued.error.code === RECIPIENT_REFUSED) {
+        throw new RecipientRefusedError("not the address the claim went to");
+      }
       throw dbError("claims_forward_user_document", queued.error);
     }
-
-    const removed = await db.storage.from(USER_DOCUMENTS_BUCKET).remove([att.data.storage_path]);
-    if (removed.error) throw dbError("delete user document", removed.error);
-    const marked = await db.rpc("claims_mark_user_document_deleted", {
-      p_attachment_id: input.attachmentId,
-    });
-    if (marked.error) throw dbError("claims_mark_user_document_deleted", marked.error);
-
-    return { status, messageId: queued.data };
+    const out = queued.data as { message_id?: string; team_queue?: "send_cap" };
+    if (out.team_queue) return { status: row.status, teamQueue: out.team_queue };
+    return { status, messageId: out.message_id! };
   }
+}
+
+/**
+ * Deletes from storage the user documents a forwarded mail carried, once that mail is `sent`
+ * (C3's sender calls this after a successful send), and marks them deleted with one
+ * `user_document_deleted` event. Returns false, keeping the files, while the mail is queued or
+ * failed. Idempotent: purging again removes nothing more and records nothing more.
+ */
+export async function purgeForwardedDocuments(
+  messageId: string,
+  deps: Pick<ActionDeps, "db"> = {},
+): Promise<boolean> {
+  const db = deps.db ?? createServiceClient();
+  const msg = await db.from("messages").select("status, direction").eq("id", messageId).single();
+  if (msg.error) throw dbError("read message", msg.error);
+  if (msg.data.direction !== "outbound" || msg.data.status !== "sent") return false;
+
+  const docs = await db
+    .from("attachments")
+    .select("storage_path")
+    .eq("message_id", messageId)
+    .eq("kind", "user_document")
+    .is("deleted_at", null);
+  if (docs.error) throw dbError("read documents", docs.error);
+  if (docs.data.length) {
+    const removed = await db.storage
+      .from(USER_DOCUMENTS_BUCKET)
+      .remove(docs.data.map((d) => d.storage_path));
+    if (removed.error) throw dbError("delete user documents", removed.error);
+  }
+  const marked = await db.rpc("claims_mark_forwarded_documents_deleted", {
+    p_message_id: messageId,
+  });
+  if (marked.error) throw dbError("claims_mark_forwarded_documents_deleted", marked.error);
+  return true;
 }

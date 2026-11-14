@@ -7,6 +7,10 @@
 -- the action was planned from, and enforce the rules that must hold whatever the caller sends.
 -- Server only, like the tables: the API roles can't execute any of them. Additive: new functions,
 -- one partial index and one private storage bucket; nothing existing changes.
+--
+-- Error codes: 40001 the case changed since it was read (the caller re-reads and re-plans);
+-- 23505 a second insistence; RT403 a recipient that isn't the case's operator address;
+-- 22023 a plan that breaks any other rule; P0002 an unknown case.
 
 -- Only one insistence after a denial, ever (ARCHITECTURE §6). The functions check it too; the
 -- index makes two concurrent denials unable to both record one.
@@ -16,7 +20,7 @@ create unique index case_events_insistence_once
 
 -- The documents a user sends when the operator asks for something only they have (IBAN, bank
 -- certificate, ID copy, ARCHITECTURE §7.1). Private, and no storage policy names it: only the
--- service role (which bypasses RLS) reads or writes it. Each file is deleted once forwarded.
+-- service role (which bypasses RLS) reads or writes it. Each file is deleted once its mail is sent.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
   'claims-user-documents', 'claims-user-documents', false, 10485760,
@@ -35,17 +39,32 @@ immutable
 set search_path = ''
 as $$ select 6 $$;
 
+-- The operator address of a case: where its first operator mail (the initial claim, C3) went.
+-- Null until that mail exists. Any later operator mail must go to this same address.
+create function public.claims_case_operator_address(p_case_id uuid)
+returns text
+language sql
+stable
+set search_path = ''
+as $$
+  select m.to_address
+  from public.messages m
+  join public.cases c on c.id = m.case_id
+  where m.case_id = p_case_id and m.direction = 'outbound' and m.to_address <> c.user_email
+  order by m.created_at, m.id
+  limit 1
+$$;
+
 -- Applies the action planned for one operator reply (`p_message_id`, an inbound message of the
 -- case, gets `p_category`). p_plan:
 --   steps:             [{event, from, to}] state-machine moves, chained from p_expected_status;
---   team_queue_reason: a reason code; then there are no steps and no mails;
+--   team_queue_reason: a reason code for the team queue (C9); it may come with steps (a denial
+--                      that can't be answered still moves the case to denied) but never with mail;
 --   outbox:            [{audience: user | operator, template, from, to, subject, body_text,
 --                       in_reply_to?}];
 --   next_action_at:    present → set to this value (null clears it); absent → kept.
--- Raises 40001 when the case changed since it was read (the caller re-reads and re-plans),
--- 23505 for a second insistence, 22023 for a plan that breaks a rule. Event data holds ids and
--- codes only, no personal data; events get clock_timestamp() so their order is the order they
--- happened in. Returns {status, message_ids}.
+-- Event data holds ids and codes only, no personal data; events get clock_timestamp() so their
+-- order is the order they happened in. Returns {status, message_ids}.
 create function public.claims_apply_reply_action(
   p_case_id uuid,
   p_message_id uuid,
@@ -92,8 +111,8 @@ begin
     raise exception 'steps and outbox must be arrays' using errcode = '22023';
   end if;
   if v_reason is not null then
-    if jsonb_array_length(v_steps) > 0 or jsonb_array_length(v_outbox) > 0 then
-      raise exception 'a team queue item changes nothing else' using errcode = '22023';
+    if jsonb_array_length(v_outbox) > 0 then
+      raise exception 'a team queue item queues no mail' using errcode = '22023';
     end if;
   elsif jsonb_array_length(v_steps) = 0 then
     raise exception 'an action needs at least one step or a team queue reason' using errcode = '22023';
@@ -145,9 +164,14 @@ begin
         raise exception 'a notice must go to the case user' using errcode = '22023';
       end if;
     elsif v_mail ->> 'audience' = 'operator' then
-      -- The only operator mail a reply triggers is the one insistence after a denial.
+      -- The only operator mail a reply triggers is the one insistence after a denial, to the
+      -- address the claim went to.
       if v_template is distinct from 'insistence_after_denial' or not v_insisted then
         raise exception 'operator mail % is not allowed here', v_template using errcode = '22023';
+      end if;
+      if v_mail ->> 'to' is distinct from public.claims_case_operator_address(p_case_id) then
+        raise exception 'the recipient is not the operator address of case %', p_case_id
+          using errcode = 'RT403';
       end if;
       v_send_count := v_send_count + 1;
       if v_send_count > public.claims_max_sends_per_case() - 1 then
@@ -195,12 +219,57 @@ begin
 end;
 $$;
 
+-- Puts a reply in the team queue without touching the case (the fallback when an action can't be
+-- applied: retries ran out). Idempotent: the same reason for the same reply is recorded once.
+-- Returns true when it recorded the item.
+create function public.claims_queue_for_team(
+  p_case_id uuid,
+  p_message_id uuid,
+  p_category public.reply_category,
+  p_reason text
+)
+returns boolean
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_data jsonb;
+begin
+  perform 1 from public.cases where id = p_case_id for update;
+  if not found then
+    raise exception 'case % not found', p_case_id using errcode = 'P0002';
+  end if;
+  perform 1 from public.messages
+  where id = p_message_id and case_id = p_case_id and direction = 'inbound';
+  if not found then
+    raise exception 'message % is not an inbound message of the case', p_message_id
+      using errcode = '22023';
+  end if;
+  if p_reason is null or length(p_reason) = 0 then
+    raise exception 'a team queue item needs a reason' using errcode = '22023';
+  end if;
+
+  v_data := jsonb_build_object('reason', p_reason, 'category', p_category, 'message_id', p_message_id);
+  if exists (
+    select 1 from public.case_events
+    where case_id = p_case_id and kind = 'team_queue' and data @> v_data
+  ) then
+    return false;
+  end if;
+  insert into public.case_events (case_id, kind, data, created_at)
+  values (p_case_id, 'team_queue', v_data, clock_timestamp());
+  update public.messages set category = p_category where id = p_message_id;
+  return true;
+end;
+$$;
+
 -- Queues the user's document to the operator (ARCHITECTURE §7.1) and moves the case
--- waiting_user → sent. p_mail: {from, to, subject, body_text, in_reply_to?}; the caller resolves
--- `to` from the operator config and refuses any other address. The attachment is linked to the
--- queued message. Raises 40001 when the case changed since it was read, 22023 when the case isn't
--- waiting on the user, the attachment isn't an unsent user document of the case, or the send cap
--- is reached. Returns the queued message id.
+-- waiting_user → sent. p_mail: {from, to, subject, body_text, in_reply_to?}; `to` must be the
+-- address the claim went to (RT403 otherwise, and when no claim went out yet). The attachment is
+-- linked to the queued message and kept: purgeForwardedDocuments deletes it once the mail is sent.
+-- With no slot left below the one reserved for d45, nothing is queued: the case goes to the team
+-- queue (`send_cap`, once per attachment). Returns {message_id} or {team_queue: 'send_cap'}.
 create function public.claims_forward_user_document(
   p_case_id uuid,
   p_attachment_id uuid,
@@ -208,7 +277,7 @@ create function public.claims_forward_user_document(
   p_mail jsonb,
   p_next_action_at timestamptz
 )
-returns uuid
+returns jsonb
 language plpgsql
 security invoker
 set search_path = ''
@@ -217,6 +286,7 @@ declare
   v_case public.cases%rowtype;
   v_attachment public.attachments%rowtype;
   v_message uuid;
+  v_data jsonb;
 begin
   select * into v_case from public.cases where id = p_case_id for update;
   if not found then
@@ -228,9 +298,6 @@ begin
   if v_case.send_count <> p_expected_send_count then
     raise exception 'case % changed since it was read', p_case_id using errcode = '40001';
   end if;
-  if v_case.send_count + 1 > public.claims_max_sends_per_case() - 1 then
-    raise exception 'case % reached the send cap', p_case_id using errcode = '22023';
-  end if;
 
   select * into v_attachment from public.attachments
   where id = p_attachment_id and case_id = p_case_id for update;
@@ -238,6 +305,23 @@ begin
     or v_attachment.message_id is not null then
     raise exception 'attachment % is not an unsent user document of the case', p_attachment_id
       using errcode = '22023';
+  end if;
+
+  if p_mail ->> 'to' is distinct from public.claims_case_operator_address(p_case_id) then
+    raise exception 'the recipient is not the operator address of case %', p_case_id
+      using errcode = 'RT403';
+  end if;
+
+  if v_case.send_count + 1 > public.claims_max_sends_per_case() - 1 then
+    v_data := jsonb_build_object('reason', 'send_cap', 'attachment_id', p_attachment_id);
+    if not exists (
+      select 1 from public.case_events
+      where case_id = p_case_id and kind = 'team_queue' and data @> v_data
+    ) then
+      insert into public.case_events (case_id, kind, data, created_at)
+      values (p_case_id, 'team_queue', v_data, clock_timestamp());
+    end if;
+    return jsonb_build_object('team_queue', 'send_cap');
   end if;
 
   insert into public.messages (
@@ -268,49 +352,69 @@ begin
     clock_timestamp()
   );
 
-  return v_message;
+  return jsonb_build_object('message_id', v_message);
 end;
 $$;
 
--- Records that a forwarded user document was deleted from storage. Only a document that was
--- forwarded (linked to a message) and not already deleted; returns false otherwise.
-create function public.claims_mark_user_document_deleted(p_attachment_id uuid)
-returns boolean
+-- Marks the user documents of a sent message deleted (their files were just removed from
+-- storage), with one `user_document_deleted` event. Only for an outbound message that is `sent`
+-- (22023 while it is queued or failed: the sender still needs the file). Idempotent: returns how
+-- many documents it marked, 0 when they already were.
+create function public.claims_mark_forwarded_documents_deleted(p_message_id uuid)
+returns integer
 language plpgsql
 security invoker
 set search_path = ''
 as $$
 declare
-  v_case uuid;
+  v_message public.messages%rowtype;
+  v_ids jsonb;
+  v_count integer;
 begin
-  update public.attachments
-  set deleted_at = now()
-  where id = p_attachment_id and kind = 'user_document' and message_id is not null
-    and deleted_at is null
-  returning case_id into v_case;
-  if v_case is null then
-    return false;
+  select * into v_message from public.messages where id = p_message_id for update;
+  if not found or v_message.direction <> 'outbound' or v_message.status <> 'sent' then
+    raise exception 'message % is not a sent outbound message', p_message_id using errcode = '22023';
   end if;
-  insert into public.case_events (case_id, kind, data, created_at)
-  values (v_case, 'user_document_deleted', jsonb_build_object('attachment_id', p_attachment_id),
-    clock_timestamp());
-  return true;
+
+  with marked as (
+    update public.attachments
+    set deleted_at = now()
+    where message_id = p_message_id and kind = 'user_document' and deleted_at is null
+    returning id
+  )
+  select coalesce(jsonb_agg(id order by id), '[]'::jsonb), count(*) into v_ids, v_count from marked;
+
+  if v_count > 0 then
+    insert into public.case_events (case_id, kind, data, created_at)
+    values (
+      v_message.case_id, 'user_document_deleted',
+      jsonb_build_object('message_id', p_message_id, 'attachment_ids', v_ids),
+      clock_timestamp()
+    );
+  end if;
+  return v_count;
 end;
 $$;
 
 revoke all on function public.claims_max_sends_per_case() from public, anon, authenticated;
+revoke all on function public.claims_case_operator_address(uuid) from public, anon, authenticated;
 revoke all on function public.claims_apply_reply_action(
   uuid, uuid, public.reply_category, public.case_status, integer, jsonb
 ) from public, anon, authenticated;
+revoke all on function public.claims_queue_for_team(uuid, uuid, public.reply_category, text)
+  from public, anon, authenticated;
 revoke all on function public.claims_forward_user_document(uuid, uuid, integer, jsonb, timestamptz)
   from public, anon, authenticated;
-revoke all on function public.claims_mark_user_document_deleted(uuid)
+revoke all on function public.claims_mark_forwarded_documents_deleted(uuid)
   from public, anon, authenticated;
 
 grant execute on function public.claims_max_sends_per_case() to service_role;
+grant execute on function public.claims_case_operator_address(uuid) to service_role;
 grant execute on function public.claims_apply_reply_action(
   uuid, uuid, public.reply_category, public.case_status, integer, jsonb
 ) to service_role;
+grant execute on function public.claims_queue_for_team(uuid, uuid, public.reply_category, text)
+  to service_role;
 grant execute on function public.claims_forward_user_document(uuid, uuid, integer, jsonb, timestamptz)
   to service_role;
-grant execute on function public.claims_mark_user_document_deleted(uuid) to service_role;
+grant execute on function public.claims_mark_forwarded_documents_deleted(uuid) to service_role;

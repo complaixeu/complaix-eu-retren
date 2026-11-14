@@ -4,9 +4,12 @@ import {
   applyReplyCategory,
   ESCALATION_DAY,
   forwardUserDocument,
+  purgeForwardedDocuments,
   RecipientRefusedError,
   USER_DOCUMENTS_BUCKET,
 } from "@/features/claims/actions";
+import { runTick } from "@/features/claims/tick";
+import { renderTemplate } from "@/features/documents";
 import { getOperatorConfig } from "@/features/rules";
 import { fixedClock } from "@/shared/clock";
 import type { CaseStatus, OperatorId, ReplyCategory } from "@/shared/contracts";
@@ -15,7 +18,8 @@ import { createServiceClient, type ServiceClient } from "@/shared/supabase/serve
 import { PII, submissionFixture } from "../../fixtures/claims/submission";
 
 // Actions per reply category against the local Supabase (plan C6): every path end to end on
-// the DB, the forwarded document deleted, only one insistence ever, and the operator-only rule.
+// the DB, the forwarded document kept until sent and then purged, only one insistence ever, and
+// the operator-only rule.
 const NOW = new Date("2030-03-01T10:00:00.000Z");
 const clock = fixedClock(NOW.toISOString());
 const DAY = 86_400_000;
@@ -49,25 +53,44 @@ type Seed = {
   sendCount?: number;
   sentAt?: string;
   insisted?: boolean;
+  /** The initial claim already went to the operator (default: yes). */
+  claimSent?: boolean;
 };
 
 async function seedCase(s: Seed): Promise<{ id: string; ref: string }> {
   const ref = `RTN-${randomUUID().slice(0, 8).toUpperCase()}`;
+  const operator = s.operator ?? "iryo";
+  const sentAt = s.sentAt ?? daysAgo(10);
   const { data, error } = await db
     .from("cases")
     .insert({
       public_ref: ref,
-      operator: s.operator ?? "iryo",
+      operator,
       status: s.status,
       submission: submissionFixture(90) as unknown as NonNullable<Json>,
       user_email: PII.email,
-      sent_at: s.sentAt ?? daysAgo(10),
+      sent_at: sentAt,
       next_action_at: daysAgo(1),
       send_count: s.sendCount ?? 1,
     })
     .select("id")
     .single();
   if (error) throw error;
+  if (s.claimSent ?? true) {
+    const ch = getOperatorConfig(operator).channel;
+    const { error: e } = await db.from("messages").insert({
+      case_id: data.id,
+      direction: "outbound",
+      from_address: "reclamaciones@retren.invalid",
+      to_address: ch.type === "email" ? ch.address : "claims@operator.example",
+      subject: `[${ref}] Reclamación`,
+      message_id: `<${randomUUID()}@retren.invalid>`,
+      status: "sent",
+      body_text: "initial claim",
+      created_at: sentAt,
+    });
+    if (e) throw e;
+  }
   if (s.insisted) {
     const { error: e } = await db.from("case_events").insert({
       case_id: data.id,
@@ -81,19 +104,24 @@ async function seedCase(s: Seed): Promise<{ id: string; ref: string }> {
   return { id: data.id, ref };
 }
 
-async function seedReply(caseId: string, ref: string): Promise<{ id: string; messageId: string }> {
+async function seedReply(
+  caseId: string,
+  ref: string,
+  over: { from?: string; category?: ReplyCategory } = {},
+): Promise<{ id: string; messageId: string }> {
   const messageId = `<${randomUUID()}@operator.example>`;
   const { data, error } = await db
     .from("messages")
     .insert({
       case_id: caseId,
       direction: "inbound",
-      from_address: OPERATOR_ADDRESS,
+      from_address: over.from ?? OPERATOR_ADDRESS,
       to_address: "reclamaciones@retren.invalid",
       subject: `Re: [${ref}] Reclamación`,
       message_id: messageId,
       status: "received",
       body_text: operatorBody,
+      ...(over.category && { category: over.category }),
     })
     .select("id")
     .single();
@@ -101,11 +129,17 @@ async function seedReply(caseId: string, ref: string): Promise<{ id: string; mes
   return { id: data.id, messageId };
 }
 
+/** The case, its events and its queued outbox (the seeded initial claim is `sent`). */
 async function stored(caseId: string) {
   const [c, events, messages] = await Promise.all([
     db.from("cases").select("*").eq("id", caseId).single(),
     db.from("case_events").select("*").eq("case_id", caseId).order("created_at"),
-    db.from("messages").select("*").eq("case_id", caseId).eq("direction", "outbound"),
+    db
+      .from("messages")
+      .select("*")
+      .eq("case_id", caseId)
+      .eq("direction", "outbound")
+      .eq("status", "queued"),
   ]);
   if (c.error || events.error || messages.error) throw c.error ?? events.error ?? messages.error;
   return { row: c.data, events: events.data, outbox: messages.data };
@@ -131,10 +165,17 @@ function expectOurNotice(mail: { to_address: string; subject: string; body_text:
   }
 }
 
-async function reply(seed: Seed, category: ReplyCategory) {
+async function reply(
+  seed: Seed,
+  category: ReplyCategory,
+  deps: Parameters<typeof applyReplyCategory>[1] = {},
+) {
   const c = await seedCase(seed);
   const m = await seedReply(c.id, c.ref);
-  const out = await applyReplyCategory({ caseId: c.id, messageId: m.id, category }, { db, clock });
+  const out = await applyReplyCategory(
+    { caseId: c.id, messageId: m.id, category },
+    { db, clock, ...deps },
+  );
   return { ...c, message: m, out, ...(await stored(c.id)) };
 }
 
@@ -176,6 +217,26 @@ describe("applyReplyCategory (local Supabase)", () => {
     ]);
   });
 
+  it("templates get the case's own data, never the operator's text", async () => {
+    const seen: Record<string, string>[] = [];
+    const render: typeof renderTemplate = (kind, operator, vars) => {
+      seen.push(vars);
+      return renderTemplate(kind, operator, vars);
+    };
+    await reply({ status: "reply_received" }, "denied", { render });
+    await reply({ status: "reply_received" }, "approved", { render });
+    expect(seen).toHaveLength(2);
+    for (const vars of seen) {
+      expect(vars).toMatchObject({
+        documentNumber: PII.documentNumber,
+        passengerName: `${PII.firstName} ${PII.lastName}`,
+      });
+      for (const v of Object.values(OPERATOR_TEXT)) {
+        expect(JSON.stringify(vars)).not.toContain(v);
+      }
+    }
+  });
+
   it("first denial: one insistence to the operator, threaded, counted, back to sent", async () => {
     const r = await reply({ status: "reply_received" }, "denied");
     expect(r.out).toMatchObject({ action: "insist", status: "sent" });
@@ -196,18 +257,55 @@ describe("applyReplyCategory (local Supabase)", () => {
     for (const e of r.events) noPersonalData(e.data);
   });
 
-  it("first denial at send_count = 5: the team queue (send_cap), the last slot is kept for d45", async () => {
+  it("first denial at send_count = 5: denied plus the team queue (send_cap), no mail", async () => {
     const r = await reply({ status: "reply_received", sendCount: 5 }, "denied");
-    expect(r.out).toMatchObject({ action: "team_queue", teamQueue: "send_cap" });
-    expect(r.row).toMatchObject({ status: "reply_received", send_count: 5 });
+    expect(r.out).toMatchObject({ action: "team_queue", teamQueue: "send_cap", status: "denied" });
+    expect(r.row).toMatchObject({ status: "denied", send_count: 5 });
     expect(r.outbox).toEqual([]);
-    expect(kinds(r.events)).toEqual([["team_queue", "send_cap"]]);
+    expect(kinds(r.events)).toEqual([
+      ["reply_action", "rejected"],
+      ["team_queue", "send_cap"],
+    ]);
   });
 
-  it("second denial before d45: closed, and the final result to the user", async () => {
+  it("a capped first denial on d42 still gets the d45 escalation from the tick", async () => {
+    const r = await reply(
+      { status: "reply_received", sendCount: 5, sentAt: daysAgo(42) },
+      "denied",
+    );
+    expect(r.row.status).toBe("denied");
+    const d45 = Date.parse(daysAgo(42)) + ESCALATION_DAY * DAY;
+    expect(Date.parse(r.row.next_action_at!)).toBe(d45);
+
+    const tick = await runTick(db, new Date(d45 + 3_600_000));
+    expect(tick.actions).toContainEqual({ caseId: r.id, action: "escalation_d45" });
+    const after = await stored(r.id);
+    expect(after.row).toMatchObject({ status: "escalated", send_count: 6 });
+    expect(after.outbox.map((m) => m.to_address)).toEqual([OPERATOR_ADDRESS]);
+  });
+
+  it("second denial before d45: left denied until the window opens, nothing queued", async () => {
     const r = await reply({ status: "reply_received", insisted: true, sendCount: 2 }, "denied");
+    expect(r.out).toMatchObject({ action: "await_escalation", status: "denied" });
+    expect(r.row).toMatchObject({ status: "denied", send_count: 2 });
+    expect(Date.parse(r.row.next_action_at!)).toBe(Date.parse(daysAgo(10)) + ESCALATION_DAY * DAY);
+    expect(r.outbox).toEqual([]);
+  });
+
+  it("second denial on d45: left denied, the tick looks now", async () => {
+    const r = await reply(
+      { status: "reply_received", insisted: true, sendCount: 2, sentAt: daysAgo(ESCALATION_DAY) },
+      "denied",
+    );
+    expect(r.out).toMatchObject({ action: "await_escalation", status: "denied" });
+    expect(Date.parse(r.row.next_action_at!)).toBe(NOW.getTime());
+    expect(r.outbox).toEqual([]);
+  });
+
+  it("second denial with no slot left for the escalation: closed, the final result", async () => {
+    const r = await reply({ status: "reply_received", insisted: true, sendCount: 6 }, "denied");
     expect(r.out).toMatchObject({ action: "close", status: "closed" });
-    expect(r.row).toMatchObject({ status: "closed", next_action_at: null, send_count: 2 });
+    expect(r.row).toMatchObject({ status: "closed", next_action_at: null, send_count: 6 });
     expect(r.outbox).toHaveLength(1);
     expectOurNotice(r.outbox[0]);
     expect(kinds(r.events).slice(1)).toEqual([
@@ -215,17 +313,6 @@ describe("applyReplyCategory (local Supabase)", () => {
       ["reply_action", "close"],
       ["user_notice_queued", "user_final_result"],
     ]);
-  });
-
-  it("second denial with the d45 escalation due: left denied for the tick, nothing queued", async () => {
-    const r = await reply(
-      { status: "reply_received", insisted: true, sendCount: 2, sentAt: daysAgo(ESCALATION_DAY) },
-      "denied",
-    );
-    expect(r.out).toMatchObject({ action: "await_escalation", status: "denied" });
-    expect(r.row.status).toBe("denied");
-    expect(Date.parse(r.row.next_action_at!)).toBe(NOW.getTime());
-    expect(r.outbox).toEqual([]);
   });
 
   it.each(["refers_to_form", "other"] as const)(
@@ -253,6 +340,48 @@ describe("applyReplyCategory (local Supabase)", () => {
     expect(kinds(r.events)).toEqual([["team_queue", "invalid_transition"]]);
   });
 
+  it("a template that fails to render: the team queue (render_failed), no change", async () => {
+    const render = () => {
+      throw new Error("missing variable");
+    };
+    const r = await reply({ status: "reply_received" }, "approved", { render });
+    expect(r.out).toMatchObject({ action: "team_queue", teamQueue: "render_failed" });
+    expect(r.row.status).toBe("reply_received");
+    expect(r.outbox).toEqual([]);
+    expect(kinds(r.events)).toEqual([["team_queue", "render_failed"]]);
+  });
+
+  it("retries run out: the team queue (retry_exhausted), never a failure", async () => {
+    const busy = new Proxy(db, {
+      get(target, prop, receiver) {
+        if (prop !== "rpc") return Reflect.get(target, prop, receiver);
+        return (fn: string, args?: object) =>
+          fn === "claims_apply_reply_action"
+            ? Promise.resolve({ data: null, error: { code: "40001", message: "changed" } })
+            : target.rpc(fn as never, args as never);
+      },
+    });
+    const r = await reply({ status: "reply_received" }, "approved", { db: busy });
+    expect(r.out).toMatchObject({ action: "team_queue", teamQueue: "retry_exhausted" });
+    expect(r.row.status).toBe("reply_received");
+    expect(kinds(r.events)).toEqual([["team_queue", "retry_exhausted"]]);
+  });
+
+  it("an insistence to an address other than the claim's: denied plus the team queue", async () => {
+    const spoofed = (id: OperatorId) => ({
+      ...getOperatorConfig(id),
+      channel: { type: "email" as const, address: OPERATOR_TEXT.address },
+    });
+    const r = await reply({ status: "reply_received" }, "denied", { getOperatorConfig: spoofed });
+    expect(r.out).toMatchObject({
+      action: "team_queue",
+      teamQueue: "operator_not_emailable",
+      status: "denied",
+    });
+    expect(r.outbox).toEqual([]);
+    expect(r.row.send_count).toBe(1);
+  });
+
   it("only one insistence ever, even for two concurrent denials", async () => {
     const c = await seedCase({ status: "reply_received" });
     const [a, b] = await Promise.all([seedReply(c.id, c.ref), seedReply(c.id, c.ref)]);
@@ -269,14 +398,14 @@ describe("applyReplyCategory (local Supabase)", () => {
       s.events.filter((e) => (e.data as { event?: string }).event === "insistence_sent"),
     ).toHaveLength(1);
 
-    // A later denial (after C4's operator_replied) never insists again.
+    // A later denial (after C4's operator_replied) never insists again: it waits for d45.
     await db.from("cases").update({ status: "reply_received" }).eq("id", c.id);
     const m3 = await seedReply(c.id, c.ref);
     const third = await applyReplyCategory(
       { caseId: c.id, messageId: m3.id, category: "denied" },
       { db, clock },
     );
-    expect(third.action).toBe("close");
+    expect(third.action).toBe("await_escalation");
     const after = await stored(c.id);
     expect(after.outbox.filter((m) => m.to_address === OPERATOR_ADDRESS)).toHaveLength(1);
   });
@@ -322,16 +451,28 @@ async function inStorage(path: string): Promise<boolean> {
   return data !== null;
 }
 
-describe("forwardUserDocument (local Supabase)", () => {
-  it("queues the document to the operator only, moves to sent, then deletes it", async () => {
+async function attachment(id: string) {
+  const { data, error } = await db.from("attachments").select("*").eq("id", id).single();
+  if (error) throw error;
+  return data;
+}
+
+const setMessageStatus = async (id: string, status: "queued" | "sent" | "failed") => {
+  const { error } = await db.from("messages").update({ status }).eq("id", id);
+  if (error) throw error;
+};
+
+describe("forwardUserDocument and purgeForwardedDocuments (local Supabase)", () => {
+  it("queues the document to the operator only and keeps it until the mail is sent", async () => {
     const c = await seedCase({ status: "waiting_user" });
-    await seedReply(c.id, c.ref);
+    const ask = await seedReply(c.id, c.ref, { category: "asks_for_data" });
+    // A later inbound mail from someone else must not become the thread parent.
+    await seedReply(c.id, c.ref, { from: "otro@remitente.example" });
     const doc = await seedDocument(c.id);
-    expect(await inStorage(doc.path)).toBe(true);
 
     const out = await forwardUserDocument({ caseId: c.id, attachmentId: doc.id }, { db, clock });
-    expect(out.status).toBe("sent");
     if (!("messageId" in out)) throw new Error("expected the document to be forwarded");
+    expect(out.status).toBe("sent");
 
     const s = await stored(c.id);
     expect(s.row).toMatchObject({ status: "sent", send_count: 2 });
@@ -339,63 +480,111 @@ describe("forwardUserDocument (local Supabase)", () => {
     expect(s.outbox[0]).toMatchObject({
       id: out.messageId,
       to_address: OPERATOR_ADDRESS,
+      in_reply_to: ask.messageId,
       status: "queued",
     });
     expect(s.outbox[0].subject).toContain(`[${c.ref}]`);
-
-    const { data: att } = await db.from("attachments").select("*").eq("id", doc.id).single();
-    expect(att).toMatchObject({ kind: "user_document", message_id: out.messageId });
-    expect(att?.deleted_at).not.toBeNull();
-    expect(await inStorage(doc.path)).toBe(false);
-
     expect(kinds(s.events)).toEqual([
       ["user_document_forwarded", null],
       ["operator_mail_queued", "reply_asks_for_data"],
-      ["user_document_deleted", null],
     ]);
     for (const e of s.events) noPersonalData(e.data);
+
+    // Still there: the sender (C3) attaches it.
+    expect(await inStorage(doc.path)).toBe(true);
+    expect(await attachment(doc.id)).toMatchObject({ message_id: out.messageId, deleted_at: null });
   });
 
-  it("refuses a non-operator recipient: nothing queued, the document kept", async () => {
-    // Renfe has no verified claims email (web form only): there is nobody we may send it to.
+  it("purges only after the mail is sent, once", async () => {
+    const c = await seedCase({ status: "waiting_user" });
+    const doc = await seedDocument(c.id);
+    const out = await forwardUserDocument({ caseId: c.id, attachmentId: doc.id }, { db, clock });
+    if (!("messageId" in out)) throw new Error("expected the document to be forwarded");
+
+    for (const status of ["queued", "failed"] as const) {
+      await setMessageStatus(out.messageId, status);
+      expect(await purgeForwardedDocuments(out.messageId, { db })).toBe(false);
+      expect(await inStorage(doc.path)).toBe(true);
+      expect((await attachment(doc.id)).deleted_at).toBeNull();
+    }
+
+    await setMessageStatus(out.messageId, "sent");
+    expect(await purgeForwardedDocuments(out.messageId, { db })).toBe(true);
+    expect(await inStorage(doc.path)).toBe(false);
+    expect((await attachment(doc.id)).deleted_at).not.toBeNull();
+
+    // A second purge is a no-op.
+    expect(await purgeForwardedDocuments(out.messageId, { db })).toBe(true);
+    const deletions = (await stored(c.id)).events.filter((e) => e.kind === "user_document_deleted");
+    expect(deletions).toHaveLength(1);
+    expect(deletions[0].data).toEqual({ message_id: out.messageId, attachment_ids: [doc.id] });
+  });
+
+  it("refuses a config that belongs to another operator: nothing written", async () => {
+    const c = await seedCase({ status: "waiting_user" });
+    const doc = await seedDocument(c.id);
+    const otherOperator = () => getOperatorConfig("ouigo");
+    await expect(
+      forwardUserDocument(
+        { caseId: c.id, attachmentId: doc.id },
+        { db, clock, getOperatorConfig: otherOperator },
+      ),
+    ).rejects.toThrow(RecipientRefusedError);
+    const s = await stored(c.id);
+    expect(s.row.status).toBe("waiting_user");
+    expect(s.outbox).toEqual([]);
+    expect(s.events).toEqual([]);
+    expect(await inStorage(doc.path)).toBe(true);
+  });
+
+  it("refuses an address other than the one the claim went to: nothing written", async () => {
+    const c = await seedCase({ status: "waiting_user" });
+    const doc = await seedDocument(c.id);
+    const spoofed = (id: OperatorId) => ({
+      ...getOperatorConfig(id),
+      channel: { type: "email" as const, address: OPERATOR_TEXT.address },
+    });
+    await expect(
+      forwardUserDocument(
+        { caseId: c.id, attachmentId: doc.id },
+        { db, clock, getOperatorConfig: spoofed },
+      ),
+    ).rejects.toThrow(RecipientRefusedError);
+    const s = await stored(c.id);
+    expect(s.row).toMatchObject({ status: "waiting_user", send_count: 1 });
+    expect(s.outbox).toEqual([]);
+    expect(s.events).toEqual([]);
+  });
+
+  it("refuses when no claim went to the operator yet", async () => {
+    const c = await seedCase({ status: "waiting_user", claimSent: false });
+    const doc = await seedDocument(c.id);
+    await expect(
+      forwardUserDocument({ caseId: c.id, attachmentId: doc.id }, { db, clock }),
+    ).rejects.toThrow(RecipientRefusedError);
+    expect((await stored(c.id)).outbox).toEqual([]);
+  });
+
+  it("refuses an operator without a verified email (web form only)", async () => {
     const c = await seedCase({ status: "waiting_user", operator: "renfe" });
     const doc = await seedDocument(c.id);
     await expect(
       forwardUserDocument({ caseId: c.id, attachmentId: doc.id }, { db, clock }),
     ).rejects.toThrow(RecipientRefusedError);
-
-    // A config that names some other address than the verified one for the case's operator.
-    const iryo = await seedCase({ status: "waiting_user" });
-    const doc2 = await seedDocument(iryo.id);
-    const spoofed = (id: OperatorId) => ({
-      ...getOperatorConfig(id),
-      id: "ouigo" as const,
-      channel: { type: "email" as const, address: OPERATOR_TEXT.address },
-    });
-    await expect(
-      forwardUserDocument(
-        { caseId: iryo.id, attachmentId: doc2.id },
-        { db, clock, getOperatorConfig: spoofed },
-      ),
-    ).rejects.toThrow(RecipientRefusedError);
-
-    for (const [id, d] of [
-      [c.id, doc],
-      [iryo.id, doc2],
-    ] as const) {
-      const s = await stored(id);
-      expect(s.row.status).toBe("waiting_user");
-      expect(s.outbox).toEqual([]);
-      expect(s.events).toEqual([]);
-      expect(await inStorage(d.path)).toBe(true);
-    }
+    const s = await stored(c.id);
+    expect(s.row.status).toBe("waiting_user");
+    expect(s.outbox).toEqual([]);
+    expect(s.events).toEqual([]);
+    expect(await inStorage(doc.path)).toBe(true);
   });
 
-  it("at send_count = 5: the team queue (send_cap), nothing queued, the document kept", async () => {
+  it("at send_count = 5: the team queue (send_cap) once, nothing queued, the document kept", async () => {
     const c = await seedCase({ status: "waiting_user", sendCount: 5 });
     const doc = await seedDocument(c.id);
-    const out = await forwardUserDocument({ caseId: c.id, attachmentId: doc.id }, { db, clock });
-    expect(out).toEqual({ status: "waiting_user", teamQueue: "send_cap" });
+    for (let i = 0; i < 2; i++) {
+      const out = await forwardUserDocument({ caseId: c.id, attachmentId: doc.id }, { db, clock });
+      expect(out).toEqual({ status: "waiting_user", teamQueue: "send_cap" });
+    }
     const s = await stored(c.id);
     expect(s.row).toMatchObject({ status: "waiting_user", send_count: 5 });
     expect(s.outbox).toEqual([]);

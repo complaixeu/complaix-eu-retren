@@ -7,7 +7,7 @@ import {
   type ReplyActionContext,
   type ReplyPlan,
 } from "@/features/claims/actions";
-import { MAX_SENDS_PER_CASE } from "@/features/claims/timers";
+import { addMonths, dueActions, MAX_SENDS_PER_CASE } from "@/features/claims/timers";
 import type { CaseStatus, OperatorPublicConfig, ReplyCategory } from "@/shared/contracts";
 
 // The category → action table (docs/plans/C-claims.md C6, ARCHITECTURE §5–§7). Written out by
@@ -15,6 +15,11 @@ import type { CaseStatus, OperatorPublicConfig, ReplyCategory } from "@/shared/c
 const NOW = new Date("2030-03-01T10:00:00.000Z");
 const DAY = 86_400_000;
 const sentDaysAgo = (d: number) => new Date(NOW.getTime() - d * DAY).toISOString();
+/** The instant `d` days from NOW. */
+const inDays = (d: number) => new Date(NOW.getTime() + d * DAY).toISOString();
+
+// The default case was sent 10 days ago: its d45 escalation window opens in 35 days.
+const D45 = inDays(ESCALATION_DAY - 10);
 
 const ctx = (over: Partial<ReplyActionContext> = {}): ReplyActionContext => ({
   status: "reply_received",
@@ -33,6 +38,8 @@ type Row = [
   over: Partial<ReplyActionContext>,
   expected: Omit<ReplyPlan, "steps"> & { steps: [string, CaseStatus, CaseStatus][] },
 ];
+
+const rejected: [string, CaseStatus, CaseStatus] = ["rejected", "reply_received", "denied"];
 
 const table: Row[] = [
   [
@@ -71,6 +78,7 @@ const table: Row[] = [
       status: "resolved",
       steps: [["approved", "reply_received", "resolved"]],
       notice: "user_final_result",
+      nextActionAt: null,
     },
   ],
   [
@@ -81,6 +89,7 @@ const table: Row[] = [
       status: "resolved",
       steps: [["approved", "escalated", "resolved"]],
       notice: "user_final_result",
+      nextActionAt: null,
     },
   ],
   [
@@ -89,33 +98,62 @@ const table: Row[] = [
     {
       action: "insist",
       status: "sent",
-      steps: [
-        ["rejected", "reply_received", "denied"],
-        ["insistence_sent", "denied", "sent"],
-      ],
+      steps: [rejected, ["insistence_sent", "denied", "sent"]],
       operatorMail: "insistence_after_denial",
+      nextActionAt: NOW.toISOString(),
     },
   ],
   [
-    "second denial before d45 → closed and the final result to the user",
+    "second denial before d45 → left denied until the d45 window opens (C7 escalates)",
     { category: "denied", insistences: 1, sendCount: 2 },
-    {
-      action: "close",
-      status: "closed",
-      steps: [
-        ["rejected", "reply_received", "denied"],
-        ["close", "denied", "closed"],
-      ],
-      notice: "user_final_result",
-    },
+    { action: "await_escalation", status: "denied", steps: [rejected], nextActionAt: D45 },
   ],
   [
-    "second denial with the d45 escalation due → left denied for the tick (C7)",
+    "second denial on d45 → left denied, the tick looks now",
     { category: "denied", insistences: 1, sendCount: 2, sentAt: sentDaysAgo(ESCALATION_DAY) },
     {
       action: "await_escalation",
       status: "denied",
-      steps: [["rejected", "reply_received", "denied"]],
+      steps: [rejected],
+      nextActionAt: NOW.toISOString(),
+    },
+  ],
+  [
+    "second denial after the escalation fired → closed and the final result",
+    { category: "denied", insistences: 1, sendCount: 3, escalationFired: true },
+    {
+      action: "close",
+      status: "closed",
+      steps: [rejected, ["close", "denied", "closed"]],
+      notice: "user_final_result",
+      nextActionAt: null,
+    },
+  ],
+  [
+    "second denial with no slot left for the escalation → closed",
+    { category: "denied", insistences: 1, sendCount: MAX_SENDS_PER_CASE },
+    {
+      action: "close",
+      status: "closed",
+      steps: [rejected, ["close", "denied", "closed"]],
+      notice: "user_final_result",
+      nextActionAt: null,
+    },
+  ],
+  [
+    "second denial after the 3 months → closed",
+    {
+      category: "denied",
+      insistences: 1,
+      sendCount: 2,
+      sentAt: addMonths(new Date(sentDaysAgo(0)), -3).toISOString(),
+    },
+    {
+      action: "close",
+      status: "closed",
+      steps: [rejected, ["close", "denied", "closed"]],
+      notice: "user_final_result",
+      nextActionAt: null,
     },
   ],
   [
@@ -130,9 +168,15 @@ const table: Row[] = [
   ],
   [
     // The last slot (MAX_SENDS_PER_CASE) is reserved for the d45 escalation (C7).
-    "first denial at send_count = MAX - 1 (5) → team queue, no insistence",
+    "first denial at send_count = MAX - 1 (5) → denied and the team queue, d45 still to come",
     { category: "denied", sendCount: MAX_SENDS_PER_CASE - 1 },
-    { action: "team_queue", status: "reply_received", steps: [], teamQueue: "send_cap" },
+    {
+      action: "team_queue",
+      status: "denied",
+      steps: [rejected],
+      teamQueue: "send_cap",
+      nextActionAt: D45,
+    },
   ],
   [
     "first denial at send_count = MAX - 2 (4) → the insistence still fits",
@@ -140,21 +184,20 @@ const table: Row[] = [
     {
       action: "insist",
       status: "sent",
-      steps: [
-        ["rejected", "reply_received", "denied"],
-        ["insistence_sent", "denied", "sent"],
-      ],
+      steps: [rejected, ["insistence_sent", "denied", "sent"]],
       operatorMail: "insistence_after_denial",
+      nextActionAt: NOW.toISOString(),
     },
   ],
   [
-    "first denial for an operator without a verified email → team queue",
+    "first denial for an operator without a verified email → denied and the team queue",
     { category: "denied", operatorReachable: false },
     {
       action: "team_queue",
-      status: "reply_received",
-      steps: [],
+      status: "denied",
+      steps: [rejected],
       teamQueue: "operator_not_emailable",
+      nextActionAt: D45,
     },
   ],
 ];
@@ -230,13 +273,32 @@ describe("planReplyAction: only one insistence ever", () => {
     }
   });
 
-  it("the escalation is not due once it fired, or at the send cap: the case closes", () => {
-    const late = { category: "denied" as const, insistences: 1, sentAt: sentDaysAgo(60) };
-    expect(planReplyAction(ctx({ ...late, escalationFired: true })).action).toBe("close");
-    expect(planReplyAction(ctx({ ...late, sendCount: MAX_SENDS_PER_CASE })).action).toBe("close");
-    expect(planReplyAction(ctx({ ...late, sentAt: sentDaysAgo(ESCALATION_DAY - 1) })).action).toBe(
-      "close",
+  it("closes only when the escalation can't happen", () => {
+    const second = { category: "denied" as const, insistences: 1 };
+    expect(planReplyAction(ctx({ ...second, sentAt: sentDaysAgo(60) })).action).toBe(
+      "await_escalation",
     );
+    expect(planReplyAction(ctx({ ...second, sendCount: MAX_SENDS_PER_CASE - 1 })).action).toBe(
+      "await_escalation",
+    );
+    expect(planReplyAction(ctx({ ...second, escalationFired: true })).action).toBe("close");
+    expect(planReplyAction(ctx({ ...second, sendCount: MAX_SENDS_PER_CASE })).action).toBe("close");
+    expect(planReplyAction(ctx({ ...second, sentAt: null })).action).toBe("close");
+  });
+});
+
+describe("C7's schedule for a denied case (documents the behaviour C6 relies on)", () => {
+  const sentAt = sentDaysAgo(ESCALATION_DAY);
+  const denied = { status: "denied" as const, sentAt, sendCount: 3, fired: [] };
+
+  it("a denied case escalates on d45", () => {
+    const due = dueActions({ ...denied, paused: false }, NOW);
+    expect(due.actions.map((a) => a.kind)).toEqual(["escalation_d45"]);
+  });
+
+  it("a paused, denied case does not escalate", () => {
+    const due = dueActions({ ...denied, paused: true }, NOW);
+    expect(due.actions).toEqual([]);
   });
 });
 

@@ -254,6 +254,7 @@ export type Database = {
         };
         Returns: string;
       };
+      claims_case_operator_address: { Args: { p_case_id: string }; Returns: string };
       claims_create_case: {
         Args: {
           p_earliest_send_at: string;
@@ -277,11 +278,20 @@ export type Database = {
           p_mail: Json;
           p_next_action_at: string;
         };
-        Returns: string;
+        Returns: Json;
       };
-      claims_mark_user_document_deleted: { Args: { p_attachment_id: string }; Returns: boolean };
+      claims_mark_forwarded_documents_deleted: { Args: { p_message_id: string }; Returns: number };
       claims_max_sends_per_case: { Args: Record<PropertyKey, never>; Returns: number };
       claims_new_public_ref: { Args: Record<PropertyKey, never>; Returns: string };
+      claims_queue_for_team: {
+        Args: {
+          p_case_id: string;
+          p_category: Database["public"]["Enums"]["reply_category"];
+          p_message_id: string;
+          p_reason: string;
+        };
+        Returns: boolean;
+      };
     };
     Enums: {
       attachment_kind: "eu_form" | "mandate" | "ticket" | "user_document";
