@@ -40,3 +40,11 @@ export const dateTime = (iso: string | null) =>
         timeZone: "Europe/Madrid",
       })
     : "—";
+
+/** A short date for lists: "14 Nov". */
+export const shortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    timeZone: "Europe/Madrid",
+  });

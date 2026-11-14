@@ -23,16 +23,22 @@ test.afterAll(async () => {
   await removeTeamMember(member);
 });
 
-/** Every element inside `root` fits its own box and the viewport: nothing is cut off. */
+/**
+ * Every visible element inside `root` fits the viewport and its own box: nothing is cut off.
+ * Skipped on purpose: screen-reader-only text (a 1 px clip box) and the one-line preview, the only
+ * text the list cuts with an ellipsis on purpose.
+ */
 async function everythingFits(root: import("@playwright/test").Locator): Promise<string[]> {
   return root.evaluate((node) => {
     const problems: string[] = [];
     const width = window.innerWidth;
     for (const el of [node, ...Array.from(node.querySelectorAll("*"))]) {
       const r = el.getBoundingClientRect();
-      if (r.width === 0 && r.height === 0) continue;
+      if (r.width <= 1 || r.height <= 1) continue;
+      const style = getComputedStyle(el);
       if (r.left < -0.5 || r.right > width + 0.5) problems.push(`outside: ${el.tagName}`);
-      if (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX !== "auto") {
+      if (style.textOverflow === "ellipsis") continue;
+      if (el.scrollWidth > el.clientWidth + 1 && style.overflowX !== "auto") {
         problems.push(`clipped: ${el.tagName} ${el.textContent?.trim().slice(0, 40)}`);
       }
     }
@@ -47,9 +53,7 @@ test("the case page has no horizontal scroll and every step name is fully visibl
   await signIn(page, member);
   await openCase(page, c);
 
-  const fits = await page.evaluate(
-    () => document.documentElement.scrollWidth <= window.innerWidth,
-  );
+  const fits = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
   expect(fits).toBe(true);
 
   const tracking = page.getByRole("region", { name: "Claim process" });
@@ -79,7 +83,11 @@ test("tapping a message shows it in full with a way back to the inbox", async ({
   const c = await seedSentCase();
   const { messages } = await caseRows(c.id);
   const body = messages.find((m) => m.direction === "outbound")?.body_text ?? "";
-  const firstLine = body.split("\n").find((line) => line.trim().length > 0)?.trim() ?? "";
+  const firstLine =
+    body
+      .split("\n")
+      .find((line) => line.trim().length > 0)
+      ?.trim() ?? "";
   expect(firstLine).not.toBe("");
 
   await signIn(page, member);
@@ -107,9 +115,7 @@ test("an unknown message id falls back to the inbox list", async ({ page }) => {
   await signIn(page, member);
   await page.goto(`/equipo/casos/${c.id}?m=00000000-0000-4000-8000-000000000000`);
   await expect(page.getByRole("heading", { level: 1, name: `Case ${c.ref}` })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Email thread" }).getByRole("link")).toHaveCount(
-    1,
-  );
+  await expect(page.getByRole("region", { name: "Email thread" }).getByRole("link")).toHaveCount(1);
 });
 
 test("the dashboard has no horizontal scroll at 375 px and each case links to its page", async ({
@@ -118,9 +124,7 @@ test("the dashboard has no horizontal scroll at 375 px and each case links to it
   const c = await seedSentCase();
   await signIn(page, member);
 
-  const fits = await page.evaluate(
-    () => document.documentElement.scrollWidth <= window.innerWidth,
-  );
+  const fits = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
   expect(fits).toBe(true);
   const cases = page.getByRole("region", { name: "Cases" });
   await expect(cases.getByRole("link", { name: c.ref })).toHaveAttribute(
