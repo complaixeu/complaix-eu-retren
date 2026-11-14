@@ -462,11 +462,15 @@ describe("sendQueued (local Supabase)", () => {
   });
 
   it("user mail goes only to the case's own user", async () => {
-    const own = await sentCaseWithQueued({ to: PII.email });
+    // A user kind (C8): the default reminder_d12 is now refused to the user (user_kind_not_allowed).
+    const own = await sentCaseWithQueued({ to: PII.email, template: "user_final_result" });
     expect((await sendQueued(own.queuedId, { db, transport: createFakeTransport() })).status).toBe(
       "sent",
     );
-    const stranger = await sentCaseWithQueued({ to: "otro.viajero@example.test" });
+    const stranger = await sentCaseWithQueued({
+      to: "otro.viajero@example.test",
+      template: "user_final_result",
+    });
     expect(await sendQueued(stranger.queuedId, { db, transport: createFakeTransport() })).toEqual({
       status: "failed",
       reason: "recipient_not_allowed",
