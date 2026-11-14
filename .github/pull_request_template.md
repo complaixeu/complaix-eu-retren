@@ -15,3 +15,4 @@
       `supabase/config.toml`, `pnpm-workspace.yaml`, `scripts/local-*.sh`, `CLAUDE.md`,
       `AGENTS.md`, `.claude/`, `docs/LOCAL_CI.md`, `docs/ONBOARDING.md`)
 - [ ] It does, and Nestor Gomez Artiles approved the change beforehand (link or note):
+# enforcement test
