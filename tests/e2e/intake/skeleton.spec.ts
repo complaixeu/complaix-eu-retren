@@ -111,31 +111,32 @@ test("continuar and atrás move through every step in order", async ({ page }) =
   await chooseTicket(page);
   await page.getByRole("button", { name: "Subir billete" }).click();
   await expect(page.getByRole("link", { name: "Continuar" })).toBeVisible();
-  for (const next of steps.slice(1)) {
-    if (next.path === "/reclamar/preguntas") {
-      // Since [A4] the review step is a form, and it stores the reviewed trip A6 needs.
-      await completeReview(page);
-      await page.getByLabel("Número de documento").fill("12345678Z");
-      await page.getByLabel("Email").fill("viajera@example.com");
-      await page.getByLabel("Fecha de llegada").fill("2026-11-14");
-      await page.getByLabel("Hora de llegada", { exact: true }).fill("18:25");
-      await page.getByRole("radio", { name: "No", exact: true }).check();
-      await page.getByRole("radio", { name: "Dinero" }).check();
-      await page.getByRole("button", { name: "Continuar" }).click();
-    } else if (next.path === "/reclamar/enviado") {
-      // Since [A6] the authorization step is a form: accept both texts to go on.
-      await page.getByRole("checkbox", { name: /^Autorizo a ReTren/ }).check();
-      await page.getByRole("checkbox", { name: /aviso de privacidad/ }).check();
-      await page.getByRole("button", { name: "Aceptar y enviar" }).click();
-    } else {
-      await page.getByRole("link", { name: "Continuar" }).click();
-    }
-    await expect(page.getByRole("heading", { level: 1, name: next.heading })).toBeVisible();
-  }
-  await expect(page.getByRole("link", { name: "Continuar" })).toHaveCount(0);
-  await page.goto(steps[2].path);
+  await page.getByRole("link", { name: "Continuar" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: steps[1].heading })).toBeVisible();
+
+  // The review form saves the trip before A5 can continue.
+  await completeReview(page);
+  await expect(page.getByRole("heading", { level: 1, name: steps[2].heading })).toBeVisible();
   await page.getByRole("link", { name: "Atrás" }).click();
   await expect(page.getByRole("heading", { level: 1, name: steps[1].heading })).toBeVisible();
+
+  await completeReview(page);
+  await expect(page.getByRole("heading", { level: 1, name: steps[2].heading })).toBeVisible();
+  await page.getByLabel("Número de documento").fill("12345678Z");
+  await page.getByLabel("Email").fill("viajera@example.com");
+  await page.getByLabel("Fecha de llegada").fill("2026-11-14");
+  await page.getByLabel("Hora de llegada", { exact: true }).fill("18:25");
+  await page.getByRole("radio", { name: "No", exact: true }).check();
+  await page.getByRole("radio", { name: "Dinero" }).check();
+  await page.getByRole("button", { name: "Continuar" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: steps[3].heading })).toBeVisible();
+
+  // The mandate has two required decisions before the result is created.
+  await page.getByRole("checkbox", { name: /^Autorizo a ReTren/ }).check();
+  await page.getByRole("checkbox", { name: /aviso de privacidad/ }).check();
+  await page.getByRole("button", { name: "Aceptar y enviar" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: steps[4].heading })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Continuar" })).toHaveCount(0);
 });
 
 test.describe("keyboard", () => {
