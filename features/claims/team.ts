@@ -6,12 +6,18 @@
 // (./team-access.ts) and only then use the service-role client. Nothing here is ever sent to a
 // browser as raw rows: the callers get the small shapes below, with ids, codes and subjects only.
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import type { Clock, CaseStatus } from "@/shared/contracts";
 import { systemClock } from "@/shared/clock";
 import type { ServiceClient } from "@/shared/supabase/server";
+import { runInbound, type InboundDeps } from "./inbound-tick";
 import { DEMO_FIXTURES } from "./demo-fixtures";
+import { isProduction } from "./outbound";
 import { runOutbound } from "./outbound-tick";
+import { assertPollConfig, imapConfigFromEnv } from "./poll-inbox";
+import { teamAccessMode } from "./team-access";
 import { runTick } from "./tick";
+import { createGmailTransport, type ClaimsTransport } from "./transport";
 
 type Env = Record<string, string | undefined>;
 
@@ -39,18 +45,72 @@ export class TeamActionError extends Error {
       | "no_fixtures"
       | "ingest_failed"
       | "already_resolved"
-      | "bad_input",
+      | "bad_input"
+      // Mail settings a mailbox read needs are missing or malformed: named by a code only.
+      | "mail_config"
+      | "inbound_failed"
+      // The queued mail could not be sent (a sender-side failure, not an outcome of the mail).
+      | "send_failed",
   ) {
     super(code);
     this.name = "TeamActionError";
   }
 }
 
-/** The simulated mailbox and the demo clock exist only with DEMO_MODE=1 and fake mail. */
-export function assertDemoMode(env: Env = process.env): void {
-  if (env.DEMO_MODE !== "1") throw new TeamActionError("demo_only");
-  // Even in the demo: a real mail provider could send what these tools queue.
-  if ((env.MAIL_PROVIDER ?? "fake") !== "fake") throw new TeamActionError("demo_only");
+// ---------------------------------------------------------------------------------------------
+// Which demo tools exist
+
+/** The demo tools of the team view (C9). Each one is its own capability, checked on its own. */
+export type DemoCapabilities = {
+  /** The demo clock: "move the clock forward" and its reset. */
+  clock: boolean;
+  /** The scripted operator reply ("Simulate reply"). Fake mail only. */
+  simulateReply: boolean;
+  /** "Check inbox now": reads the real mailbox. Real mail only. */
+  checkInbox: boolean;
+};
+export type DemoCapability = keyof DemoCapabilities;
+
+const NO_DEMO: DemoCapabilities = { clock: false, simulateReply: false, checkInbox: false };
+
+/**
+ * Whether MAIL_REDIRECT_ALL_TO makes real mail safe to drive from here: set, a valid address, not
+ * the sending mailbox (C4 reads that one), and never in production. Mail to operators can then
+ * reach only the redirected test inboxes (transport.ts refuses gmail outside production without
+ * a redirect, and the outbound rules apply the redirect to every row).
+ */
+function realMailRedirected(env: Env): boolean {
+  if (isProduction(env)) return false;
+  const redirect = env.MAIL_REDIRECT_ALL_TO?.trim().toLowerCase();
+  if (!redirect || !z.email().safeParse(redirect).success) return false;
+  return redirect !== env.SMTP_USER?.trim().toLowerCase();
+}
+
+/**
+ * Which demo tools this deployment gets. Pure. There is no production in this project, and
+ * DEMO_MODE=1 is for DEV only.
+ * - DEMO_MODE is not "1": none.
+ * - MAIL_PROVIDER fake (or unset): the clock and the simulated reply. No mailbox to check.
+ * - MAIL_PROVIDER gmail, and all of: RETREN_ENV is not "production"; MAIL_REDIRECT_ALL_TO is set
+ *   and a valid address; that address is not SMTP_USER (case-insensitive); team Auth is
+ *   configured (not open mode, where anyone with the URL is in): the clock and "Check inbox now".
+ *   The simulated reply stays off: real replies come by email.
+ * - Anything else (production, no or invalid redirect, redirect equal to SMTP_USER, open mode,
+ *   an unknown provider): none.
+ */
+export function demoCapabilities(env: Env = process.env): DemoCapabilities {
+  if (env.DEMO_MODE !== "1") return NO_DEMO;
+  const mail = env.MAIL_PROVIDER ?? "fake";
+  if (mail === "fake") return { clock: true, simulateReply: true, checkInbox: false };
+  if (mail === "gmail" && realMailRedirected(env) && teamAccessMode(env) === "auth") {
+    return { clock: true, simulateReply: false, checkInbox: true };
+  }
+  return NO_DEMO;
+}
+
+/** Refuses (demo_only) unless this deployment has the capability. */
+export function assertDemoCapability(capability: DemoCapability, env: Env = process.env): void {
+  if (!demoCapabilities(env)[capability]) throw new TeamActionError("demo_only");
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -411,29 +471,81 @@ export type ClockResult = {
 /** The most timer rounds per click: each round applies one stage per case, a case has 4. */
 const MAX_ROUNDS = 6;
 
+/** What the demo tick sends with: an injected transport (tests), else the one MAIL_PROVIDER picks. */
+export interface DemoTickDeps {
+  transport?: ClaimsTransport;
+}
+
 /**
  * Runs the tick at `now` for ONE case (the one being viewed; other cases are never touched):
- * timer actions, then its initial claim and queued mail, like POST /api/claims/tick. A case moves one stage per round, so it repeats until nothing is due:
- * moving the clock to d30 queues the d12 and the d30 reminder, as hourly ticks would have.
+ * timer actions, then its initial claim and queued mail, like POST /api/claims/tick. A case moves
+ * one stage per round, so it repeats until nothing is due: moving the clock to d30 queues the d12
+ * and the d30 reminder, as hourly ticks would have. Needs the clock capability.
  */
 export async function runDemoTick(
   db: ServiceClient,
   now: Date,
   caseId: string,
   env: Env = process.env,
+  deps: DemoTickDeps = {},
 ): Promise<ClockResult> {
-  assertDemoMode(env);
+  assertDemoCapability("clock", env);
   if (!UUID_RE.test(caseId)) throw new TeamActionError("bad_input");
   const out: ClockResult = { now: now.toISOString(), timerActions: 0, initialClaims: 0, sent: 0 };
   for (let i = 0; i < MAX_ROUNDS; i++) {
     const tick = await runTick(db, now, { caseId });
-    const outbound = await runOutbound(db, now, { env }, undefined, { caseId });
+    const outbound = await runOutbound(db, now, { env, transport: deps.transport }, undefined, {
+      caseId,
+    });
+    // Nothing went out because the sender refused to run: say so, never report it as a success.
+    if (outbound.sendError) {
+      throw new TeamActionError(outbound.sendError === "config" ? "mail_config" : "send_failed");
+    }
     out.timerActions += tick.actions.length;
     out.initialClaims += outbound.initialClaims.filter((c) => c.ok).length;
     out.sent += outbound.sent.filter((s) => s.status === "sent").length;
     if (tick.actions.length === 0) break;
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Check inbox now
+
+export interface CheckInboxDeps extends InboundDeps, DemoTickDeps {
+  /** Defaults to process.env. */
+  env?: Env;
+}
+
+/**
+ * "Check inbox now" (real mail, C9): reads the Retren mailbox once (the same read as the hourly
+ * tick, read only), then runs the tick for the case being viewed, so a reply that has just been
+ * read is acted on at once. Needs the checkInbox capability. Settings a read can never work
+ * without are reported as `mail_config`, by code only: the error text may name an address.
+ */
+export async function checkInboxNow(
+  db: ServiceClient,
+  now: Date,
+  caseId: string,
+  deps: CheckInboxDeps = {},
+): Promise<{ processed: number; connected: boolean }> {
+  const env = deps.env ?? process.env;
+  assertDemoCapability("checkInbox", env);
+  if (!UUID_RE.test(caseId)) throw new TeamActionError("bad_input");
+  // Everything the read and the sends need, checked before the mailbox is touched. Building the
+  // gmail transport never connects; it throws on incomplete SMTP settings.
+  try {
+    imapConfigFromEnv(env);
+    assertPollConfig(env);
+    createGmailTransport(env);
+  } catch {
+    throw new TeamActionError("mail_config");
+  }
+  const inbound = await runInbound(db, now, env, { client: deps.client, state: deps.state });
+  if (!("processed" in inbound)) throw new TeamActionError("inbound_failed");
+  await runDemoTick(db, now, caseId, env, { transport: deps.transport });
+  // The first check only records where the mailbox is: nothing before it is read.
+  return { processed: inbound.processed, connected: inbound.started === "first_run" };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -534,7 +646,7 @@ export async function injectOperatorReply(
   deps: InjectDeps,
 ): Promise<IngestOutcome> {
   const env = deps.env ?? process.env;
-  assertDemoMode(env);
+  assertDemoCapability("simulateReply", env);
   if (!FIXTURE_NAME.test(input.fixture) || !UUID_RE.test(input.caseId)) {
     throw new TeamActionError("bad_input");
   }
