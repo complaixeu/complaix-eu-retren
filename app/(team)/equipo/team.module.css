@@ -1,3 +1,9 @@
+/*
+ * The team view (/equipo). Phones first: everything stacks, nothing is fixed-width, and long
+ * values wrap (overflow-wrap: anywhere) instead of pushing the page sideways. Tokens only: every
+ * colour, space, radius and type size comes from app/globals.css.
+ */
+
 .shell {
   width: 100%;
   max-width: var(--page-width);
@@ -25,80 +31,11 @@
 .main {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-4);
 }
 
 .main:focus {
   outline: none;
-}
-
-.card {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-5);
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-card);
-}
-
-.narrow {
-  max-width: var(--content-width);
-}
-
-.title {
-  font-size: var(--text-2xl);
-  font-weight: var(--weight-semibold);
-  line-height: var(--leading-tight);
-}
-
-.subtitle {
-  font-size: var(--text-lg);
-  font-weight: var(--weight-semibold);
-  line-height: var(--leading-tight);
-}
-
-.muted,
-.meta {
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
-
-.tableWrap {
-  max-width: 100%;
-  overflow-x: auto;
-}
-
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--text-sm);
-}
-
-.table caption {
-  padding-bottom: var(--space-2);
-  text-align: left;
-}
-
-.table th,
-.table td {
-  padding: var(--space-2) var(--space-3);
-  border-bottom: var(--border-width) solid var(--color-border);
-  text-align: left;
-  vertical-align: top;
-}
-
-.table th {
-  color: var(--color-text-muted);
-  font-weight: var(--weight-semibold);
-}
-
-.code,
-.mailBody {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: var(--text-sm);
 }
 
 .inline {
@@ -125,16 +62,34 @@
   font-weight: var(--weight-semibold);
 }
 
-/* Mail bodies are plain text and remain readable without expanding the technical details. */
-.mailBody {
-  max-height: 20rem;
-  overflow: auto;
-  margin: 0;
-  padding: var(--space-3);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-sunken);
-  white-space: pre-wrap;
+.title {
+  font-family: var(--font-heading);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--heading-tracking);
+  line-height: var(--leading-tight);
   overflow-wrap: anywhere;
+}
+
+.subtitle {
+  font-family: var(--font-heading);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  overflow-wrap: anywhere;
+}
+
+.muted,
+.meta {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.code,
+.mailBody {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
 }
 
 .list {
@@ -144,103 +99,6 @@
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.steps {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.step {
-  position: relative;
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-1);
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  line-height: var(--leading-tight);
-  text-align: center;
-}
-
-.step::before {
-  position: absolute;
-  z-index: 0;
-  top: calc(var(--space-4) - var(--stepper-line) / 2);
-  left: -50%;
-  width: 100%;
-  height: var(--stepper-line);
-  background: var(--color-border);
-  content: "";
-}
-
-.step:first-child::before {
-  display: none;
-}
-
-.stepCircle {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  width: var(--space-6);
-  height: var(--space-6);
-  flex: 0 0 var(--space-6);
-  place-items: center;
-  border: var(--border-width) solid var(--color-border-strong);
-  border-radius: var(--radius-full);
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-}
-
-.stepDone .stepCircle {
-  border-color: var(--color-primary);
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-}
-
-.stepDone::before {
-  background: var(--color-primary);
-}
-
-.stepCurrent .stepCircle {
-  border-color: var(--color-accent);
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
-}
-
-.stepCurrent .stepName {
-  color: var(--color-text);
-  font-weight: var(--weight-semibold);
-}
-
-.demoControls {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
-  align-items: stretch;
-}
-
-.demoControls > section {
-  min-width: 0;
-}
-
-.casePage {
-  display: flex;
-  width: 100%;
-  max-width: var(--page-width);
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--space-4);
-  margin-inline: auto;
-  padding: var(--space-4) var(--page-gutter) var(--space-7);
 }
 
 .backLink {
@@ -255,85 +113,655 @@
   text-decoration: underline;
 }
 
-.hero {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-5);
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-card);
-}
-
-.heroEyebrow {
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-}
-
-.operatorLine {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-weight: var(--weight-semibold);
-}
-
-.operatorBadge {
-  display: grid;
-  width: var(--space-6);
-  height: var(--space-6);
-  flex: 0 0 var(--space-6);
-  place-items: center;
-  border-radius: var(--radius-full);
-  background: var(--color-surface-sunken);
-  color: var(--color-text-strong);
-  font-weight: var(--weight-semibold);
-}
-
-.statusPill,
-.pill,
+/* Chips: neutral labels for kind, status and blocked state. Accent blue is for links and focus. */
+.chip,
 .kindTag,
+.pill,
+.statusPill,
 .previewTag {
   display: inline-flex;
   align-items: center;
-  width: fit-content;
-  min-height: var(--tap-target);
-  padding: var(--space-1) var(--space-3);
+  max-width: 100%;
+  padding: var(--space-1) var(--space-2);
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-full);
   background: var(--color-surface-sunken);
   color: var(--color-text-secondary);
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
+  line-height: var(--leading-tight);
+  overflow-wrap: anywhere;
 }
 
-.statusPill {
-  min-height: auto;
-  margin-top: var(--space-1);
+.previewTag {
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+}
+
+.blockedTag {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: var(--border-width) solid var(--color-danger-line);
+  border-radius: var(--radius-full);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  overflow-wrap: anywhere;
+}
+
+.blockedQueue {
+  display: block;
+  margin-bottom: var(--space-1);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+/* Cards: quiet on phones (less padding), the same border and radius everywhere. */
+.card,
+.quietCard {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.card {
+  gap: var(--space-4);
+}
+
+.tableWrap {
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Tables: on phones each row becomes a stacked block with the column name above the value. */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.table caption {
+  padding-bottom: var(--space-2);
+  text-align: left;
+}
+
+.table th,
+.table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--border-width) solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.table th {
+  color: var(--color-text-muted);
+  font-weight: var(--weight-semibold);
+}
+
+.stackTable,
+.stackTable tbody {
+  display: block;
+}
+
+.stackTable caption {
+  display: block;
+}
+
+.stackTable thead {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  margin: -1px;
+}
+
+.stackTable tr {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  border-bottom: var(--border-width) solid var(--color-border);
+}
+
+.stackTable td {
+  display: block;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+
+.stackTable td[data-label]::before {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  content: attr(data-label);
+}
+
+/* Dashboard case list */
+.caseList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.caseRow {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) 0;
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.caseRow:first-child {
+  border-top: 0;
+}
+
+.caseTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.caseRef {
+  min-width: 0;
+  color: var(--color-accent);
+  font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.caseRef:hover {
+  color: var(--color-accent-hover);
+  text-decoration: underline;
+}
+
+.caseMeta {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+/* Case page: header, tracking, inbox, then the quieter actions and history. */
+/* The layout's shell already supplies the side gutter; the case page adds only vertical space. */
+.casePage {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4) 0 var(--space-7);
+}
+
+.caseHeader {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.operatorLine,
+.statusLine {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.statusLine {
+  color: var(--color-text-secondary);
+}
+
+.statusLine strong {
+  color: var(--color-text);
+}
+
+/* Tracking: a vertical list on phones (dot, line, step, day or date). */
+.track {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trackStep {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: var(--space-5) minmax(0, 1fr);
+  column-gap: var(--space-3);
+  align-items: start;
+  padding-bottom: var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+
+.trackStep:last-child {
+  padding-bottom: 0;
+}
+
+.trackStep::before {
+  position: absolute;
+  top: var(--space-5);
+  bottom: 0;
+  left: calc(var(--space-5) / 2 - var(--stepper-line) / 2);
+  width: var(--stepper-line);
+  background: var(--color-border);
+  content: "";
+}
+
+.trackStep:last-child::before {
+  display: none;
+}
+
+.trackDot {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-column: 1;
+  grid-row: 1;
+  width: var(--space-5);
+  height: var(--space-5);
+  place-items: center;
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  line-height: 1;
+}
+
+.trackText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  grid-column: 2;
+  grid-row: 1;
+  gap: var(--space-1);
+  overflow-wrap: anywhere;
+}
+
+.stepName {
+  overflow-wrap: anywhere;
+}
+
+.stepWhen {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.stepDone::before {
+  background: var(--color-primary);
+}
+
+.stepDone .trackDot {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.stepDone .stepName {
+  color: var(--color-text-strong);
+}
+
+.stepCurrent .trackDot {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.stepCurrent .stepName {
+  color: var(--color-accent);
+  font-weight: var(--weight-semibold);
+}
+
+/* Inbox: one row per email, newest first. The whole row is the link. */
+.sectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.inbox {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inboxItem + .inboxItem {
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.row {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: var(--control-height);
+  grid-template-columns: var(--space-6) minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.row:hover .rowSubject {
+  text-decoration: underline;
+}
+
+.row:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--space-1);
+}
+
+.avatar {
+  display: grid;
+  width: var(--space-6);
+  height: var(--space-6);
+  place-items: center;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-strong);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.operatorAvatar {
   border-color: var(--color-accent-line);
   background: var(--color-accent-soft);
   color: var(--color-accent-hover);
 }
 
-.title {
-  font-family: var(--font-heading);
-  letter-spacing: var(--heading-tracking);
+.rowBody {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
 }
 
-.heroDescription {
+.rowTop {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+}
+
+.sender,
+.senderIn {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sender {
+  color: var(--color-text-secondary);
+  font-weight: var(--weight-regular);
+}
+
+.senderIn {
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
+}
+
+.rowDate {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.rowSubject {
+  color: var(--color-text-strong);
+  font-size: var(--text-base);
+  line-height: var(--leading-tight);
+  overflow-wrap: anywhere;
+}
+
+/* The one-line preview is the only text cut with an ellipsis; the full body is one tap away. */
+.rowPreview {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMeta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.clip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.chevron {
+  align-self: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-xl);
+  line-height: 1;
+}
+
+/* One email, read in place (?m=<id>). */
+.readMessage {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.readSubject {
+  margin: 0;
+  color: var(--color-text);
+  font-family: var(--font-heading);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  overflow-wrap: anywhere;
+}
+
+.readMeta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.readMeta div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+}
+
+.readMeta dt {
   color: var(--color-text-muted);
 }
 
-.casePage .card {
-  gap: var(--space-4);
+.readMeta dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
 }
 
-.casePage .subtitle {
-  font-family: var(--font-heading);
+.messageTags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
 }
 
+.readBody {
+  margin: 0;
+  padding-top: var(--space-2);
+  color: var(--color-text);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.suspiciousBody {
+  color: var(--color-text-secondary);
+}
+
+.warningBanner {
+  margin: 0;
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--color-danger-line);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.files li {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.aiLines {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.aiFooter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.aiBadge {
+  display: inline-grid;
+  min-width: var(--space-6);
+  height: var(--space-5);
+  place-items: center;
+  padding-inline: var(--space-1);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.bodyDetails,
+.historyDetails {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.bodyDetails summary,
+.historyDetails summary {
+  min-height: var(--tap-target);
+  padding-block: var(--space-3);
+  cursor: pointer;
+  font-weight: var(--weight-semibold);
+}
+
+.historyDetails > summary {
+  color: var(--color-text);
+}
+
+.technicalDetails {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-block: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.technicalDetails p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.technicalDetails .mailBody {
+  max-height: 14rem;
+  margin: 0;
+}
+
+.mailBody {
+  max-height: 20rem;
+  overflow: auto;
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.historyDetails > h2 {
+  margin-block: var(--space-2);
+}
+
+/* Summary: a definition list, one pair per row on phones. */
 .casePage dl {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -368,249 +796,20 @@
   scroll-margin-top: var(--space-4);
 }
 
-.thread > .list {
+.demoControls {
+  display: grid;
   gap: var(--space-4);
+  align-items: stretch;
 }
 
-.mailCard {
-  width: 100%;
-  max-width: 100%;
+.demoControls > section {
   min-width: 0;
-  padding: var(--space-4);
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-card);
-  overflow-wrap: anywhere;
 }
 
-.incoming,
-.outgoing {
-  align-self: stretch;
-}
-
-.emailHeader {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  gap: var(--space-3);
-}
-
-.avatar {
-  display: grid;
-  width: var(--space-7);
-  height: var(--space-7);
-  flex: 0 0 var(--space-7);
-  place-items: center;
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-full);
-  background: var(--color-surface-sunken);
-  color: var(--color-text-strong);
-  font-weight: var(--weight-semibold);
-}
-
-.operatorAvatar {
-  border-color: var(--color-accent-line);
-  background: var(--color-accent-soft);
-  color: var(--color-accent-hover);
-}
-
-.passengerAvatar {
-  background: var(--color-surface-sunken);
-  color: var(--color-text-secondary);
-}
-
-.senderBlock {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  line-height: var(--leading-tight);
-  overflow-wrap: anywhere;
-}
-
-.emailDate {
-  display: flex;
-  max-width: 40%;
-  flex-direction: column;
-  align-items: flex-end;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-
-.emailDate small {
-  font-size: var(--text-sm);
-}
-
-.emailSubject {
-  margin-top: var(--space-4);
-  font-size: var(--text-lg);
-  font-weight: var(--weight-semibold);
-  line-height: var(--leading-tight);
-  overflow-wrap: anywhere;
-}
-
-.messageTags {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.kindTag,
-.previewTag,
-.pill {
-  min-height: auto;
-  padding: var(--space-1) var(--space-2);
-}
-
-.previewTag {
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-}
-
-.emailBody {
-  margin: var(--space-4) 0;
-  color: var(--color-text);
-  line-height: var(--leading-normal);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.suspiciousBody {
-  color: var(--color-text-secondary);
-}
-
-.blocked {
-  border-color: var(--color-danger-line);
-  background: var(--color-danger-soft);
-}
-
-.warningBanner {
-  margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-1)) var(--space-3);
-  padding: var(--space-3);
-  border: var(--border-width) solid var(--color-danger-line);
-  border-radius: var(--radius-md);
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-}
-
-.blockedStatus,
-.blockedQueue {
-  display: block;
-  margin-top: var(--space-1);
-  color: var(--color-danger);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-}
-
-.chips {
+.quickDays {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.chips li {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-sunken);
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-  overflow-wrap: anywhere;
-}
-
-.fileIcon {
-  display: grid;
-  min-width: var(--space-6);
-  height: var(--space-6);
-  place-items: center;
-  border: var(--border-width) solid var(--color-accent-line);
-  border-radius: var(--radius-sm);
-  background: var(--color-accent-soft);
-  color: var(--color-accent-hover);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-}
-
-.aiFooter {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
-
-.aiBadge {
-  display: inline-grid;
-  min-width: var(--space-6);
-  height: var(--space-5);
-  place-items: center;
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-}
-
-.bodyDetails,
-.historyDetails {
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
-
-.bodyDetails summary,
-.historyDetails summary {
-  min-height: var(--tap-target);
-  padding-block: var(--space-3);
-  cursor: pointer;
-  font-weight: var(--weight-semibold);
-}
-
-.technicalDetails {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding-block: var(--space-2);
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-}
-
-.technicalDetails p {
-  overflow-wrap: anywhere;
-}
-
-.technicalDetails .mailBody {
-  max-height: 14rem;
-}
-
-.historyCard {
-  padding: var(--space-4);
-}
-
-.historyDetails > summary {
-  color: var(--color-text);
-}
-
-.historyDetails > h2 {
-  margin-block: var(--space-2);
-}
-
-.historyDetails .table {
-  min-width: 34rem;
 }
 
 .actionStatus {
@@ -619,45 +818,91 @@
   font-size: var(--text-sm);
 }
 
+.historyCard {
+  gap: var(--space-2);
+}
+
+/* Tablet and up: the tables are tables again, the tracking runs across, the controls sit side by side. */
 @media (min-width: 40rem) {
   .casePage dl {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .stackTable {
+    display: table;
+  }
+
+  .stackTable tbody {
+    display: table-row-group;
+  }
+
+  .stackTable caption {
+    display: table-caption;
+  }
+
+  .stackTable thead {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    margin: 0;
+  }
+
+  .stackTable tr {
+    display: table-row;
+    padding: 0;
+    border-bottom: 0;
+  }
+
+  .stackTable td {
+    display: table-cell;
+    padding: var(--space-2) var(--space-3);
+    border-bottom: var(--border-width) solid var(--color-border);
+  }
+
+  .stackTable td[data-label]::before {
+    display: none;
+  }
+
+  .demoControls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
-@media (max-width: 40rem) {
-  .demoControls {
-    grid-template-columns: 1fr;
+@media (min-width: 48rem) {
+  .card,
+  .quietCard {
+    padding: var(--space-5);
   }
 
-  .steps {
-    gap: 0;
+  .track {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
-  .step {
-    padding-inline: var(--space-1);
-    font-size: var(--text-sm);
+  .trackStep {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-2);
+    padding-right: var(--space-3);
+    padding-bottom: 0;
   }
 
-  .stepCircle {
-    width: var(--space-5);
-    height: var(--space-5);
-    flex-basis: var(--space-5);
+  .trackStep::before {
+    top: calc(var(--space-5) / 2 - var(--stepper-line) / 2);
+    right: calc(-1 * var(--space-3));
+    bottom: auto;
+    left: var(--space-5);
+    width: auto;
+    height: var(--stepper-line);
   }
 
-  .step::before {
-    top: calc(var(--space-3) - var(--stepper-line) / 2);
+  .trackDot {
+    grid-column: 1;
   }
 
-  .emailHeader {
-    gap: var(--space-2);
-  }
-
-  .emailDate {
-    max-width: 36%;
-  }
-
-  .casePage .card {
-    padding: var(--space-4);
+  .trackText {
+    grid-column: 1;
+    grid-row: 2;
   }
 }

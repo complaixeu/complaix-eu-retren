@@ -9,11 +9,19 @@ import {
   demoNow,
   getCaseView,
   listFixtures,
+  type CaseView,
+  type TimelineMessage,
 } from "../../../../../features/claims/team";
 import { injectReply } from "../../actions";
 import { isDemo, requireTeam } from "../../_lib/session";
 import { ClockPanel } from "../../_components/clock-panel";
-import { dateTime, reasonLabel, statusLabel } from "../../_components/labels";
+import {
+  dateTime,
+  operatorName,
+  reasonLabel,
+  shortDate,
+  statusLabel,
+} from "../../_components/labels";
 import { Notice } from "../../_components/notice";
 import { ActionSubmit } from "../../_components/action-submit";
 import { ResolveForm } from "../../_components/resolve-form";
@@ -87,6 +95,9 @@ function emailSubject(kind: string | null, ref: string) {
   return `${kind?.startsWith("reply_") || kind === "insistence_after_denial" ? "Re: " : ""}[${ref}] ${subject.replace(/^Re: /, "")}`;
 }
 
+/** The subject the team reads: without the leading "[RTN-…]" tag, since the case ref is the heading. */
+const displaySubject = (subject: string) => subject.replace(/^(Re: )?\[[^\]]+\]\s*/, "");
+
 function emailPreview(kind: string | null, operator: string, ref: string, inbound: boolean) {
   if (inbound) {
     const copy: Record<string, string> = {
@@ -139,6 +150,138 @@ function statusHeadline(status: string, operator: string) {
   return { title: "Claim in progress", text: "Your case is being prepared for the operator." };
 }
 
+/** One email as the inbox shows it: who, what, when, and what the team needs to know. */
+type InboxItem = {
+  id: string;
+  /** The full subject, with the case tag (shown in Technical details). */
+  subject: string;
+  /** The subject as the team reads it: no case tag. */
+  title: string;
+  body: string;
+  mockBody: boolean;
+  kindLabel: string;
+  kind: string | null;
+  incoming: boolean;
+  passenger: boolean;
+  sender: string;
+  recipient: string;
+  initial: string;
+  createdAt: string;
+  status: string;
+  blocked: boolean;
+  classification: string | null;
+  outcome: string | null;
+  attachments: string[];
+  from: string | null;
+  to: string | null;
+  deliveredTo: string[];
+  storedSubject: string;
+  rawBody: string | null;
+};
+
+const STATUS_TEXT: Record<string, string> = {
+  queued: "Queued",
+  sent: "Sent",
+  failed: "Failed",
+  blocked: "Blocked",
+};
+
+function describeMessages(view: CaseView): InboxItem[] {
+  const c = view.case;
+  const operator = operatorName(c.operator);
+  return view.messages.map((m: TimelineMessage) => {
+    const passenger = Boolean(m.kind?.startsWith("user_"));
+    const incoming = m.direction === "inbound";
+    const mockBody = Boolean(m.body?.toLowerCase().startsWith("mock "));
+    const sender = incoming
+      ? `${operator} Customer Service`
+      : passenger
+        ? "Passenger"
+        : "ReTren Claims";
+    const recipient = incoming
+      ? "ReTren Claims"
+      : passenger
+        ? "Passenger"
+        : `${operator} Customer Service`;
+    // Only the events between this email and the next inbound email are its outcome, so a later
+    // reply never relabels an earlier one.
+    const nextInbound = view.messages.find(
+      (n) => n.direction === "inbound" && n.createdAt > m.createdAt,
+    );
+    const inWindow = (e: { createdAt: string }) =>
+      e.createdAt >= m.createdAt && (!nextInbound || e.createdAt < nextInbound.createdAt);
+    const blocked =
+      m.direction === "inbound" &&
+      (m.kind === "other" ||
+        view.events.some(
+          (e) =>
+            inWindow(e) &&
+            (["wrong_sender", "spoofed_reference", "unknown_reference"].includes(e.detail ?? "") ||
+              e.kind === "team_queue"),
+        ));
+    const outcome = !incoming
+      ? null
+      : view.events.some(
+            (e) => inWindow(e) && (e.kind === "case_resolved" || e.toStatus === "resolved"),
+          )
+        ? "Case resolved and passenger notified"
+        : m.kind === "asks_for_data"
+          ? "Asked the passenger for the document"
+          : m.kind === "denied"
+            ? "Sent one insistence"
+            : blocked
+              ? "Sent to the team queue — instructions in the email ignored"
+              : "Waiting for the operator";
+    const subject = emailSubject(m.kind, c.publicRef);
+    return {
+      id: m.id,
+      subject,
+      title: displaySubject(subject),
+      body: mockBody
+        ? emailPreview(m.kind, operator, c.publicRef, incoming)
+        : m.body || emailPreview(m.kind, operator, c.publicRef, incoming),
+      mockBody,
+      kindLabel: KIND_LABELS[m.kind ?? ""] ?? "Email",
+      kind: m.kind,
+      incoming,
+      passenger,
+      sender,
+      recipient,
+      initial: incoming ? operator.slice(0, 1) : passenger ? "P" : "R",
+      createdAt: m.createdAt,
+      status: STATUS_TEXT[m.status ?? ""] ?? m.status ?? "",
+      blocked,
+      classification: incoming ? (CLASSIFICATIONS[m.kind ?? ""] ?? "Unclear / suspicious") : null,
+      outcome,
+      attachments: m.attachments.map((a) => ATTACHMENT_FILES[a] ?? ATTACHMENT_LABELS[a] ?? a),
+      from: m.from,
+      to: m.to,
+      deliveredTo: m.deliveredTo,
+      storedSubject: m.subject,
+      rawBody: m.body || null,
+    };
+  });
+}
+
+function Paperclip() {
+  return (
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      viewBox="0 0 16 16"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M13.2 7.6 8 12.8a3.2 3.2 0 0 1-4.5-4.5L9 3.8a2.1 2.1 0 0 1 3 3L6.9 12" />
+    </svg>
+  );
+}
+
 export default function TeamCasePage({ params, searchParams }: PageProps<"/equipo/casos/[id]">) {
   return (
     <Suspense fallback={<p>Cargando…</p>}>
@@ -163,7 +306,8 @@ async function CaseDetail({
   const demo = isDemo();
   const fixtures = demo ? listFixtures(c.operator) : [];
   const now = demoNow((await cookies()).get(DEMO_CLOCK_COOKIE)?.value);
-  const headline = statusHeadline(c.status, c.operator);
+  const operator = operatorName(c.operator);
+  const headline = statusHeadline(c.status, operator);
   const currentStep =
     c.status === "draft"
       ? 0
@@ -177,106 +321,284 @@ async function CaseDetail({
               ? 4
               : 0;
 
+  // Tracking: the day or date a step happened, where the case says so.
+  const lastInbound = [...view.messages].reverse().find((m) => m.direction === "inbound");
+  const lastStatusChange = view.events.filter((e) => e.toStatus === c.status).at(-1);
+  const steps: { label: string; when: string | null }[] = [
+    { label: "Case created", when: null },
+    { label: "Waiting period", when: null },
+    // A step has a date only once it has happened, each from its own event.
+    { label: "Claim sent", when: currentStep >= 2 ? c.sentAt : null },
+    {
+      label: "Operator replied",
+      when: currentStep >= 3 ? (lastInbound?.createdAt ?? null) : null,
+    },
+    {
+      label:
+        c.status === "waiting_user"
+          ? "Waiting for user"
+          : c.status === "resolved"
+            ? "Resolved"
+            : c.status === "escalated"
+              ? "Escalated"
+              : c.status === "closed"
+                ? "Closed"
+                : "Resolved / Escalated / Closed",
+      when: currentStep >= 4 ? (lastStatusChange?.createdAt ?? null) : null,
+    },
+  ];
+
+  const items = describeMessages(view);
+  const sorted = [...items].reverse(); // newest first, like a mail app
+  const selected = items.find((item) => item.id === one(query.m));
+  const latestReply = [...items].reverse().find((item) => item.incoming);
+
   return (
-    <main className={styles.casePage}>
+    <div className={styles.casePage}>
       <Link className={styles.backLink} href="/equipo">
         Back to team queue
       </Link>
       <Notice aviso={one(query.aviso)} error={one(query.error)} />
-      <header className={styles.hero}>
-        <div className={styles.heroEyebrow}>CASE {c.publicRef}</div>
-        <div className={styles.operatorLine}>
-          <span className={styles.operatorBadge}>{c.operator.slice(0, 1)}</span>
-          <span>{c.operator}</span>
-        </div>
-        <span className={styles.statusPill}>{headline.title}</span>
+
+      <header className={styles.caseHeader}>
         <h1 className={styles.title}>Case {c.publicRef}</h1>
-        <p className={styles.heroDescription}>{headline.text}</p>
+        <p className={styles.operatorLine}>
+          <span className={styles.muted}>Operator</span> {operator}
+        </p>
+        <p className={styles.statusLine}>
+          <strong>{headline.title}</strong> {headline.text}
+        </p>
       </header>
 
       <section aria-labelledby="process" className={styles.card}>
         <h2 id="process" className={styles.subtitle}>
           Claim process
         </h2>
-        <ol className={styles.steps}>
-          {[
-            "Case created",
-            "Waiting period",
-            "Claim sent",
-            "Operator replied",
-            c.status === "waiting_user"
-              ? "Waiting for user"
-              : c.status === "resolved"
-                ? "Resolved"
-                : c.status === "escalated"
-                  ? "Escalated"
-                  : c.status === "closed"
-                    ? "Closed"
-                    : "Resolved / Escalated / Closed",
-          ].map((step, index) => (
-            <li
-              key={`${step}-${index}`}
-              aria-current={
-                (c.status === "draft" && index === 0) ||
-                (c.status === "waiting_period" && index === 1) ||
-                (c.status === "sent" && index === 2) ||
-                (c.status === "reply_received" && index === 3) ||
-                (c.status === "waiting_user" && index === 4) ||
-                (["resolved", "escalated", "closed"].includes(c.status) && index === 4) ||
-                (c.status === "denied" && index === 3)
-                  ? "step"
-                  : undefined
-              }
-              className={`${styles.step} ${index < currentStep ? styles.stepDone : ""} ${index === currentStep ? styles.stepCurrent : ""}`}
-            >
-              <span className={styles.stepCircle} aria-hidden="true">
-                {index < currentStep ? (
-                  <svg
-                    aria-hidden="true"
-                    viewBox="0 0 16 16"
-                    width="14"
-                    height="14"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M3 8.5l3.2 3L13 4.5" />
-                  </svg>
-                ) : (
-                  index + 1
-                )}
-              </span>
-              <span className={styles.stepName}>{step}</span>
-            </li>
-          ))}
+        <ol className={styles.track}>
+          {steps.map((step, index) => {
+            const done = index < currentStep;
+            const current = index === currentStep;
+            return (
+              <li
+                key={`${step.label}-${index}`}
+                aria-current={current ? "step" : undefined}
+                className={`${styles.trackStep} ${done ? styles.stepDone : ""} ${current ? styles.stepCurrent : ""}`}
+              >
+                <span className={styles.trackDot} aria-hidden="true">
+                  {done ? (
+                    <svg
+                      aria-hidden="true"
+                      focusable="false"
+                      viewBox="0 0 16 16"
+                      width="14"
+                      height="14"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M3 8.5l3.2 3L13 4.5" />
+                    </svg>
+                  ) : (
+                    index + 1
+                  )}
+                </span>
+                <span className={styles.trackText}>
+                  <span className={styles.stepName}>{step.label}</span>
+                  {!current && (
+                    <span className="visually-hidden">{done ? " completed" : " upcoming"}</span>
+                  )}
+                  {step.when && (
+                    <span className={styles.stepWhen}>
+                      Day {dayFrom(step.when, c.sentAt)} · {dateTime(step.when)}
+                    </span>
+                  )}
+                </span>
+              </li>
+            );
+          })}
         </ol>
-        <p className={styles.muted}>
-          Day {dayFrom(now.toISOString(), c.sentAt)} <span>of this claim</span>
-        </p>
       </section>
 
-      <section aria-labelledby="resumen" className={styles.card}>
+      <section aria-labelledby="mensajes" className={`${styles.card} ${styles.thread}`}>
+        <div className={styles.sectionHead}>
+          <h2 id="mensajes" className={styles.subtitle}>
+            Email thread
+          </h2>
+          {items.length > 0 && (
+            <span className={styles.muted}>
+              {items.length} {items.length === 1 ? "email" : "emails"}
+            </span>
+          )}
+        </div>
+
+        {items.length === 0 ? (
+          <p>This case has no email yet.</p>
+        ) : selected ? (
+          <article className={styles.readMessage}>
+            <Link className={styles.backLink} href={back}>
+              ← Inbox
+            </Link>
+            <h3 className={styles.readSubject}>{selected.title}</h3>
+            <dl className={styles.readMeta}>
+              <div>
+                <dt>From</dt>
+                <dd>{selected.sender}</dd>
+              </div>
+              <div>
+                <dt>To</dt>
+                <dd>{selected.recipient}</dd>
+              </div>
+              <div>
+                <dt>Date</dt>
+                <dd>
+                  {dateTime(selected.createdAt)} · Day {dayFrom(selected.createdAt, c.sentAt)}
+                </dd>
+              </div>
+            </dl>
+            <div className={styles.messageTags}>
+              <span className={styles.kindTag}>{selected.kindLabel}</span>
+              <span className={styles.pill}>{selected.status}</span>
+              {selected.blocked && <span className={styles.blockedTag}>Blocked</span>}
+              {selected.mockBody && <span className={styles.previewTag}>Preview</span>}
+            </div>
+            {selected.blocked && (
+              <p className={styles.warningBanner}>
+                Suspicious email: instructions ignored, sent to the ReTren team
+              </p>
+            )}
+            <p className={`${styles.readBody} ${selected.blocked ? styles.suspiciousBody : ""}`}>
+              {selected.body}
+            </p>
+            {selected.attachments.length > 0 && (
+              <ul className={styles.files} aria-label="Attachments">
+                {selected.attachments.map((name, n) => (
+                  <li key={`${name}-${n}`}>
+                    <Paperclip />
+                    {name}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {selected.incoming && (
+              <div className={styles.aiLines}>
+                <p className={styles.aiFooter}>
+                  <span className={styles.aiBadge}>AI</span> AI classification:{" "}
+                  {selected.classification} · ReTren replied automatically
+                </p>
+                <p className={styles.meta}>What ReTren did next: {selected.outcome}</p>
+              </div>
+            )}
+            <details className={styles.bodyDetails}>
+              <summary>Technical details</summary>
+              <div className={styles.technicalDetails}>
+                <p>
+                  <strong>From:</strong> {selected.from ?? "—"}
+                </p>
+                <p>
+                  <strong>To:</strong> {selected.to ?? "—"}
+                </p>
+                {selected.deliveredTo.length > 0 && (
+                  <p>Redirected to: {selected.deliveredTo.join(", ")} (demo)</p>
+                )}
+                <p>
+                  <strong>Subject:</strong> {selected.subject}
+                </p>
+                <p>
+                  <strong>Stored subject:</strong> {selected.storedSubject}
+                </p>
+                <p>
+                  <strong>Kind:</strong> <span className={styles.pill}>{selected.kindLabel}</span>{" "}
+                  <code className={styles.code}>{selected.kind ?? "unknown"}</code>
+                </p>
+                {selected.rawBody && <pre className={styles.mailBody}>{selected.rawBody}</pre>}
+              </div>
+            </details>
+          </article>
+        ) : (
+          <ol className={styles.inbox}>
+            {sorted.map((item) => (
+              <li key={item.id} className={styles.inboxItem}>
+                <Link className={styles.row} href={`${back}?m=${item.id}`}>
+                  <span
+                    className={`${styles.avatar} ${item.incoming ? styles.operatorAvatar : ""}`}
+                    aria-hidden="true"
+                  >
+                    {item.initial}
+                  </span>
+                  <span className={styles.rowBody}>
+                    <span className={styles.rowTop}>
+                      <span className={item.incoming ? styles.senderIn : styles.sender}>
+                        {item.sender}
+                      </span>
+                      <time className={styles.rowDate} dateTime={item.createdAt}>
+                        {shortDate(item.createdAt)}
+                      </time>
+                    </span>
+                    <span className={styles.rowSubject}>{item.title}</span>
+                    <span className={styles.rowPreview}>{item.body.replace(/\s+/g, " ")}</span>
+                    <span className={styles.rowMeta}>
+                      <span className={styles.kindTag}>{item.kindLabel}</span>
+                      <span>{item.status}</span>
+                      {item.blocked && (
+                        <span className={styles.blockedTag}>
+                          Blocked — sent to the team for review
+                        </span>
+                      )}
+                      {item.attachments.length > 0 && (
+                        <span className={styles.clip}>
+                          <Paperclip />
+                          {item.attachments.length}{" "}
+                          {item.attachments.length === 1 ? "attachment" : "attachments"}
+                        </span>
+                      )}
+                    </span>
+                  </span>
+                  <span className={styles.chevron} aria-hidden="true">
+                    ›
+                  </span>
+                </Link>
+                {item.attachments.length > 0 && (
+                  <ul className="visually-hidden" aria-label="Attachments">
+                    {item.attachments.map((name, n) => (
+                      <li key={`${name}-${n}`}>{name}</li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+
+      <section aria-labelledby="resumen" className={styles.quietCard}>
         <h2 id="resumen" className={styles.subtitle}>
           Case summary
         </h2>
         <dl>
           <dt className={styles.muted}>Status</dt>
-          <dd>
-            {statusLabel(c.status)} <code className={styles.code}>{c.status}</code>
-          </dd>
+          <dd>{statusLabel(c.status)}</dd>
           <dt className={styles.muted}>Operator</dt>
-          <dd>{c.operator}</dd>
+          <dd>{operator}</dd>
           <dt className={styles.muted}>Claim sent</dt>
           <dd>{dateTime(c.sentAt)}</dd>
           <dt className={styles.muted}>Emails sent to operator</dt>
           <dd>{c.sendCount}</dd>
         </dl>
+        {latestReply && (
+          <div className={styles.aiLines}>
+            <p className={styles.aiFooter}>
+              <span className={styles.aiBadge}>AI</span> AI classification:{" "}
+              {latestReply.classification} · ReTren replied automatically
+            </p>
+            <p className={styles.meta}>What ReTren did next: {latestReply.outcome}</p>
+          </div>
+        )}
       </section>
 
       {view.open.length > 0 && (
-        <section aria-labelledby="pendiente" className={styles.card}>
+        <section aria-labelledby="pendiente" className={styles.quietCard}>
           <h2 id="pendiente" className={styles.subtitle}>
             Needs team review
           </h2>
@@ -300,7 +622,7 @@ async function CaseDetail({
 
       <div className={styles.demoControls}>
         {isDemo() && (
-          <section aria-labelledby="inyectar" className={styles.card}>
+          <section aria-labelledby="inyectar" className={styles.quietCard}>
             <h2 id="inyectar" className={styles.subtitle}>
               Simulate an operator reply
             </h2>
@@ -331,167 +653,17 @@ async function CaseDetail({
         {demo && <ClockPanel now={now.toISOString()} back={back} caseId={c.id} />}
       </div>
 
-      <section aria-labelledby="mensajes" className={`${styles.card} ${styles.thread}`}>
-        <h2 id="mensajes" className={styles.subtitle}>
-          Email thread
-        </h2>
-        {view.messages.length === 0 ? (
-          <p>This case has no email yet.</p>
-        ) : (
-          <ol className={styles.list}>
-            {view.messages.map((m) => {
-              const passenger = Boolean(m.kind?.startsWith("user_"));
-              const incoming = m.direction === "inbound";
-              const mockBody = Boolean(m.body?.toLowerCase().startsWith("mock "));
-              const sender = incoming
-                ? `${c.operator} Customer Service`
-                : passenger
-                  ? "Passenger"
-                  : "ReTren Claims";
-              const recipient = incoming
-                ? "ReTren Claims"
-                : passenger
-                  ? "Passenger"
-                  : `${c.operator} Customer Service`;
-              // Only the events between this email and the next inbound email are its
-              // outcome, so a later reply never relabels an earlier one.
-              const nextInbound = view.messages.find(
-                (n) => n.direction === "inbound" && n.createdAt > m.createdAt,
-              );
-              const inWindow = (e: { createdAt: string }) =>
-                e.createdAt >= m.createdAt && (!nextInbound || e.createdAt < nextInbound.createdAt);
-              const blocked =
-                m.direction === "inbound" &&
-                (m.kind === "other" ||
-                  view.events.some(
-                    (e) =>
-                      inWindow(e) &&
-                      (["wrong_sender", "spoofed_reference", "unknown_reference"].includes(
-                        e.detail ?? "",
-                      ) ||
-                        e.kind === "team_queue"),
-                  ));
-              const outcome = view.events.some(
-                (e) => inWindow(e) && (e.kind === "case_resolved" || e.toStatus === "resolved"),
-              )
-                ? "Case resolved and passenger notified"
-                : m.kind === "asks_for_data"
-                  ? "Asked the passenger for the document"
-                  : m.kind === "denied"
-                    ? "Sent one insistence"
-                    : blocked
-                      ? "Sent to the team queue — instructions in the email ignored"
-                      : "Waiting for the operator";
-              return (
-                <li
-                  key={m.id}
-                  className={`${styles.mailCard} ${incoming ? styles.incoming : styles.outgoing} ${blocked ? styles.blocked : ""}`}
-                >
-                  {blocked && (
-                    <p className={styles.warningBanner}>
-                      Suspicious email: instructions ignored, sent to the ReTren team
-                      <span className={styles.blockedStatus}>
-                        Blocked — sent to the team for review
-                      </span>
-                    </p>
-                  )}
-                  <div className={styles.emailHeader}>
-                    <span
-                      className={`${styles.avatar} ${incoming ? styles.operatorAvatar : passenger ? styles.passengerAvatar : ""}`}
-                      aria-hidden="true"
-                    >
-                      {incoming ? c.operator.slice(0, 1) : passenger ? "P" : "R"}
-                    </span>
-                    <div className={styles.senderBlock}>
-                      <strong>{sender}</strong>
-                      <span className={styles.meta}>to {recipient}</span>
-                    </div>
-                    <span className={styles.emailDate}>
-                      {dateTime(m.createdAt)}
-                      <small>Day {dayFrom(m.createdAt, c.sentAt)}</small>
-                    </span>
-                  </div>
-                  <h3 className={styles.emailSubject}>{emailSubject(m.kind, c.publicRef)}</h3>
-                  <div className={styles.messageTags}>
-                    <span className={styles.kindTag}>{KIND_LABELS[m.kind ?? ""] ?? "Email"}</span>
-                    <span className={styles.pill}>
-                      {m.status === "queued"
-                        ? "Queued"
-                        : m.status === "sent"
-                          ? "Sent"
-                          : m.status === "failed"
-                            ? "Failed"
-                            : m.status === "blocked"
-                              ? "Blocked"
-                              : m.status}
-                    </span>
-                    {mockBody && <span className={styles.previewTag}>Preview</span>}
-                  </div>
-                  <p className={`${styles.emailBody} ${blocked ? styles.suspiciousBody : ""}`}>
-                    {mockBody
-                      ? emailPreview(m.kind, c.operator, c.publicRef, incoming)
-                      : m.body || emailPreview(m.kind, c.operator, c.publicRef, incoming)}
-                  </p>
-                  {m.attachments.length > 0 && (
-                    <ul className={styles.chips}>
-                      {m.attachments.map((a, n) => (
-                        <li key={`${a}-${n}`}>
-                          <span className={styles.fileIcon} aria-hidden="true">
-                            PDF
-                          </span>
-                          {ATTACHMENT_FILES[a] ?? ATTACHMENT_LABELS[a] ?? a}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {m.direction === "inbound" && (
-                    <>
-                      <p className={styles.aiFooter}>
-                        <span className={styles.aiBadge}>AI</span> AI classification:{" "}
-                        {CLASSIFICATIONS[m.kind ?? ""] ?? "Unclear / suspicious"} · ReTren replied
-                        automatically
-                      </p>
-                      <p className={styles.meta}>What ReTren did next: {outcome}</p>
-                    </>
-                  )}
-                  <details className={styles.bodyDetails}>
-                    <summary>Technical details</summary>
-                    <div className={styles.technicalDetails}>
-                      <p>
-                        <strong>From:</strong> {m.from ?? "—"}
-                      </p>
-                      <p>
-                        <strong>To:</strong> {m.to ?? "—"}
-                      </p>
-                      {m.deliveredTo.length > 0 && (
-                        <p>Redirected to: {m.deliveredTo.join(", ")} (demo)</p>
-                      )}
-                      <p>
-                        <strong>Stored subject:</strong> {m.subject}
-                      </p>
-                      <p>
-                        <strong>Kind:</strong>{" "}
-                        <span className={styles.pill}>{KIND_LABELS[m.kind ?? ""] ?? "Email"}</span>{" "}
-                        <code className={styles.code}>{m.kind ?? "unknown"}</code>
-                      </p>
-                      {m.body && <pre className={styles.mailBody}>{m.body}</pre>}
-                    </div>
-                  </details>
-                </li>
-              );
-            })}
-          </ol>
-        )}
-      </section>
-
-      <section aria-labelledby="historial" className={`${styles.card} ${styles.historyCard}`}>
+      <section aria-labelledby="historial" className={`${styles.quietCard} ${styles.historyCard}`}>
         <details className={styles.historyDetails}>
           <summary>Technical history</summary>
           <h2 id="historial" className={styles.subtitle}>
             History
           </h2>
+          <p className={styles.meta}>
+            Status code: <code className={styles.code}>{c.status}</code>
+          </p>
           <div className={styles.tableWrap}>
-            <table className={styles.table}>
+            <table className={`${styles.table} ${styles.stackTable}`}>
               <thead>
                 <tr>
                   <th scope="col">Date</th>
@@ -503,16 +675,18 @@ async function CaseDetail({
               <tbody>
                 {view.events.map((e) => (
                   <tr key={e.id}>
-                    <td>{dateTime(e.createdAt)}</td>
-                    <td>
+                    <td data-label="Date">{dateTime(e.createdAt)}</td>
+                    <td data-label="Event">
                       <code className={styles.code}>{e.kind}</code>
                     </td>
-                    <td>
+                    <td data-label="Status change">
                       {e.fromStatus || e.toStatus
                         ? `${e.fromStatus ?? "—"} → ${e.toStatus ?? "—"}`
                         : "—"}
                     </td>
-                    <td>{e.detail ? <code className={styles.code}>{e.detail}</code> : "—"}</td>
+                    <td data-label="Details">
+                      {e.detail ? <code className={styles.code}>{e.detail}</code> : "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -520,6 +694,6 @@ async function CaseDetail({
           </div>
         </details>
       </section>
-    </main>
+    </div>
   );
 }

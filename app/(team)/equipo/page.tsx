@@ -5,7 +5,7 @@ import { createServiceClient } from "@/shared/supabase/server";
 import { listCases, listQueue } from "../../../features/claims/team";
 import { logout } from "./actions";
 import { requireTeam } from "./_lib/session";
-import { dateTime, reasonLabel, statusLabel } from "./_components/labels";
+import { dateTime, operatorName, reasonLabel, statusLabel } from "./_components/labels";
 import { Notice } from "./_components/notice";
 import { ActionSubmit } from "./_components/action-submit";
 import { ResolveForm } from "./_components/resolve-form";
@@ -47,7 +47,7 @@ async function Queue({ searchParams }: Pick<PageProps<"/equipo">, "searchParams"
       <h1 className={styles.title}>Team queue</h1>
       <Notice aviso={one(params.aviso)} error={one(params.error)} />
 
-      <section aria-labelledby="cola" className={styles.card}>
+      <section aria-labelledby="cola" className={styles.quietCard}>
         <h2 id="cola" className={styles.subtitle}>
           Needs team review
         </h2>
@@ -55,7 +55,7 @@ async function Queue({ searchParams }: Pick<PageProps<"/equipo">, "searchParams"
           <p>Nothing needs review.</p>
         ) : (
           <div className={styles.tableWrap}>
-            <table className={styles.table}>
+            <table className={`${styles.table} ${styles.stackTable}`}>
               <caption className={styles.muted}>
                 Cases and emails that need a person, newest first.
               </caption>
@@ -70,15 +70,15 @@ async function Queue({ searchParams }: Pick<PageProps<"/equipo">, "searchParams"
               <tbody>
                 {queue.map((item) => (
                   <tr key={item.id}>
-                    <td>{dateTime(item.createdAt)}</td>
-                    <td>
+                    <td data-label="Date">{dateTime(item.createdAt)}</td>
+                    <td data-label="Case">
                       {item.caseId ? (
                         <Link href={`/equipo/casos/${item.caseId}`}>{item.publicRef}</Link>
                       ) : (
                         "No case"
                       )}
                     </td>
-                    <td>
+                    <td data-label="Reason">
                       {item.source === "message" ||
                       ["wrong_sender", "spoofed_reference", "unknown_reference", "other"].includes(
                         item.reason,
@@ -89,12 +89,12 @@ async function Queue({ searchParams }: Pick<PageProps<"/equipo">, "searchParams"
                       ) : null}
                       {reasonLabel(item.reason)} <code className={styles.code}>{item.reason}</code>
                     </td>
-                    <td>
+                    <td data-label="Action">
                       <ResolveForm
                         id={item.id}
                         source={item.source}
                         back="/equipo"
-                        label={`${item.publicRef ?? "correo sin caso"}, ${reasonLabel(item.reason)}`}
+                        label={`${item.publicRef ?? "email without a case"}, ${reasonLabel(item.reason)}`}
                       />
                     </td>
                   </tr>
@@ -105,39 +105,29 @@ async function Queue({ searchParams }: Pick<PageProps<"/equipo">, "searchParams"
         )}
       </section>
 
-      <section aria-labelledby="casos" className={styles.card}>
+      <section aria-labelledby="casos" className={styles.quietCard}>
         <h2 id="casos" className={styles.subtitle}>
           Cases
         </h2>
         {cases.length === 0 ? (
           <p>No cases yet.</p>
         ) : (
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th scope="col">Reference</th>
-                  <th scope="col">Operator</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Sent</th>
-                  <th scope="col">Next action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cases.map((c) => (
-                  <tr key={c.id}>
-                    <td>
-                      <Link href={`/equipo/casos/${c.id}`}>{c.publicRef}</Link>
-                    </td>
-                    <td>{c.operator}</td>
-                    <td>{statusLabel(c.status)}</td>
-                    <td>{dateTime(c.sentAt)}</td>
-                    <td>{dateTime(c.nextActionAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ul className={styles.caseList}>
+            {cases.map((c) => (
+              <li key={c.id} className={styles.caseRow}>
+                <div className={styles.caseTop}>
+                  <Link className={styles.caseRef} href={`/equipo/casos/${c.id}`}>
+                    {c.publicRef}
+                  </Link>
+                  <span className={styles.statusPill}>{statusLabel(c.status)}</span>
+                </div>
+                <p className={styles.caseMeta}>{operatorName(c.operator)}</p>
+                <p className={styles.caseMeta}>
+                  Sent {dateTime(c.sentAt)} · Next step {dateTime(c.nextActionAt)}
+                </p>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
     </>

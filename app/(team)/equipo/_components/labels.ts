@@ -40,3 +40,17 @@ export const dateTime = (iso: string | null) =>
         timeZone: "Europe/Madrid",
       })
     : "—";
+
+/** A short date for lists: "14 Nov". */
+export const shortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    timeZone: "Europe/Madrid",
+  });
+
+// Operator ids as the team sees them: the display name, never the lowercase id.
+const OPERATORS: Record<string, string> = { iryo: "Iryo", renfe: "Renfe", ouigo: "Ouigo" };
+
+export const operatorName = (id: string) =>
+  OPERATORS[id] ?? id.charAt(0).toUpperCase() + id.slice(1);
