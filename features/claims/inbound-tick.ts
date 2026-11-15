@@ -7,9 +7,15 @@ import type { ServiceClient } from "@/shared/supabase/server";
 import { createClassifier, type ReplyClassifier } from "./classifier";
 import { ingestMessage } from "./inbound";
 import { operatorInboxes } from "./operator-inboxes";
-import { pollInbox, type PollResult } from "./poll-inbox";
+import { pollInbox, type ImapClient, type PollResult, type PollStateStore } from "./poll-inbox";
 
 type Env = Record<string, string | undefined>;
+
+/** Test seams only: the IMAP client and poll state. The real ones (from env) when left out. */
+export interface InboundDeps {
+  client?: ImapClient;
+  state?: PollStateStore;
+}
 
 /** Codes and counts only: the tick's response holds no personal data and no error text. */
 export type InboundTickResult =
@@ -23,12 +29,14 @@ let classifier: ReplyClassifier | undefined;
 /**
  * Reads the mailbox only when MAIL_PROVIDER=gmail; with the fake provider there is no mailbox
  * (the team's simulated mailbox, C9, calls ingestMessage directly). Never throws: a mailbox that
- * can't be read (or refuses to start) never stops the timers.
+ * can't be read (or refuses to start) never stops the timers. The team's "Check inbox now" (C9)
+ * uses the same read, with its own client and state in tests.
  */
 export async function runInbound(
   db: ServiceClient,
   now: Date,
   env: Env = process.env,
+  deps: InboundDeps = {},
 ): Promise<InboundTickResult> {
   try {
     if (provider("MAIL_PROVIDER", env) !== "gmail") return { skipped: "mail_provider_fake" };
@@ -46,6 +54,8 @@ export async function runInbound(
     return await pollInbox({
       db,
       env,
+      client: deps.client,
+      state: deps.state,
       ingest: (raw) => ingestMessage(raw, { db, env, classifier: c, clock: fixedClock(now) }),
     });
   } catch {

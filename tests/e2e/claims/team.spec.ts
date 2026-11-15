@@ -177,3 +177,16 @@ test("a queue item can be resolved and then is no longer listed", async ({ page 
   await expect(page.getByRole("status")).toContainText("marked as resolved");
   await expect(queue.getByRole("link", { name: ref })).toHaveCount(0);
 });
+
+test("with the fake mail, the demo clock and the simulated reply are shown, and Check inbox now is not", async ({
+  page,
+}) => {
+  const { ref } = await seedSentCase();
+  await signIn(page, member);
+  await page.getByRole("link", { name: ref }).click();
+  await expect(heading(page, `Case ${ref}`)).toBeVisible();
+
+  await expect(page.getByRole("region", { name: "Simulated clock" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Simulate an operator reply" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check inbox now" })).toHaveCount(0);
+});

@@ -8,7 +8,9 @@ import { createServiceClient } from "@/shared/supabase/server";
 import {
   DEMO_CLOCK_COOKIE,
   TeamActionError,
-  assertDemoMode,
+  assertDemoCapability,
+  checkInboxNow,
+  demoNow,
   nextDemoNow,
   resolveQueueItem,
   injectOperatorReply,
@@ -84,7 +86,7 @@ export async function injectReply(formData: FormData): Promise<void> {
   const caseId = str(formData, "caseId");
   const back = /^[0-9a-f-]{36}$/i.test(caseId) ? `/equipo/casos/${caseId}` : "/equipo";
   await perform(back, async () => {
-    assertDemoMode();
+    assertDemoCapability("simulateReply");
     const out = await injectOperatorReply(
       createServiceClient(),
       { caseId, fixture: str(formData, "fixture") },
@@ -109,7 +111,7 @@ export async function advanceClock(formData: FormData): Promise<void> {
   await perform(
     backTo(formData),
     async () => {
-      assertDemoMode();
+      assertDemoCapability("clock");
       if (!next || !/^[0-9a-f-]{36}$/i.test(caseId)) throw new TeamActionError("bad_input");
       await runDemoTick(createServiceClient(), next, caseId);
       return { aviso: "reloj_movido" };
@@ -130,9 +132,27 @@ export async function advanceClock(formData: FormData): Promise<void> {
 export async function resetClock(formData: FormData): Promise<void> {
   await requireTeam();
   await perform(backTo(formData), async () => {
-    assertDemoMode();
+    assertDemoCapability("clock");
     (await cookies()).delete(DEMO_CLOCK_COOKIE);
     return { aviso: "reloj_reiniciado" };
+  });
+}
+
+/**
+ * Reads the Retren mailbox now and acts on what it finds for the case viewed (real mail only).
+ * The notice carries the count of mails read: `buzon_<n>`.
+ */
+export async function checkInbox(formData: FormData): Promise<void> {
+  await requireTeam();
+  const caseId = str(formData, "caseId");
+  const back = /^[0-9a-f-]{36}$/i.test(caseId) ? `/equipo/casos/${caseId}` : "/equipo";
+  const jar = await cookies();
+  await perform(back, async () => {
+    assertDemoCapability("checkInbox");
+    // The same instant the demo clock shows, so "now" is never ahead of what the team sees.
+    const now = demoNow(jar.get(DEMO_CLOCK_COOKIE)?.value);
+    const out = await checkInboxNow(createServiceClient(), now, caseId, { env: process.env });
+    return { aviso: `buzon_${out.processed}` };
   });
 }
 

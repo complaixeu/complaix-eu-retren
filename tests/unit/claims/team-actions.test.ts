@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TeamActionError } from "@/features/claims/team";
 
 // [C9] Every server action re-checks the session itself: an action is a public endpoint, so a
 // visitor without a team session must reach neither the database nor the demo tools, whatever
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   injectOperatorReply: vi.fn(async () => ({ outcome: "applied" })),
   resolveQueueItem: vi.fn(async () => undefined),
   runDemoTick: vi.fn(async () => ({})),
+  checkInboxNow: vi.fn(async () => ({ processed: 2 })),
   verifyTeamToken: vi.fn(async (token: string | undefined) =>
     token === "good" ? { email: "a@retren.test" } : null,
   ),
@@ -48,6 +50,7 @@ vi.mock("@/features/claims/team", async (orig) => ({
   injectOperatorReply: mocks.injectOperatorReply,
   resolveQueueItem: mocks.resolveQueueItem,
   runDemoTick: mocks.runDemoTick,
+  checkInboxNow: mocks.checkInboxNow,
 }));
 
 const ID = "11111111-1111-4111-8111-111111111111";
@@ -79,6 +82,7 @@ describe("without a team session", () => {
     ["advanceClock", { days: "30", caseId: ID }],
     ["resetClock", {}],
     ["resolveItem", { id: ID, source: "event" }],
+    ["checkInbox", { caseId: ID }],
   ];
 
   it.each(calls)("%s sends the visitor to the login and touches nothing", async (name, data) => {
@@ -88,6 +92,7 @@ describe("without a team session", () => {
     expect(mocks.injectOperatorReply).not.toHaveBeenCalled();
     expect(mocks.resolveQueueItem).not.toHaveBeenCalled();
     expect(mocks.runDemoTick).not.toHaveBeenCalled();
+    expect(mocks.checkInboxNow).not.toHaveBeenCalled();
     expect(mocks.cookieSet).not.toHaveBeenCalled();
   });
 
@@ -203,5 +208,88 @@ describe("with a team session", () => {
       expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
       expect.objectContaining({ httpOnly: true }),
     );
+  });
+});
+
+// [C9] Real mail on DEV: gmail with a redirect outside production. The clock and "Check inbox
+// now" are allowed; a simulated reply and anything in production are refused with demo_only.
+describe("with real mail (gmail, redirected, not production)", () => {
+  const REAL = {
+    MAIL_PROVIDER: "gmail",
+    MAIL_REDIRECT_ALL_TO: "team@example.com",
+    SMTP_USER: "retren@example.com",
+  };
+  beforeEach(() => {
+    mocks.token = "good";
+    Object.assign(process.env, REAL);
+  });
+
+  it("moves the clock", async () => {
+    const a = await actions();
+    await expect(a.advanceClock(form({ days: "30", caseId: ID }))).rejects.toThrow(
+      "?aviso=reloj_movido",
+    );
+    expect(mocks.runDemoTick).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses the clock in production, even with the redirect", async () => {
+    process.env.RETREN_ENV = "production";
+    const a = await actions();
+    // No `back` in the form, so it goes back to the queue.
+    await expect(a.advanceClock(form({ days: "30", caseId: ID }))).rejects.toThrow(
+      "REDIRECT /equipo?error=demo_only",
+    );
+    expect(mocks.runDemoTick).not.toHaveBeenCalled();
+  });
+
+  it("refuses a simulated reply", async () => {
+    const a = await actions();
+    await expect(a.injectReply(form({ caseId: ID, fixture: "approved-01" }))).rejects.toThrow(
+      `REDIRECT /equipo/casos/${ID}?error=demo_only`,
+    );
+    expect(mocks.injectOperatorReply).not.toHaveBeenCalled();
+  });
+
+  it("checks the inbox for the case viewed and reports how many emails were read", async () => {
+    const a = await actions();
+    await expect(a.checkInbox(form({ caseId: ID }))).rejects.toThrow(
+      `REDIRECT /equipo/casos/${ID}?aviso=buzon_2`,
+    );
+    expect(mocks.checkInboxNow).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(Date),
+      ID,
+      expect.anything(),
+    );
+  });
+
+  it("answers mail settings that are incomplete with their code only", async () => {
+    mocks.checkInboxNow.mockRejectedValueOnce(new TeamActionError("mail_config"));
+    const a = await actions();
+    await expect(a.checkInbox(form({ caseId: ID }))).rejects.toThrow(
+      `REDIRECT /equipo/casos/${ID}?error=mail_config`,
+    );
+  });
+
+  it("answers any other failure with the generic code, never its text", async () => {
+    mocks.checkInboxNow.mockRejectedValueOnce(new Error("imap login failed for team@example.com"));
+    const a = await actions();
+    let err: Error | undefined;
+    try {
+      await a.checkInbox(form({ caseId: ID }));
+    } catch (e) {
+      err = e as Error;
+    }
+    expect(err?.message).toBe(`REDIRECT /equipo/casos/${ID}?error=failed`);
+    expect(err?.message).not.toContain("example.com");
+  });
+
+  it("does not check the inbox with the fake mail", async () => {
+    delete process.env.MAIL_PROVIDER;
+    const a = await actions();
+    await expect(a.checkInbox(form({ caseId: ID }))).rejects.toThrow(
+      `REDIRECT /equipo/casos/${ID}?error=demo_only`,
+    );
+    expect(mocks.checkInboxNow).not.toHaveBeenCalled();
   });
 });

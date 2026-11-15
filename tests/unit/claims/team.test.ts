@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   TeamActionError,
-  assertDemoMode,
   demoNow,
   listFixtures,
   nextDemoNow,
@@ -34,21 +33,7 @@ const opts = {
   messageId: "<scripted-1@mail.example>",
 };
 
-describe("assertDemoMode", () => {
-  it("passes only with DEMO_MODE=1", () => {
-    expect(() => assertDemoMode({ DEMO_MODE: "1" })).not.toThrow();
-    for (const env of [{}, { DEMO_MODE: "0" }, { DEMO_MODE: "true" }]) {
-      expect(() => assertDemoMode(env)).toThrow(TeamActionError);
-    }
-  });
-
-  it("refuses a real mail provider, even in DEMO_MODE", () => {
-    expect(() => assertDemoMode({ DEMO_MODE: "1", MAIL_PROVIDER: "fake" })).not.toThrow();
-    for (const MAIL_PROVIDER of ["gmail", "other"]) {
-      expect(() => assertDemoMode({ DEMO_MODE: "1", MAIL_PROVIDER })).toThrow(TeamActionError);
-    }
-  });
-});
+// The demo rule itself (which tool each mail setup gets) is in demo-capabilities.test.ts.
 
 describe("the demo clock", () => {
   const clock = fixedClock("2030-03-01T10:00:00.000Z");

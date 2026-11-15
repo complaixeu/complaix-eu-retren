@@ -29,7 +29,3 @@ export async function requireTeam(): Promise<{ email: string | null }> {
   if (!member) redirect(LOGIN_PATH);
   return member;
 }
-
-/** The demo tools (simulated mailbox, clock): DEMO_MODE=1 and fake mail, like assertDemoMode. */
-export const isDemo = () =>
-  process.env.DEMO_MODE === "1" && (process.env.MAIL_PROVIDER ?? "fake") === "fake";

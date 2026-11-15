@@ -25,12 +25,23 @@ const ERRORES: Record<string, string> = {
   no_fixtures: "No reply fixtures are available for this operator.",
   ingest_failed: "Could not process the reply.",
   already_resolved: "This item was already resolved.",
+  mail_config: "Mail settings are incomplete.",
   failed: "Could not complete the action.",
 };
+
+/** `buzon_<n>`: the inbox was checked and n mails were read. */
+const buzon = (aviso: string) => /^buzon_(\d{1,4})$/.exec(aviso)?.[1];
 
 export function Notice({ aviso, error }: { aviso?: string; error?: string }) {
   if (error) return <Alert tone="error">{ERRORES[error] ?? ERRORES.failed}</Alert>;
   if (!aviso) return null;
+  const read = buzon(aviso);
+  if (read !== undefined) {
+    const n = Number(read);
+    return (
+      <Alert tone="success">{`Inbox checked: ${n} new ${n === 1 ? "email" : "emails"}`}</Alert>
+    );
+  }
   const injected = aviso.startsWith("inyectado_") ? aviso.slice("inyectado_".length) : null;
   const text = injected ? INYECTADO[injected] : AVISOS[aviso];
   return text ? <Alert tone="success">{text}</Alert> : null;

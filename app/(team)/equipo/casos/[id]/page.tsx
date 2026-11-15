@@ -6,6 +6,7 @@ import { Suspense } from "react";
 import { createServiceClient } from "@/shared/supabase/server";
 import {
   DEMO_CLOCK_COOKIE,
+  demoCapabilities,
   demoNow,
   getCaseView,
   listFixtures,
@@ -13,8 +14,9 @@ import {
   type TimelineMessage,
 } from "../../../../../features/claims/team";
 import { injectReply } from "../../actions";
-import { isDemo, requireTeam } from "../../_lib/session";
+import { requireTeam } from "../../_lib/session";
 import { ClockPanel } from "../../_components/clock-panel";
+import { InboxCheck } from "../../_components/inbox-check";
 import {
   dateTime,
   operatorName,
@@ -303,8 +305,9 @@ async function CaseDetail({
   if (!view) notFound();
   const { case: c } = view;
   const back = `/equipo/casos/${c.id}`;
-  const demo = isDemo();
-  const fixtures = demo ? listFixtures(c.operator) : [];
+  // Which demo tools this deployment has (never a hard-coded rule here: see demoCapabilities).
+  const caps = demoCapabilities();
+  const fixtures = caps.simulateReply ? listFixtures(c.operator) : [];
   const now = demoNow((await cookies()).get(DEMO_CLOCK_COOKIE)?.value);
   const operator = operatorName(c.operator);
   const headline = statusHeadline(c.status, operator);
@@ -621,7 +624,7 @@ async function CaseDetail({
       )}
 
       <div className={styles.demoControls}>
-        {isDemo() && (
+        {caps.simulateReply && (
           <section aria-labelledby="inyectar" className={styles.quietCard}>
             <h2 id="inyectar" className={styles.subtitle}>
               Simulate an operator reply
@@ -650,7 +653,8 @@ async function CaseDetail({
           </section>
         )}
 
-        {demo && <ClockPanel now={now.toISOString()} back={back} caseId={c.id} />}
+        {caps.clock && <ClockPanel now={now.toISOString()} back={back} caseId={c.id} />}
+        {caps.checkInbox && <InboxCheck caseId={c.id} />}
       </div>
 
       <section aria-labelledby="historial" className={`${styles.quietCard} ${styles.historyCard}`}>
