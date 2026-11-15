@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { TeamActionError, assertDemoCapability, demoCapabilities } from "@/features/claims/team";
 import { createGmailTransport } from "@/features/claims/transport";
 
-// [C9] Which demo tools a deployment gets, from DEMO_MODE, MAIL_PROVIDER, RETREN_ENV and the
-// redirect. One rule, pure, tested row by row (docs/plans/README.md §4.8).
+// [C9] Which demo tools a deployment gets, from DEMO_MODE, MAIL_PROVIDER, RETREN_ENV, the redirect
+// and whether team Auth is configured. One rule, pure, tested row by row.
 const SMTP = {
   SMTP_HOST: "smtp.example.test",
   SMTP_PORT: "465",
@@ -12,12 +12,18 @@ const SMTP = {
   SMTP_PASS: "not-a-real-password",
 };
 const REDIRECT = "team@example.com";
-/** DEV with real mail: the redirect is set, the environment is not production. */
+/** Team Auth configured (placeholder values): real mail needs a signed-in team member. */
+const AUTH = {
+  NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321",
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-placeholder",
+};
+/** DEV with real mail: the redirect is set, the environment is not production, Auth is on. */
 const DEV_REAL = {
   DEMO_MODE: "1",
   MAIL_PROVIDER: "gmail",
   MAIL_REDIRECT_ALL_TO: REDIRECT,
   ...SMTP,
+  ...AUTH,
 };
 
 const NOTHING = { clock: false, simulateReply: false, checkInbox: false };
@@ -57,6 +63,10 @@ describe("demoCapabilities: the rule", () => {
   });
 
   it.each([
+    [
+      "open mode (no team Auth), with the redirect",
+      { ...DEV_REAL, NEXT_PUBLIC_SUPABASE_URL: undefined },
+    ],
     ["production, with the redirect", { ...DEV_REAL, RETREN_ENV: "production" }],
     ["no redirect", { ...DEV_REAL, MAIL_REDIRECT_ALL_TO: undefined }],
     ["an empty redirect", { ...DEV_REAL, MAIL_REDIRECT_ALL_TO: "   " }],
@@ -109,7 +119,7 @@ describe("real mail can still only reach the redirected inboxes", () => {
   it("without a redirect outside production there is no clock, and no gmail transport either", () => {
     const noRedirect = { ...DEV_REAL, MAIL_REDIRECT_ALL_TO: undefined };
     expect(demoCapabilities(noRedirect).clock).toBe(false);
-    // The transport's own rule (README §4.8), still in force for the clock's sends.
+    // The transport's own rule, still in force for the clock's sends.
     expect(() => createGmailTransport(noRedirect)).toThrow(/MAIL_REDIRECT_ALL_TO/);
   });
 

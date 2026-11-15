@@ -1,6 +1,6 @@
 // An in-memory IMAP mailbox and poll-state store for the mailbox tests (C4). Shared by the unit
 // tests (tests/unit/claims/poll-inbox.test.ts) and the integration tests of "Check inbox now"
-// (tests/integration/claims/team.test.ts). Never a real mailbox: it records every call, and any
+// (tests/integration/claims/team-real-mail.test.ts). Never a real mailbox: it records every call, and any
 // mailbox-changing command is recorded as a mutation.
 import { expect } from "vitest";
 import {

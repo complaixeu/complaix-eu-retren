@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
   injectOperatorReply: vi.fn(async () => ({ outcome: "applied" })),
   resolveQueueItem: vi.fn(async () => undefined),
   runDemoTick: vi.fn(async () => ({})),
-  checkInboxNow: vi.fn(async () => ({ processed: 2 })),
+  checkInboxNow: vi.fn(async () => ({ processed: 2, connected: false })),
   verifyTeamToken: vi.fn(async (token: string | undefined) =>
     token === "good" ? { email: "a@retren.test" } : null,
   ),
@@ -261,6 +261,27 @@ describe("with real mail (gmail, redirected, not production)", () => {
       ID,
       expect.anything(),
     );
+  });
+
+  it("says the inbox is connected on the first check, not that zero emails were read", async () => {
+    mocks.checkInboxNow.mockResolvedValueOnce({ processed: 0, connected: true });
+    const a = await actions();
+    await expect(a.checkInbox(form({ caseId: ID }))).rejects.toThrow(
+      `REDIRECT /equipo/casos/${ID}?aviso=buzon_conectado`,
+    );
+  });
+
+  it("refuses the inbox check and the clock without team Auth (open mode)", async () => {
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const a = await actions();
+    await expect(a.checkInbox(form({ caseId: ID }))).rejects.toThrow(
+      `REDIRECT /equipo/casos/${ID}?error=demo_only`,
+    );
+    await expect(a.advanceClock(form({ days: "30", caseId: ID }))).rejects.toThrow(
+      "REDIRECT /equipo?error=demo_only",
+    );
+    expect(mocks.checkInboxNow).not.toHaveBeenCalled();
+    expect(mocks.runDemoTick).not.toHaveBeenCalled();
   });
 
   it("answers mail settings that are incomplete with their code only", async () => {

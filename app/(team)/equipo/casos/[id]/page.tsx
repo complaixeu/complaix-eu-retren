@@ -9,14 +9,11 @@ import {
   demoCapabilities,
   demoNow,
   getCaseView,
-  listFixtures,
   type CaseView,
   type TimelineMessage,
 } from "../../../../../features/claims/team";
-import { injectReply } from "../../actions";
 import { requireTeam } from "../../_lib/session";
-import { ClockPanel } from "../../_components/clock-panel";
-import { InboxCheck } from "../../_components/inbox-check";
+import { DemoControls } from "../../_components/demo-controls";
 import {
   dateTime,
   operatorName,
@@ -25,7 +22,6 @@ import {
   statusLabel,
 } from "../../_components/labels";
 import { Notice } from "../../_components/notice";
-import { ActionSubmit } from "../../_components/action-submit";
 import { ResolveForm } from "../../_components/resolve-form";
 import styles from "../../team.module.css";
 
@@ -307,7 +303,6 @@ async function CaseDetail({
   const back = `/equipo/casos/${c.id}`;
   // Which demo tools this deployment has (never a hard-coded rule here: see demoCapabilities).
   const caps = demoCapabilities();
-  const fixtures = caps.simulateReply ? listFixtures(c.operator) : [];
   const now = demoNow((await cookies()).get(DEMO_CLOCK_COOKIE)?.value);
   const operator = operatorName(c.operator);
   const headline = statusHeadline(c.status, operator);
@@ -623,39 +618,13 @@ async function CaseDetail({
         </section>
       )}
 
-      <div className={styles.demoControls}>
-        {caps.simulateReply && (
-          <section aria-labelledby="inyectar" className={styles.quietCard}>
-            <h2 id="inyectar" className={styles.subtitle}>
-              Simulate an operator reply
-            </h2>
-            {fixtures.length === 0 ? (
-              <p>No reply fixtures are available for this operator.</p>
-            ) : (
-              <form action={injectReply} className={styles.inline}>
-                <input type="hidden" name="caseId" value={c.id} />
-                <label className={styles.label}>
-                  Reply fixture
-                  <select name="fixture" className={styles.select} required>
-                    {fixtures.map((f) => (
-                      <option key={f.name} value={f.name}>
-                        {f.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <ActionSubmit pendingLabel="Processing reply…">Simulate reply</ActionSubmit>
-              </form>
-            )}
-            <p className={styles.muted}>
-              The reply follows the real inbound path: it is stored, classified, and acted on.
-            </p>
-          </section>
-        )}
-
-        {caps.clock && <ClockPanel now={now.toISOString()} back={back} caseId={c.id} />}
-        {caps.checkInbox && <InboxCheck caseId={c.id} />}
-      </div>
+      <DemoControls
+        caps={caps}
+        caseId={c.id}
+        back={back}
+        operator={c.operator}
+        now={now.toISOString()}
+      />
 
       <section aria-labelledby="historial" className={`${styles.quietCard} ${styles.historyCard}`}>
         <details className={styles.historyDetails}>

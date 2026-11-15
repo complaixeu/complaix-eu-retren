@@ -152,7 +152,7 @@ export async function checkInbox(formData: FormData): Promise<void> {
     // The same instant the demo clock shows, so "now" is never ahead of what the team sees.
     const now = demoNow(jar.get(DEMO_CLOCK_COOKIE)?.value);
     const out = await checkInboxNow(createServiceClient(), now, caseId, { env: process.env });
-    return { aviso: `buzon_${out.processed}` };
+    return { aviso: out.connected ? "buzon_conectado" : `buzon_${out.processed}` };
   });
 }
 

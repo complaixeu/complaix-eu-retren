@@ -15,8 +15,9 @@ import { DEMO_FIXTURES } from "./demo-fixtures";
 import { isProduction } from "./outbound";
 import { runOutbound } from "./outbound-tick";
 import { assertPollConfig, imapConfigFromEnv } from "./poll-inbox";
+import { teamAccessMode } from "./team-access";
 import { runTick } from "./tick";
-import type { ClaimsTransport } from "./transport";
+import { createGmailTransport, type ClaimsTransport } from "./transport";
 
 type Env = Record<string, string | undefined>;
 
@@ -47,7 +48,9 @@ export class TeamActionError extends Error {
       | "bad_input"
       // Mail settings a mailbox read needs are missing or malformed: named by a code only.
       | "mail_config"
-      | "inbound_failed",
+      | "inbound_failed"
+      // The queued mail could not be sent (a sender-side failure, not an outcome of the mail).
+      | "send_failed",
   ) {
     super(code);
     this.name = "TeamActionError";
@@ -84,18 +87,22 @@ function realMailRedirected(env: Env): boolean {
 }
 
 /**
- * Which demo tools this deployment gets (docs/plans/README.md §4.8). Pure.
+ * Which demo tools this deployment gets. Pure. There is no production in this project, and
+ * DEMO_MODE=1 is for DEV only.
  * - DEMO_MODE is not "1": none.
- * - MAIL_PROVIDER fake (or unset): the clock and the simulated reply. There is no mailbox to check.
- * - MAIL_PROVIDER gmail, outside production, with a valid MAIL_REDIRECT_ALL_TO: the clock and
- *   "Check inbox now". The simulated reply stays off: real replies come by email.
- * - Anything else (production with real mail, no redirect, an unknown provider): none.
+ * - MAIL_PROVIDER fake (or unset): the clock and the simulated reply. No mailbox to check.
+ * - MAIL_PROVIDER gmail, and all of: RETREN_ENV is not "production"; MAIL_REDIRECT_ALL_TO is set
+ *   and a valid address; that address is not SMTP_USER (case-insensitive); team Auth is
+ *   configured (not open mode, where anyone with the URL is in): the clock and "Check inbox now".
+ *   The simulated reply stays off: real replies come by email.
+ * - Anything else (production, no or invalid redirect, redirect equal to SMTP_USER, open mode,
+ *   an unknown provider): none.
  */
 export function demoCapabilities(env: Env = process.env): DemoCapabilities {
   if (env.DEMO_MODE !== "1") return NO_DEMO;
   const mail = env.MAIL_PROVIDER ?? "fake";
   if (mail === "fake") return { clock: true, simulateReply: true, checkInbox: false };
-  if (mail === "gmail" && realMailRedirected(env)) {
+  if (mail === "gmail" && realMailRedirected(env) && teamAccessMode(env) === "auth") {
     return { clock: true, simulateReply: false, checkInbox: true };
   }
   return NO_DEMO;
@@ -490,6 +497,10 @@ export async function runDemoTick(
     const outbound = await runOutbound(db, now, { env, transport: deps.transport }, undefined, {
       caseId,
     });
+    // Nothing went out because the sender refused to run: say so, never report it as a success.
+    if (outbound.sendError) {
+      throw new TeamActionError(outbound.sendError === "config" ? "mail_config" : "send_failed");
+    }
     out.timerActions += tick.actions.length;
     out.initialClaims += outbound.initialClaims.filter((c) => c.ok).length;
     out.sent += outbound.sent.filter((s) => s.status === "sent").length;
@@ -517,23 +528,24 @@ export async function checkInboxNow(
   now: Date,
   caseId: string,
   deps: CheckInboxDeps = {},
-): Promise<{ processed: number }> {
+): Promise<{ processed: number; connected: boolean }> {
   const env = deps.env ?? process.env;
   assertDemoCapability("checkInbox", env);
   if (!UUID_RE.test(caseId)) throw new TeamActionError("bad_input");
+  // Everything the read and the sends need, checked before the mailbox is touched. Building the
+  // gmail transport never connects; it throws on incomplete SMTP settings.
   try {
     imapConfigFromEnv(env);
     assertPollConfig(env);
+    createGmailTransport(env);
   } catch {
     throw new TeamActionError("mail_config");
   }
   const inbound = await runInbound(db, now, env, { client: deps.client, state: deps.state });
-  if ("error" in inbound) {
-    throw new TeamActionError(inbound.error === "config" ? "mail_config" : "inbound_failed");
-  }
   if (!("processed" in inbound)) throw new TeamActionError("inbound_failed");
   await runDemoTick(db, now, caseId, env, { transport: deps.transport });
-  return { processed: inbound.processed };
+  // The first check only records where the mailbox is: nothing before it is read.
+  return { processed: inbound.processed, connected: inbound.started === "first_run" };
 }
 
 // ---------------------------------------------------------------------------------------------

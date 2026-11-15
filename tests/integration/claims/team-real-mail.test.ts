@@ -36,6 +36,9 @@ const REAL = {
   IMAP_PORT: "993",
   IMAP_SECURE: "true",
   MAIL_REDIRECT_ALL_TO: REDIRECT,
+  // Team Auth configured (not "open" mode): real mail needs a signed-in team member (C9).
+  NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321",
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-placeholder",
 };
 const OPERATOR_ADDRESS = (() => {
   const ch = getOperatorConfig("iryo").channel;
@@ -158,7 +161,7 @@ describe("Check inbox now", () => {
       messageId: `<reply-${randomUUID()}@mail.example>`,
     });
     const mailbox = new FakeImap([
-      { uid: 1, subject: `Re: Reclamacion [${c.ref}]`, from: "atencion.cliente@iryo.eu", raw },
+      { uid: 1, subject: `Re: Reclamacion [${c.ref}]`, from: OPERATOR_ADDRESS, raw },
     ]);
     const transport = createFakeTransport();
 
@@ -233,5 +236,106 @@ describe("Check inbox now", () => {
     expect(err).toBeInstanceOf(TeamActionError);
     expect((err as TeamActionError).code).toBe("inbound_failed");
     expect(String(err)).not.toContain("retren@example.com");
+  });
+
+  it("the first check only connects: nothing is read or sent, and it says so", async () => {
+    const c = await seedCase("sent", 1);
+    const raw = scriptedReply(DEMO_FIXTURES.iryo!["asks_for_data-01"]!, {
+      fixture: "asks_for_data-01",
+      publicRef: c.ref,
+      initialMessageId: c.claimMessageId,
+      messageId: `<reply-${randomUUID()}@mail.example>`,
+    });
+    // A reply that is already in the mailbox before the first check is never imported.
+    const mailbox = new FakeImap([
+      { uid: 1, subject: `Re: Reclamacion [${c.ref}]`, from: OPERATOR_ADDRESS, raw },
+    ]);
+    const transport = createFakeTransport();
+    const state = memoryState();
+    const out = await checkInboxNow(db, new Date(), c.id, {
+      env: REAL,
+      client: mailbox,
+      state,
+      transport,
+    });
+    expect(out).toEqual({ processed: 0, connected: true });
+    expect(mailbox.fetched).toEqual([]);
+    expect(transport.outbox).toEqual([]);
+    expect(state.value).toEqual({ uidValidity: BigInt(1), lastUid: 1 });
+  });
+
+  it("incomplete SMTP settings are refused before the mailbox is read, and nothing is sent", async () => {
+    const c = await seedCase("sent", 1);
+    const mailbox = new FakeImap([]);
+    const noSmtp = { ...REAL, SMTP_HOST: undefined };
+    await expect(
+      checkInboxNow(db, new Date(), c.id, {
+        env: noSmtp,
+        client: mailbox,
+        state: memoryState({ uidValidity: BigInt(1), lastUid: 0 }),
+      }),
+    ).rejects.toMatchObject({ code: "mail_config" });
+    expect(mailbox.calls).toEqual([]);
+  });
+
+  it("the clock with incomplete SMTP settings reports mail_config, and marks nothing as sent", async () => {
+    const c = await seedCase("sent", 0);
+    const before = await db.from("messages").select("id, status").eq("case_id", c.id);
+    const noSmtp = { ...REAL, SMTP_HOST: undefined };
+    await expect(runDemoTick(db, later(30), c.id, noSmtp)).rejects.toMatchObject({
+      code: "mail_config",
+    });
+    const after = await db.from("messages").select("id, status").eq("case_id", c.id);
+    expect(after.data?.filter((m) => m.status === "sent")).toHaveLength(
+      before.data?.filter((m) => m.status === "sent").length ?? 0,
+    );
+  });
+
+  it("checking the inbox for one case leaves another due case untouched", async () => {
+    const viewed = await seedCase("sent", 1);
+    const other = await seedCase("sent", 0);
+    const snapshot = async () => {
+      const rows = await db.from("messages").select("id, status, template").eq("case_id", other.id);
+      const row = await db.from("cases").select("status, send_count").eq("id", other.id).single();
+      return { rows: rows.data, row: row.data };
+    };
+    const before = await snapshot();
+    const raw = scriptedReply(DEMO_FIXTURES.iryo!["asks_for_data-01"]!, {
+      fixture: "asks_for_data-01",
+      publicRef: viewed.ref,
+      initialMessageId: viewed.claimMessageId,
+      messageId: `<reply-${randomUUID()}@mail.example>`,
+    });
+    const mailbox = new FakeImap([
+      { uid: 1, subject: `Re: Reclamacion [${viewed.ref}]`, from: OPERATOR_ADDRESS, raw },
+    ]);
+    await checkInboxNow(db, later(30), viewed.id, {
+      env: REAL,
+      client: mailbox,
+      state: memoryState({ uidValidity: BigInt(1), lastUid: 0 }),
+      transport: createFakeTransport(),
+    });
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("with Auth off (open mode), real mail is refused for the inbox check and the clock", async () => {
+    const c = await seedCase();
+    const open = {
+      ...REAL,
+      NEXT_PUBLIC_SUPABASE_URL: undefined,
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: undefined,
+    };
+    const mailbox = new FakeImap([]);
+    await expect(
+      checkInboxNow(db, new Date(), c.id, {
+        env: open,
+        client: mailbox,
+        state: memoryState(),
+      }),
+    ).rejects.toMatchObject({ code: "demo_only" });
+    expect(mailbox.calls).toEqual([]);
+    await expect(runDemoTick(db, later(30), c.id, open)).rejects.toMatchObject({
+      code: "demo_only",
+    });
   });
 });
