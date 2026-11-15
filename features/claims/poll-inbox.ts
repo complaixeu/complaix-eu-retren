@@ -16,6 +16,7 @@ import { getOperatorConfig } from "@/features/rules";
 import { OperatorId } from "@/shared/contracts";
 import { createServiceClient, type ServiceClient } from "@/shared/supabase/server";
 import { ingestMessage, type IngestResult } from "./inbound";
+import { operatorInboxes } from "./operator-inboxes";
 import { sendingDomain } from "./send-queued";
 
 type Env = Record<string, string | undefined>;
@@ -138,6 +139,8 @@ export function imapConfigFromEnv(env: Env = process.env): ImapConfig {
  * IMAP_USER): every redirected copy of our own mail would come back as an operator reply.
  */
 export function assertPollConfig(env: Env = process.env): void {
+  // A malformed MAIL_OPERATOR_INBOXES throws before the mailbox is opened.
+  operatorInboxes(env);
   const redirect = env.MAIL_REDIRECT_ALL_TO?.trim().toLowerCase();
   if (!redirect) return;
   const mailboxes = [env.SMTP_USER, env.IMAP_USER].map((a) => a?.trim().toLowerCase());

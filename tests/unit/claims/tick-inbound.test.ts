@@ -77,6 +77,21 @@ describe("the tick and the mailbox", () => {
     expect((await res.json()).inbound).toEqual({ error: "inbound_failed" });
   });
 
+  it("a malformed MAIL_OPERATOR_INBOXES answers a config code, logs the code only, and never opens IMAP", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const env = {
+      MAIL_PROVIDER: "gmail",
+      SMTP_USER: "retren@retren.example",
+      MAIL_OPERATOR_INBOXES: "iryo:not-an-address",
+    };
+    expect(await runInbound({} as never, new Date(), env)).toEqual({ error: "config" });
+    expect(poll).not.toHaveBeenCalled();
+    expect(logged).toHaveBeenCalledTimes(1);
+    expect(String(logged.mock.calls[0][0])).toMatch(/config/);
+    expect(JSON.stringify(logged.mock.calls)).not.toContain("not-an-address");
+    logged.mockRestore();
+  });
+
   it("runInbound answers `skipped` for the fake provider", async () => {
     expect(await runInbound({} as never, new Date(), { MAIL_PROVIDER: "fake" })).toEqual({
       skipped: "mail_provider_fake",

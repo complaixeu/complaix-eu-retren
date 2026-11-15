@@ -4,6 +4,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { renderTemplate } from "@/features/documents";
 import { getOperatorConfig } from "@/features/rules";
+import { effectiveOperator } from "./operator-inboxes";
 import { systemClock } from "@/shared/clock";
 import { OperatorId, type CaseStatus, type Clock } from "@/shared/contracts";
 import type { Json } from "@/shared/supabase";
@@ -66,6 +67,8 @@ export interface TickDeps {
   from?: string;
   /** Only this case (the team view's demo clock). Every due case when left out. */
   caseId?: string;
+  /** For MAIL_OPERATOR_INBOXES (effectiveOperator); process.env when left out. */
+  env?: Record<string, string | undefined>;
 }
 
 type CaseRow = {
@@ -109,6 +112,7 @@ export async function runTick(
   const result: TickResult = { now: now.toISOString(), actions: [], skipped: [], failed: [] };
   const render = deps.render ?? renderTemplate;
   const from = deps.from ?? process.env.MAIL_FROM ?? DEFAULT_NOTICE_FROM;
+  const env = deps.env ?? process.env;
 
   let query = db
     .from("cases")
@@ -150,7 +154,7 @@ export async function runTick(
         continue;
       }
 
-      const recipient = recipientFor(action, row);
+      const recipient = recipientFor(action, row, env);
       if (typeof recipient !== "string") {
         // Moves on to the next stage, so a skipped case doesn't come back on every tick.
         await moveNextAction(db, row, due.nextActionAt);
@@ -237,9 +241,13 @@ async function firedActions(db: ServiceClient, ids: string[]): Promise<Map<strin
 }
 
 /** The operator's verified address for operator mail, the case's user for the close notice. */
-function recipientFor(action: DueAction, row: CaseRow): string | { skip: string } {
+function recipientFor(
+  action: DueAction,
+  row: CaseRow,
+  env: Record<string, string | undefined>,
+): string | { skip: string } {
   if (action.recipient === "user") return row.user_email;
-  const config = getOperatorConfig(OperatorId.parse(row.operator));
+  const config = effectiveOperator(getOperatorConfig(OperatorId.parse(row.operator)), env);
   if (!config.active) return { skip: "operator_inactive" };
   if (config.channel.type !== "email") return { skip: "operator_has_no_email_channel" };
   return config.channel.address;

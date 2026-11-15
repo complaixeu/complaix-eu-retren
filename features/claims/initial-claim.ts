@@ -34,6 +34,7 @@ import {
   type OutboundDeps,
   type SendQueuedResult,
 } from "./send-queued";
+import { effectiveOperator } from "./operator-inboxes";
 import { RECHECK_MS } from "./timers";
 import { provider } from "@/shared/providers";
 import { DOCUMENTS_BUCKET, TICKET_BUCKET } from "./buckets";
@@ -178,7 +179,7 @@ export async function sendInitialClaim(
   if (found.error) throw found.error;
   if (!found.data) return { ok: false, reason: "case_not_found" };
   const c = found.data;
-  const operator = getOperatorConfig(OperatorId.parse(c.operator));
+  const operator = effectiveOperator(getOperatorConfig(OperatorId.parse(c.operator)), env);
 
   const refused = initialClaimRefusal(
     { status: c.status as CaseStatus, earliestSendAt: c.earliest_send_at, sendCount: c.send_count },
