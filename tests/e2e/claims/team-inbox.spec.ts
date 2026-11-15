@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   caseRows,
   createTeamMember,
+  db,
   openCase,
   removeTeamMember,
   seedSentCase,
@@ -46,6 +47,9 @@ async function everythingFits(root: import("@playwright/test").Locator): Promise
   });
 }
 
+const noPageScroll = (page: import("@playwright/test").Page) =>
+  page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+
 test("the case page has no horizontal scroll and every step name is fully visible at 375 px", async ({
   page,
 }) => {
@@ -53,8 +57,7 @@ test("the case page has no horizontal scroll and every step name is fully visibl
   await signIn(page, member);
   await openCase(page, c);
 
-  const fits = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
-  expect(fits).toBe(true);
+  expect(await noPageScroll(page)).toBe(true);
 
   const tracking = page.getByRole("region", { name: "Claim process" });
   const steps = tracking.locator("li");
@@ -65,7 +68,39 @@ test("the case page has no horizontal scroll and every step name is fully visibl
   expect(await everythingFits(tracking)).toEqual([]);
 });
 
-test("the inbox lists the case's messages as links, newest first", async ({ page }) => {
+test("the case page has exactly one main landmark, on the case page and the dashboard", async ({
+  page,
+}) => {
+  const c = await seedSentCase();
+  await signIn(page, member);
+  await expect(page.getByRole("main")).toHaveCount(1);
+  await openCase(page, c);
+  await expect(page.getByRole("main")).toHaveCount(1);
+});
+
+test("the tracking shows a date only for steps that have happened, and says each step's state", async ({
+  page,
+}) => {
+  // A case sent today: "Claim sent" is the current step; the two steps after it are upcoming.
+  const c = await seedSentCase();
+  await signIn(page, member);
+  await openCase(page, c);
+
+  const tracking = page.getByRole("region", { name: "Claim process" });
+  const steps = tracking.locator("li");
+  await expect(steps.nth(2)).toContainText("Day");
+  await expect(steps.nth(3)).not.toContainText("Day");
+  await expect(steps.nth(4)).not.toContainText("Day");
+
+  await expect(tracking.locator('[aria-current="step"]')).toHaveCount(1);
+  await expect(tracking.locator('[aria-current="step"]')).toContainText("Claim sent");
+  await expect(tracking.getByText("completed", { exact: true })).toHaveCount(2);
+  await expect(tracking.getByText("upcoming", { exact: true })).toHaveCount(2);
+});
+
+test("the inbox lists the case's messages as links, newest first, without the case tag", async ({
+  page,
+}) => {
   const c = await seedSentCase();
   await signIn(page, member);
   await openCase(page, c);
@@ -74,9 +109,30 @@ test("the inbox lists the case's messages as links, newest first", async ({ page
   const rows = inbox.getByRole("link");
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toHaveAttribute("href", /\?m=/);
-  await expect(rows.first()).toContainText(`[${c.ref}] Delay compensation claim`);
+  await expect(rows.first()).toContainText("Delay compensation claim");
+  await expect(rows.first()).not.toContainText(`[${c.ref}]`);
   await expect(rows.first()).toContainText("Initial claim");
   expect(await everythingFits(inbox)).toEqual([]);
+});
+
+test("each inbox row is at least 48 px tall", async ({ page }) => {
+  const c = await seedSentCase();
+  await signIn(page, member);
+  await openCase(page, c);
+
+  const row = page.getByRole("region", { name: "Email thread" }).getByRole("link").first();
+  const box = await row.boundingBox();
+  expect(box?.height ?? 0).toBeGreaterThanOrEqual(48);
+});
+
+test("the operator is shown by its name, not its id", async ({ page }) => {
+  const c = await seedSentCase();
+  await signIn(page, member);
+  await openCase(page, c);
+  await expect(
+    page.getByRole("region", { name: "Case summary" }).getByText("Iryo", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("region", { name: "Case summary" })).not.toContainText("iryo");
 });
 
 test("tapping a message shows it in full with a way back to the inbox", async ({ page }) => {
@@ -96,7 +152,7 @@ test("tapping a message shows it in full with a way back to the inbox", async ({
   await inbox.getByRole("link").first().click();
 
   await expect(page).toHaveURL(/\?m=[0-9a-f-]+$/);
-  const subject = `[${c.ref}] Delay compensation claim`;
+  const subject = "Delay compensation claim";
   await expect(page.getByRole("heading", { level: 3, name: subject })).toBeVisible();
   await expect(inbox).toContainText(firstLine);
 
@@ -108,6 +164,37 @@ test("tapping a message shows it in full with a way back to the inbox", async ({
   await expect(page.getByRole("heading", { level: 1, name: `Case ${c.ref}` })).toBeVisible();
   await expect(page.getByRole("heading", { level: 3, name: subject })).toHaveCount(0);
   await expect(inbox.getByRole("link")).toHaveCount(1);
+});
+
+test("a long subject and body fit a 375 px message view without horizontal scroll", async ({
+  page,
+}) => {
+  const c = await seedSentCase();
+  // A long body and a long stored subject, with unbroken tokens: the view must wrap them.
+  const token = "Reclamacion".repeat(20);
+  const longBody = `Estimado equipo,\n\n${token} ${"texto largo ".repeat(60)}\n${token}`;
+  const { error } = await db()
+    .from("messages")
+    .update({ body_text: longBody, subject: `[${c.ref}] ${token} ${"asunto ".repeat(30)}` })
+    .eq("case_id", c.id)
+    .eq("direction", "outbound");
+  if (error) throw error;
+
+  await signIn(page, member);
+  await page.goto(`/equipo/casos/${c.id}`);
+  await page.getByRole("region", { name: "Email thread" }).getByRole("link").first().click();
+  await expect(page).toHaveURL(/\?m=/);
+  await expect(page.getByText(token.slice(0, 40)).first()).toBeVisible();
+
+  expect(await noPageScroll(page)).toBe(true);
+  const thread = page.getByRole("region", { name: "Email thread" });
+  expect(await everythingFits(thread)).toEqual([]);
+
+  // The technical details open to the raw stored subject and body, still without scroll.
+  await page.getByText("Technical details").click();
+  await expect(page.getByText("Stored subject:")).toBeVisible();
+  expect(await noPageScroll(page)).toBe(true);
+  expect(await everythingFits(thread)).toEqual([]);
 });
 
 test("an unknown message id falls back to the inbox list", async ({ page }) => {
@@ -124,12 +211,13 @@ test("the dashboard has no horizontal scroll at 375 px and each case links to it
   const c = await seedSentCase();
   await signIn(page, member);
 
-  const fits = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
-  expect(fits).toBe(true);
+  expect(await noPageScroll(page)).toBe(true);
+  await expect(page.getByRole("main")).toHaveCount(1);
   const cases = page.getByRole("region", { name: "Cases" });
   await expect(cases.getByRole("link", { name: c.ref })).toHaveAttribute(
     "href",
     `/equipo/casos/${c.id}`,
   );
+  await expect(cases).toContainText("Iryo");
   expect(await everythingFits(cases)).toEqual([]);
 });

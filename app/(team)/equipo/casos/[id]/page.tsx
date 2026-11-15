@@ -15,7 +15,13 @@ import {
 import { injectReply } from "../../actions";
 import { isDemo, requireTeam } from "../../_lib/session";
 import { ClockPanel } from "../../_components/clock-panel";
-import { dateTime, reasonLabel, shortDate, statusLabel } from "../../_components/labels";
+import {
+  dateTime,
+  operatorName,
+  reasonLabel,
+  shortDate,
+  statusLabel,
+} from "../../_components/labels";
 import { Notice } from "../../_components/notice";
 import { ActionSubmit } from "../../_components/action-submit";
 import { ResolveForm } from "../../_components/resolve-form";
@@ -89,6 +95,9 @@ function emailSubject(kind: string | null, ref: string) {
   return `${kind?.startsWith("reply_") || kind === "insistence_after_denial" ? "Re: " : ""}[${ref}] ${subject.replace(/^Re: /, "")}`;
 }
 
+/** The subject the team reads: without the leading "[RTN-…]" tag, since the case ref is the heading. */
+const displaySubject = (subject: string) => subject.replace(/^(Re: )?\[[^\]]+\]\s*/, "");
+
 function emailPreview(kind: string | null, operator: string, ref: string, inbound: boolean) {
   if (inbound) {
     const copy: Record<string, string> = {
@@ -144,7 +153,10 @@ function statusHeadline(status: string, operator: string) {
 /** One email as the inbox shows it: who, what, when, and what the team needs to know. */
 type InboxItem = {
   id: string;
+  /** The full subject, with the case tag (shown in Technical details). */
   subject: string;
+  /** The subject as the team reads it: no case tag. */
+  title: string;
   body: string;
   mockBody: boolean;
   kindLabel: string;
@@ -176,12 +188,13 @@ const STATUS_TEXT: Record<string, string> = {
 
 function describeMessages(view: CaseView): InboxItem[] {
   const c = view.case;
+  const operator = operatorName(c.operator);
   return view.messages.map((m: TimelineMessage) => {
     const passenger = Boolean(m.kind?.startsWith("user_"));
     const incoming = m.direction === "inbound";
     const mockBody = Boolean(m.body?.toLowerCase().startsWith("mock "));
     const sender = incoming
-      ? `${c.operator} Customer Service`
+      ? `${operator} Customer Service`
       : passenger
         ? "Passenger"
         : "ReTren Claims";
@@ -189,7 +202,7 @@ function describeMessages(view: CaseView): InboxItem[] {
       ? "ReTren Claims"
       : passenger
         ? "Passenger"
-        : `${c.operator} Customer Service`;
+        : `${operator} Customer Service`;
     // Only the events between this email and the next inbound email are its outcome, so a later
     // reply never relabels an earlier one.
     const nextInbound = view.messages.find(
@@ -219,12 +232,14 @@ function describeMessages(view: CaseView): InboxItem[] {
             : blocked
               ? "Sent to the team queue — instructions in the email ignored"
               : "Waiting for the operator";
+    const subject = emailSubject(m.kind, c.publicRef);
     return {
       id: m.id,
-      subject: emailSubject(m.kind, c.publicRef),
+      subject,
+      title: displaySubject(subject),
       body: mockBody
-        ? emailPreview(m.kind, c.operator, c.publicRef, incoming)
-        : m.body || emailPreview(m.kind, c.operator, c.publicRef, incoming),
+        ? emailPreview(m.kind, operator, c.publicRef, incoming)
+        : m.body || emailPreview(m.kind, operator, c.publicRef, incoming),
       mockBody,
       kindLabel: KIND_LABELS[m.kind ?? ""] ?? "Email",
       kind: m.kind,
@@ -232,7 +247,7 @@ function describeMessages(view: CaseView): InboxItem[] {
       passenger,
       sender,
       recipient,
-      initial: incoming ? c.operator.slice(0, 1) : passenger ? "P" : "R",
+      initial: incoming ? operator.slice(0, 1) : passenger ? "P" : "R",
       createdAt: m.createdAt,
       status: STATUS_TEXT[m.status ?? ""] ?? m.status ?? "",
       blocked,
@@ -291,7 +306,8 @@ async function CaseDetail({
   const demo = isDemo();
   const fixtures = demo ? listFixtures(c.operator) : [];
   const now = demoNow((await cookies()).get(DEMO_CLOCK_COOKIE)?.value);
-  const headline = statusHeadline(c.status, c.operator);
+  const operator = operatorName(c.operator);
+  const headline = statusHeadline(c.status, operator);
   const currentStep =
     c.status === "draft"
       ? 0
@@ -311,8 +327,12 @@ async function CaseDetail({
   const steps: { label: string; when: string | null }[] = [
     { label: "Case created", when: null },
     { label: "Waiting period", when: null },
-    { label: "Claim sent", when: c.sentAt },
-    { label: "Operator replied", when: lastInbound?.createdAt ?? null },
+    // A step has a date only once it has happened, each from its own event.
+    { label: "Claim sent", when: currentStep >= 2 ? c.sentAt : null },
+    {
+      label: "Operator replied",
+      when: currentStep >= 3 ? (lastInbound?.createdAt ?? null) : null,
+    },
     {
       label:
         c.status === "waiting_user"
@@ -324,7 +344,7 @@ async function CaseDetail({
               : c.status === "closed"
                 ? "Closed"
                 : "Resolved / Escalated / Closed",
-      when: lastStatusChange?.createdAt ?? null,
+      when: currentStep >= 4 ? (lastStatusChange?.createdAt ?? null) : null,
     },
   ];
 
@@ -334,7 +354,7 @@ async function CaseDetail({
   const latestReply = [...items].reverse().find((item) => item.incoming);
 
   return (
-    <main className={styles.casePage}>
+    <div className={styles.casePage}>
       <Link className={styles.backLink} href="/equipo">
         Back to team queue
       </Link>
@@ -343,7 +363,7 @@ async function CaseDetail({
       <header className={styles.caseHeader}>
         <h1 className={styles.title}>Case {c.publicRef}</h1>
         <p className={styles.operatorLine}>
-          <span className={styles.muted}>Operator</span> {c.operator}
+          <span className={styles.muted}>Operator</span> {operator}
         </p>
         <p className={styles.statusLine}>
           <strong>{headline.title}</strong> {headline.text}
@@ -386,6 +406,9 @@ async function CaseDetail({
                 </span>
                 <span className={styles.trackText}>
                   <span className={styles.stepName}>{step.label}</span>
+                  {!current && (
+                    <span className="visually-hidden">{done ? " completed" : " upcoming"}</span>
+                  )}
                   {step.when && (
                     <span className={styles.stepWhen}>
                       Day {dayFrom(step.when, c.sentAt)} · {dateTime(step.when)}
@@ -417,7 +440,7 @@ async function CaseDetail({
             <Link className={styles.backLink} href={back}>
               ← Inbox
             </Link>
-            <h3 className={styles.readSubject}>{selected.subject}</h3>
+            <h3 className={styles.readSubject}>{selected.title}</h3>
             <dl className={styles.readMeta}>
               <div>
                 <dt>From</dt>
@@ -480,6 +503,9 @@ async function CaseDetail({
                   <p>Redirected to: {selected.deliveredTo.join(", ")} (demo)</p>
                 )}
                 <p>
+                  <strong>Subject:</strong> {selected.subject}
+                </p>
+                <p>
                   <strong>Stored subject:</strong> {selected.storedSubject}
                 </p>
                 <p>
@@ -510,7 +536,7 @@ async function CaseDetail({
                         {shortDate(item.createdAt)}
                       </time>
                     </span>
-                    <span className={styles.rowSubject}>{item.subject}</span>
+                    <span className={styles.rowSubject}>{item.title}</span>
                     <span className={styles.rowPreview}>{item.body.replace(/\s+/g, " ")}</span>
                     <span className={styles.rowMeta}>
                       <span className={styles.kindTag}>{item.kindLabel}</span>
@@ -552,11 +578,9 @@ async function CaseDetail({
         </h2>
         <dl>
           <dt className={styles.muted}>Status</dt>
-          <dd>
-            {statusLabel(c.status)} <code className={styles.code}>{c.status}</code>
-          </dd>
+          <dd>{statusLabel(c.status)}</dd>
           <dt className={styles.muted}>Operator</dt>
-          <dd>{c.operator}</dd>
+          <dd>{operator}</dd>
           <dt className={styles.muted}>Claim sent</dt>
           <dd>{dateTime(c.sentAt)}</dd>
           <dt className={styles.muted}>Emails sent to operator</dt>
@@ -635,6 +659,9 @@ async function CaseDetail({
           <h2 id="historial" className={styles.subtitle}>
             History
           </h2>
+          <p className={styles.meta}>
+            Status code: <code className={styles.code}>{c.status}</code>
+          </p>
           <div className={styles.tableWrap}>
             <table className={`${styles.table} ${styles.stackTable}`}>
               <thead>
@@ -667,6 +694,6 @@ async function CaseDetail({
           </div>
         </details>
       </section>
-    </main>
+    </div>
   );
 }

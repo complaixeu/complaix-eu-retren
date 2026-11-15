@@ -48,3 +48,9 @@ export const shortDate = (iso: string) =>
     month: "short",
     timeZone: "Europe/Madrid",
   });
+
+// Operator ids as the team sees them: the display name, never the lowercase id.
+const OPERATORS: Record<string, string> = { iryo: "Iryo", renfe: "Renfe", ouigo: "Ouigo" };
+
+export const operatorName = (id: string) =>
+  OPERATORS[id] ?? id.charAt(0).toUpperCase() + id.slice(1);

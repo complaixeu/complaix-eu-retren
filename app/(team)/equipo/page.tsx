@@ -5,7 +5,7 @@ import { createServiceClient } from "@/shared/supabase/server";
 import { listCases, listQueue } from "../../../features/claims/team";
 import { logout } from "./actions";
 import { requireTeam } from "./_lib/session";
-import { dateTime, reasonLabel, statusLabel } from "./_components/labels";
+import { dateTime, operatorName, reasonLabel, statusLabel } from "./_components/labels";
 import { Notice } from "./_components/notice";
 import { ActionSubmit } from "./_components/action-submit";
 import { ResolveForm } from "./_components/resolve-form";
@@ -94,7 +94,7 @@ async function Queue({ searchParams }: Pick<PageProps<"/equipo">, "searchParams"
                         id={item.id}
                         source={item.source}
                         back="/equipo"
-                        label={`${item.publicRef ?? "correo sin caso"}, ${reasonLabel(item.reason)}`}
+                        label={`${item.publicRef ?? "email without a case"}, ${reasonLabel(item.reason)}`}
                       />
                     </td>
                   </tr>
@@ -121,7 +121,7 @@ async function Queue({ searchParams }: Pick<PageProps<"/equipo">, "searchParams"
                   </Link>
                   <span className={styles.statusPill}>{statusLabel(c.status)}</span>
                 </div>
-                <p className={styles.caseMeta}>{c.operator}</p>
+                <p className={styles.caseMeta}>{operatorName(c.operator)}</p>
                 <p className={styles.caseMeta}>
                   Sent {dateTime(c.sentAt)} · Next step {dateTime(c.nextActionAt)}
                 </p>

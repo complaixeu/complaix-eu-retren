@@ -182,9 +182,12 @@ export const messagesOf = (page: Page) => page.getByRole("region", { name: "Emai
 export const historyOf = (page: Page) => page.getByRole("region", { name: "History" });
 export const pendingOf = (page: Page) => page.getByRole("region", { name: "Needs team review" });
 
-/** The case status, by its code in the summary ("Estado"). */
+/**
+ * The case status code. The summary shows the plain-English status; the raw code lives in the
+ * collapsed Technical history, so it is checked there (attached, not visible).
+ */
 export async function expectStatus(page: Page, code: string): Promise<void> {
-  await expect(summary(page).getByText(code, { exact: true })).toBeVisible();
+  await expect(historyOf(page).getByText(code, { exact: true }).first()).toBeAttached();
 }
 
 /** One message of the email thread, by its template or category code. */
